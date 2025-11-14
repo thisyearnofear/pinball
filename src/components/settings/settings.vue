@@ -42,11 +42,17 @@
             <Toggle v-model="fullscreen" />
         </div>
     </fieldset>
+
+    <fieldset class="ps-fieldset ps-fieldset--bordered">
+        <legend>Web3 Wallet</legend>
+        <WalletConnection />
+    </fieldset>
 </template>
 
 <script lang="ts">
 import Bowser from "bowser";
 import Toggle from "@vueform/toggle";
+import WalletConnection from "@/components/wallet-connection/wallet-connection.vue";
 import { STORED_DISABLE_VHS_EFFECT, STORED_FULLSCREEN } from "@/definitions/settings";
 import { getFxMuted, setFxMuted, getMusicMuted, setMusicMuted } from "@/services/audio-service";
 import { isFullscreen, toggleFullscreen } from "@/utils/fullscreen-util";
@@ -55,6 +61,7 @@ import { getFromStorage, setInStorage } from "@/utils/local-storage";
 export default {
     components: {
         Toggle,
+        WalletConnection,
     },
     data: () => ({
         useVHS: getFromStorage( STORED_DISABLE_VHS_EFFECT ) !== "true",

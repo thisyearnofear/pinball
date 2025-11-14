@@ -48,12 +48,10 @@
         },
         "about": {
             "credits": "Credits",
-            "introduction": "Unless otherwise stated, programming, illustrations, sound design and music by:",
+            "introduction": "ArbiPinball is a mini app on Arbitrum where players spend $0.5 USDC to play, contributing to the weekly pot. The highest score at week's end receives 90% of the pot, with 10% funding ongoing development and a splits contract with the original developer.",
             "animation": "Animation",
             "tableDesign": "Table design",
-            "font": "Font",
-            "by": "by",
-            "opensource": "Pinball Schminball is fully open source and can be found on"
+            "font": "Font"
         },
         "tutorial": {
             "tutorial": "Tutorial",

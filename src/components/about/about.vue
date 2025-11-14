@@ -23,11 +23,6 @@
 <template>
     <p>
         <span v-t="'about.introduction'"></span>
-        &nbsp;<a href="https://www.igorski.nl" target="_blank" title="igorski.nl website">igorski</a>.<br />
-    </p>
-    <p>
-        <span v-t="'about.opensource'"></span>
-        &nbsp;<a href="https://www.github.com/igorski/pinball-schminball" target="_blank" noopener>GitHub</a>.
     </p>
     <h3
         v-t="'about.credits'"
@@ -75,6 +70,12 @@ export default {
                 author: "HAL Laboratory",
                 type: this.$t( "about.tableDesign" ),
                 url: "https://en.wikipedia.org/wiki/Rollerball_(video_game)",
+            },
+            {
+                title: "Pinball Schminball",
+                author: "igorski",
+                type: "Programming",
+                url: "https://www.igorski.nl",
             }
         ];
     },
