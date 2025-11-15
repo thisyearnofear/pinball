@@ -77,6 +77,7 @@ import { STORED_FULLSCREEN, STORED_HAS_VIEWED_TUTORIAL, STORED_DISABLE_VHS_EFFEC
 import { preloadAssets } from "@/services/asset-preloader";
 import { init } from "@/services/audio-service";
 import { isSupported, startGame, stopGame } from "@/services/high-scores-service";
+import { web3Service } from "@/services/web3-service";
 import { getFromStorage, setInStorage } from "@/utils/local-storage";
 import { isFullscreen, toggleFullscreen } from "@/utils/fullscreen-util";
 
