@@ -35,7 +35,7 @@
                 <span>&#9776;</span>
             </div>
             
-            <!-- Wallet Status (always visible when connected) -->
+            <!-- Unified Wallet Interface -->
             <div v-if="isWalletConnected" class="menu__wallet" ref="walletMenu">
                 <div class="menu__wallet-status" @click="toggleWalletMenu">
                     <span class="menu__wallet-indicator" :class="{ 'menu__wallet-indicator--tournament': isTournamentActive }"></span>
@@ -69,7 +69,7 @@
                     ></button>
                 </li>
                 
-                <!-- Wallet connection/status items -->
+                <!-- Unified Wallet Connect Button (hidden when wallet is connected) -->
                 <li v-if="!isWalletConnected" class="menu__wallet-connect">
                     <button
                         type="button"
@@ -78,24 +78,6 @@
                     >
                         {{ $t('ui.connectWallet') }}
                     </button>
-                </li>
-                
-                <!-- Mobile wallet status (shown in hamburger menu) -->
-                <li v-else-if="isWalletConnected" class="menu__wallet-mobile">
-                    <div class="mobile-wallet-status">
-                        <div class="mobile-wallet-info">
-                            <span class="mobile-wallet-label">{{ $t('ui.connected') }}:</span>
-                            <span class="mobile-wallet-address">{{ shortAddress }}</span>
-                        </div>
-                        <div class="mobile-wallet-actions">
-                            <button @click="switchWallet" class="mobile-wallet-btn">
-                                {{ $t('ui.switchWallet') }}
-                            </button>
-                            <button @click="disconnectWallet" class="mobile-wallet-btn mobile-wallet-btn--danger">
-                                {{ $t('ui.disconnect') }}
-                            </button>
-                        </div>
-                    </div>
                 </li>
             </ul>
         </nav>
@@ -460,69 +442,6 @@ export default {
                     width: 100%;
                     padding: 12px;
                     font-size: 14px;
-                }
-            }
-        }
-
-        &.menu__wallet-mobile {
-            @include large() {
-                display: none; // Only show on mobile
-            }
-
-            .mobile-wallet-status {
-                width: 100%;
-                padding: 12px 0;
-                border-top: 1px solid #333;
-                border-bottom: 1px solid #333;
-                margin: 8px 0;
-            }
-
-            .mobile-wallet-info {
-                margin-bottom: 8px;
-
-                .mobile-wallet-label {
-                    color: $color-anchors;
-                    font-size: 12px;
-                }
-
-                .mobile-wallet-address {
-                    color: #fff;
-                    font-family: monospace;
-                    font-weight: bold;
-                    font-size: 14px;
-                    display: block;
-                    margin-top: 2px;
-                }
-            }
-
-            .mobile-wallet-actions {
-                display: flex;
-                gap: 8px;
-
-                .mobile-wallet-btn {
-                    flex: 1;
-                    padding: 8px 12px;
-                    border: 1px solid #555;
-                    background: transparent;
-                    color: #fff;
-                    border-radius: 4px;
-                    font-size: 12px;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-
-                    &:hover {
-                        border-color: $color-anchors;
-                        color: $color-anchors;
-                    }
-
-                    &--danger {
-                        border-color: #ff6b6b;
-                        color: #ff6b6b;
-
-                        &:hover {
-                            background: rgba(255, 107, 107, 0.1);
-                        }
-                    }
                 }
             }
         }

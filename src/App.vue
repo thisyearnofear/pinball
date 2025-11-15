@@ -61,6 +61,7 @@
 <script lang="ts">
 import { defineAsyncComponent } from "vue";
 import type { Component } from "vue";
+import { ethers } from 'ethers';
 import HeaderMenu from "./components/header-menu/header-menu.vue";
 import Loader from "@/components/loader/loader.vue";
 import Modal from "@/components/modal/modal.vue";
@@ -235,18 +236,39 @@ export default {
             try {
                 const mod: any = await import("@farcaster/miniapp-sdk");
                 const fc = mod?.default ?? mod;
+                
+                // Initialize the SDK if init function exists
                 if (typeof fc?.init === "function") {
                     await fc.init();
                 }
                 
+                // Notify Farcaster Mini App that the app is ready to render (hide splash)
+                if (typeof fc?.actions?.ready === "function") {
+                    await fc.actions.ready();
+                }
+                
                 // In Farcaster context, try auto-connecting wallet
-                if (typeof fc?.wallet?.connect === "function") {
+                if (typeof fc?.wallet?.getEthereumProvider === "function") {
                     try {
-                        await fc.wallet.connect();
-                        // If successful, update our game props
-                        const address = fc.wallet.address;
-                        if (address) {
-                            this.newGameProps.playerName = address;
+                        // Get the Ethereum provider from Farcaster SDK
+                        const provider = fc.wallet.getEthereumProvider();
+                        if (provider) {
+                            // Create ethers provider from the Farcaster provider
+                            const ethersProvider = new ethers.BrowserProvider(provider);
+                            const signer = await ethersProvider.getSigner();
+                            const address = await signer.getAddress();
+                            
+                            if (address) {
+                                this.newGameProps.playerName = address;
+                                // Also update the web3 service with the connected provider
+                                (this as any).$web3Service = {
+                                    provider: ethersProvider,
+                                    signer: signer,
+                                    address: address,
+                                    isConnected: () => true,
+                                    getAddress: () => address
+                                };
+                            }
                         }
                     } catch (error) {
                         console.log('Auto-connect not available or failed:', error);
@@ -256,6 +278,17 @@ export default {
             } catch (error) {
                 console.log('Farcaster SDK not available:', error);
                 // Expected when not in Farcaster context
+                
+                // Still call ready to hide splash screen in case SDK loaded partially
+                try {
+                    const mod: any = await import("@farcaster/miniapp-sdk");
+                    const fc = mod?.default ?? mod;
+                    if (typeof fc?.actions?.ready === "function") {
+                        await fc.actions.ready();
+                    }
+                } catch (e) {
+                    // Ignore if still can't load
+                }
             }
         },
         onWalletConnected(): void {
