@@ -62,7 +62,7 @@
         },
         "about": {
             "credits": "Credits",
-            "introduction": "ArbiPinball is a mini app on Arbitrum with weekly tournaments. Players pay a fixed entry fee in ETH to enter, and 100% of entry fees fund the prize pot. After the tournament ends, prizes are distributed among the top winners according to the configured split (e.g., top 3: 50/30/20)."
+            "introduction": "ArbiPinball is a mini app on Arbitrum with weekly tournaments. Players pay a fixed entry fee in ETH to enter, and 100% of entry fees fund the prize pot. After the tournament ends, prizes are distributed among the top winners according to the configured split (e.g., top 3: 50/30/20).",
             "animation": "Animation",
             "tableDesign": "Table design",
             "font": "Font"
