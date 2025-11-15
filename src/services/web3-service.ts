@@ -133,6 +133,13 @@ class Web3Service extends EventEmitter {
         return this.address !== null;
     }
 
+    setProvider(provider: ethers.BrowserProvider, signer: ethers.Signer, address: string): void {
+        this.provider = provider;
+        this.signer = signer;
+        this.address = address;
+        this.emit('connected', { address, chainId: 1 });
+    }
+
     async switchChain(chainId: number): Promise<void> {
         if (!this.provider) return;
 

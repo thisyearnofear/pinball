@@ -238,10 +238,21 @@ export default {
             setInStorage( STORED_HAS_VIEWED_TUTORIAL, "true" );
         },
         async initializeFarcaster(): Promise<void> {
+             // Skip Farcaster initialization if MetaMask is already available
+             if (window.ethereum && typeof window.ethereum.request === 'function') {
+                 console.log('MetaMask detected, skipping Farcaster provider setup');
+                 return;
+             }
+             
              // Farcaster SDK (guarded dynamic import to support varying SDK exports)
              try {
                  const mod: any = await import("@farcaster/miniapp-sdk");
                  const fc = mod?.default ?? mod;
+                 
+                 // Validate SDK was loaded
+                 if (!fc) {
+                     throw new Error('Farcaster SDK module not found');
+                 }
                  
                  // Initialize the SDK if init function exists
                  if (typeof fc?.init === "function") {
@@ -270,13 +281,11 @@ export default {
                               const address = await signer.getAddress();
                               
                               if (address) {
-                                  this.newGameProps.playerName = address;
-                                  // Update the web3Service with the connected provider
-                                  (web3Service as any).provider = ethersProvider;
-                                  (web3Service as any).signer = signer;
-                                  (web3Service as any).address = address;
-                                  console.log('Farcaster wallet auto-connected:', address);
-                              }
+                                      this.newGameProps.playerName = address;
+                                      // Use the web3Service's method to set provider and notify UI
+                                      web3Service.setProvider(ethersProvider, signer, address);
+                                      console.log('Farcaster wallet auto-connected:', address);
+                                  }
                           } else {
                               console.log('Farcaster provider is not available or invalid');
                           }
