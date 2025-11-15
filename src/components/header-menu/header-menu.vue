@@ -69,8 +69,8 @@
                     ></button>
                 </li>
                 
-                <!-- Unified Wallet Connect Button (hidden when wallet is connected) -->
-                <li v-if="!isWalletConnected" class="menu__wallet-connect">
+                <!-- Unified Wallet Connect Button (hidden when wallet is connected or game is active) -->
+                <li v-if="!isWalletConnected && showConnectButton" class="menu__wallet-connect">
                     <button
                         type="button"
                         :title="$t('ui.connectWallet')"
@@ -92,6 +92,10 @@ import { useTournamentState } from "@/model/tournament-state";
 export default {
     props: {
         collapsable: {
+            type: Boolean,
+            default: false
+        },
+        showConnectButton: {
             type: Boolean,
             default: false
         }
