@@ -23,10 +23,12 @@
 <template>
     <loader v-if="loading" />
     <template v-else>
-        <p
-            v-if="!isSupported">
-            High scores are not supported in this environment.
-        </p>
+        <div v-if="!isWalletConnected" class="wallet-prompt">
+            <p>{{ $t('ui.connectWalletForScores') }}</p>
+            <button @click="connectWallet" class="connect-btn">
+                {{ $t('ui.connectForTournament') }}
+            </button>
+        </div>
         <div v-else>
             <TournamentStatus />
             <TournamentActions />
@@ -58,7 +60,8 @@ import Loader from "@/components/loader/loader.vue";
 import TournamentStatus from "@/components/high-scores/TournamentStatus.vue";
 import TournamentActions from "@/components/high-scores/TournamentActions.vue";
 import type { HighScoreDef } from "@/services/high-scores-service";
-import { isSupported, getHighScores } from "@/services/high-scores-service";
+import { getHighScores } from "@/services/high-scores-service";
+import { web3Service } from "@/services/web3-service";
 import { useTournamentState } from "@/model/tournament-state";
 
 // our fancy font has some challenges for our presentation purposes
@@ -72,7 +75,6 @@ const replaceDiacritics = ( def: HighScoreDef ): HighScoreDef => ({
 });
 
 interface ComponentData {
-    isSupported: boolean;
     loading: boolean;
     scores: HighScoreDef[];
 };
@@ -84,11 +86,13 @@ export default {
         TournamentActions,
     },
     data: (): ComponentData => ({
-        isSupported: false,
         loading: true,
         scores: [],
     }),
     computed: {
+        isWalletConnected(): boolean {
+            return web3Service.isConnected();
+        },
         formattedScores(): HighScoreDef[] {
             const filteredScores = this.scores.filter(({ score }) => score > 0 );
             return filteredScores.map( replaceDiacritics );
@@ -97,11 +101,21 @@ export default {
     methods: {
         async onRefresh() {
             this.scores = await getHighScores();
+        },
+        async connectWallet() {
+            try {
+                await web3Service.connect('metamask');
+                // Load scores after connection
+                if (web3Service.isConnected()) {
+                    this.scores = await getHighScores();
+                }
+            } catch (error) {
+                console.error('Wallet connection failed:', error);
+            }
         }
     },
     async mounted(): Promise<void> {
-        this.isSupported = isSupported();
-        if ( this.isSupported ) {
+        if (this.isWalletConnected) {
             this.scores = await getHighScores();
         }
         this.loading = false;
@@ -146,4 +160,31 @@ export default {
 }
 .empty{ margin: 8px 0; opacity: 0.7; }
 .empty a{ color: #66f; text-decoration: underline; cursor: pointer; }
+
+.wallet-prompt {
+    text-align: center;
+    padding: $spacing-large;
+    
+    p {
+        color: #ccc;
+        margin-bottom: $spacing-medium;
+        font-size: 14px;
+    }
+    
+    .connect-btn {
+        @include titleFont(16px);
+        padding: 12px 24px;
+        background: linear-gradient(135deg, $color-anchors, #00cc88);
+        border: none;
+        border-radius: 6px;
+        color: #000;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        
+        &:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 255, 136, 0.3);
+        }
+    }
+}
 </style>

@@ -76,7 +76,7 @@
                         :title="$t('ui.connectWallet')"
                         @click="connectWallet"
                     >
-                        {{ $t('ui.connectForTournament') }}
+                        {{ $t('ui.connectWallet') }}
                     </button>
                 </li>
                 

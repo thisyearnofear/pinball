@@ -18,19 +18,20 @@
             "roundUp": "Round up",
             "totalPoints": "Total points",
             "remainingBalls": "Remaining balls",
-            "connectWallet": "Connect Wallet to Enter Tournament",
-            "walletExplanation": "Connect your wallet to compete in tournaments and win prizes from the weekly pot.",
-            "connectForTournament": "Connect & Enter Tournament",
+            "connectWallet": "Connect",
+            "walletExplanation": "Connect wallet to compete for prizes from the weekly pot.",
+            "connectForTournament": "Connect",
             "connecting": "Connecting...",
             "connected": "Connected",
             "or": "or",
-            "practiceNote": "Practice without competing for prizes",
-            "playAnonymous": "Practice Mode",
-            "enterTournament": "Enter Tournament",
+            "practiceNote": "Practice without prizes",
+            "playAnonymous": "Practice",
+            "enterTournament": "Play",
             "switchWallet": "Switch Wallet",
             "disconnectWallet": "Disconnect Wallet",
             "disconnect": "Disconnect",
-            "tournamentActive": "Tournament Active"
+            "tournamentActive": "Tournament Active",
+            "connectWalletForScores": "Connect wallet to view tournament leaderboard"
         },
         "messages": {
             "gotLucky": "Got lucky",
@@ -61,7 +62,7 @@
         },
         "about": {
             "credits": "Credits",
-            "introduction": "ArbiPinball is a mini app on Arbitrum where players spend $0.5 USDC to play, contributing to the weekly pot. The highest score at week's end receives 90% of the pot, with 10% funding ongoing development and a splits contract with the original developer.",
+            "introduction": "ArbiPinball is a mini app on Arbitrum with weekly tournaments. Players pay a fixed entry fee in ETH to enter, and 100% of entry fees fund the prize pot. After the tournament ends, prizes are distributed among the top winners according to the configured split (e.g., top 3: 50/30/20)."
             "animation": "Animation",
             "tableDesign": "Table design",
             "font": "Font"

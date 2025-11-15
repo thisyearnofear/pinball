@@ -10,6 +10,10 @@ const winners = ref<string[]>([]);
 const address = ref<string | null>(null);
 const scores = ref<{ name: string; score: number; duration: number }[]>([]);
 const entered = ref<boolean>(false);
+const totalPotWei = ref<bigint>(0n);
+const startTime = ref<number | null>(null);
+const endTime = ref<number | null>(null);
+const topN = ref<number>(0);
 
 export function useTournamentState() {
   async function load() {
@@ -19,6 +23,10 @@ export function useTournamentState() {
     entryFeeWei.value = await getEntryFeeWei();
     const info = await getTournamentInfo(id);
     finalized.value = info.finalized;
+    totalPotWei.value = info.totalPot;
+    startTime.value = info.startTime;
+    endTime.value = info.endTime;
+    topN.value = info.topN;
     winners.value = await getWinners(id);
     scores.value = await getHighScores();
     // Lightweight 'entered' inference: if address appears in leaderboard or winners
@@ -49,6 +57,12 @@ export function useTournamentState() {
     return await claimReward(tournamentId.value);
   }
 
+  const timeRemainingSec = computed(() => {
+    if (!endTime.value) return null;
+    const now = Math.floor(Date.now() / 1000);
+    return Math.max(0, endTime.value - now);
+  });
+
   return {
     tournamentId,
     entryFeeWei,
@@ -57,6 +71,11 @@ export function useTournamentState() {
     address,
     scores,
     entered,
+    totalPotWei,
+    startTime,
+    endTime,
+    topN,
+    timeRemainingSec,
     isWinner,
     load,
     enter,
