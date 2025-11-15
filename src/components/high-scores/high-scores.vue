@@ -28,21 +28,26 @@
             High scores are not supported in this environment.
         </p>
         <div v-else>
-            <div
-                v-for="( entry, index ) in formattedScores"
-                :key="`c_${index}`"
-                class="highscores-entry"
-            >
-                <span class="highscores-entry__name">{{ entry.name }}</span>
-                <span class="highscores-entry__score">
-                    <span
-                        v-for="( number, idx ) in entry.score"
-                        :key="`s_${idx}`"
-                        :class="`highscores-entry__score-number-${number}`"
-                    >
-                        {{ number }}
+            <TournamentStatus />
+            <TournamentActions />
+            <div v-if="formattedScores.length === 0" class="empty">No scores yet. <a href="#" @click.prevent="onRefresh">Refresh Leaderboard</a></div>
+            <div v-else>
+                <div
+                    v-for="( entry, index ) in formattedScores"
+                    :key="`c_${index}`"
+                    class="highscores-entry"
+                >
+                    <span class="highscores-entry__name">{{ entry.name }}</span>
+                    <span class="highscores-entry__score">
+                        <span
+                            v-for="( number, idx ) in entry.score"
+                            :key="`s_${idx}`"
+                            :class="`highscores-entry__score-number-${number}`"
+                        >
+                            {{ number }}
+                        </span>
                     </span>
-                </span>
+                </div>
             </div>
         </div>
     </template>
@@ -50,8 +55,11 @@
 
 <script lang="ts">
 import Loader from "@/components/loader/loader.vue";
+import TournamentStatus from "@/components/high-scores/TournamentStatus.vue";
+import TournamentActions from "@/components/high-scores/TournamentActions.vue";
 import type { HighScoreDef } from "@/services/high-scores-service";
 import { isSupported, getHighScores } from "@/services/high-scores-service";
+import { useTournamentState } from "@/model/tournament-state";
 
 // our fancy font has some challenges for our presentation purposes
 // for one, it does not support diacritics, fallback to the unaccented character
@@ -72,6 +80,8 @@ interface ComponentData {
 export default {
     components: {
         Loader,
+        TournamentStatus,
+        TournamentActions,
     },
     data: (): ComponentData => ({
         isSupported: false,
@@ -81,20 +91,16 @@ export default {
     computed: {
         formattedScores(): HighScoreDef[] {
             const filteredScores = this.scores.filter(({ score }) => score > 0 );
-            if ( filteredScores.length > 0 ) {
-                return filteredScores.map( replaceDiacritics );
-            }
-            const names = "JIHGFEDCBA";
-            const scores = [];
-            for ( let i = scores.length; i < 10; ++i ) {
-                scores.push({ name: new Array( 4 ).fill( names[ i ] ).join( "" ), score: 1000 * ( i + 1 ) });
-            }
-            return scores.reverse().map( replaceDiacritics );
+            return filteredScores.map( replaceDiacritics );
         },
+    },
+    methods: {
+        async onRefresh() {
+            this.scores = await getHighScores();
+        }
     },
     async mounted(): Promise<void> {
         this.isSupported = isSupported();
-
         if ( this.isSupported ) {
             this.scores = await getHighScores();
         }
@@ -138,4 +144,6 @@ export default {
         }
     }
 }
+.empty{ margin: 8px 0; opacity: 0.7; }
+.empty a{ color: #66f; text-decoration: underline; cursor: pointer; }
 </style>

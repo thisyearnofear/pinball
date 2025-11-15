@@ -2,104 +2,81 @@
  * The MIT License (MIT)
  *
  * Igor Zinken 2023 - https://www.igorski.nl
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of
- * this software and associated documentation files (the "Software"), to deal in
- * the Software without restriction, including without limitation the rights to
- * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
- * the Software, and to permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
- * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
- * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-import axios from "axios";
 
-/**
- * URLs to REST endpoint.
- * All URLs should end in trailing slashes.
- */
-type HighScoreServiceConfiguration = {
-    list: string;
-    start: string;
-    stop: string;
-};
+// Contract-backed high score service (no REST, no mocks)
+// Keeps the same public API (startGame, stopGame, getHighScores)
+
+import { web3Service } from './web3-service';
+import { getActiveTournamentId, fetchLeaderboard, submitScoreWithSignature } from './contracts/tournament-client';
+import { requestScoreSignature } from './backend-scores-client';
 
 export type HighScoreDef = {
-    name: string;
+    name: string; // currently we don't store names on-chain; keep field for compatibility
     score: number;
-    duration: number;
+    duration: number; // not tracked on-chain; set to 0 to preserve shape
 };
 
 export const isSupported = (): boolean => {
-    return !!getConfiguration();
+    // Supported only when wallet is connected and contracts are configured
+    try {
+        return web3Service.isConnected();
+    } catch {
+        return false;
+    }
 };
 
 /**
- * Invoke when starting a new game so it can be registered in the remote service
- * Returns string id identifying the game or null when game could not be registered.
+ * Invoke when starting a new game; returns active tournament id as the session id.
  */
 export const startGame = async (): Promise<string | null> => {
-    const startEndpoint = getConfiguration()?.start;
-    if ( !startEndpoint ) {
+    try {
+        const id = await getActiveTournamentId();
+        return String(id);
+    } catch (e) {
+        console.error('startGame failed:', e);
         return null;
     }
-    try {
-        const { data } = await axios.get( startEndpoint );
-        if ( data?.success === true && typeof data.id === "string" ) {
-            return data.id;
-        }
-    } catch {}
-    return null;
 };
 
+// NOTE: To submit a score we require a server signature proving validity.
+// The caller must obtain `signature` out-of-band (server API) and pass via metaData (or adapt as needed).
 export const stopGame = async ( gameId: string, score: number, playerName?: string, metaData?: string ): Promise<HighScoreDef[]> => {
-    const stopEndpoint = getConfiguration()?.stop;
-    if ( !stopEndpoint ) {
+    try {
+        const tournamentId = Number(gameId);
+        if (!web3Service.isConnected()) throw new Error('Wallet not connected');
+        // Expect metaData to contain a JSON string with { signature: string, metadata?: string }
+        let metadata = '';
+        if (metaData) {
+            try {
+                const parsed = JSON.parse(metaData);
+                metadata = parsed.metadata || '';
+            } catch {
+                metadata = metaData;
+            }
+        }
+        const address = web3Service.getAddress();
+        if (!address) throw new Error('No wallet address');
+        const signature = await requestScoreSignature({ tournamentId, address, score, name: playerName || '', metadata });
+        await submitScoreWithSignature(tournamentId, score, playerName || '', metadata, signature);
+        // Return updated leaderboard top slice
+        const rows = await fetchLeaderboard(tournamentId, 0, 100);
+        const scores: HighScoreDef[] = rows.map(r => ({ name: '', score: r.score, duration: 0 }));
+        return scores;
+    } catch (e) {
+        console.error('stopGame failed:', e);
         return [];
     }
-    try {
-        const { data } = await axios.post( `${stopEndpoint}${gameId}`, {
-            score,
-            name: playerName,
-            metadata: metaData,
-        });
-        return data?.scores ?? [];
-    } catch {}
-    return [];
 };
 
 export const getHighScores = async (): Promise<HighScoreDef[]> => {
-    const listEndpoint = getConfiguration()?.list;
-    if ( !listEndpoint ) {
-        return null;
-    }
     try {
-        const { data } = await axios.get( listEndpoint );
-        return data?.scores ?? [];
-    } catch {}
-    return [];
-};
-
-/* internal methods */
-
-function getConfiguration(): HighScoreServiceConfiguration | undefined {
-    // @ts-expect-error Property 'psConf' does not exist on type 'Window & typeof globalThis'.
-    if ( window.psConf ) return window.psConf;
-
-    // @ts-expect-error Property 'env' does not exist on type 'ImportMeta', Vite takes care of it
-    if ( import.meta.env.MODE !== "production" ) {
-        // in local dev mode we allow custom overrides
-        try {
-            const localSettings = window.localStorage.getItem( "psConf" );
-            return JSON.parse( localSettings );
-        } catch {}
+        const id = await getActiveTournamentId();
+        const rows = await fetchLeaderboard(id, 0, 100);
+        const scores: HighScoreDef[] = rows.map(r => ({ name: '', score: r.score, duration: 0 }));
+        return scores;
+    } catch (e) {
+        console.error('getHighScores failed:', e);
+        return [];
     }
-}
+};

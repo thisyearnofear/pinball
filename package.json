@@ -10,6 +10,7 @@
     "typecheck": "npx -p typescript tsc -p tsconfig.check.json --noEmit"
   },
   "dependencies": {
+    "@farcaster/miniapp-sdk": "^0.2.1",
     "@walletconnect/qrcode-modal": "^1.8.0",
     "@walletconnect/web3-provider": "^1.8.0",
     "ethers": "^6.15.0",
@@ -40,5 +41,13 @@
     "vitest-canvas-mock": "^0.3.3",
     "vue-i18n": "^9.14.3",
     "zcanvas": "^6.0.5"
-  }
+  },
+  "description": "_Pinball Schminball_ is a retro-style vertically scrolling pinball game created to showcase the possibilities of creating a game using the open source [zCanvas library](https://github.com/igorski/zCanvas) for graphics rendering, this time enriched by using Matter JS as a physics engine.",
+  "main": ".eslintrc.js",
+  "directories": {
+    "test": "tests"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }
