@@ -7,11 +7,11 @@
   "frame": {
     "version": "1",
     "name": "ArbiPinball",
-    "iconUrl": "https://arbipinball.netlify.app/assets/logo.png",
+    "iconUrl": "https://arbipinball.netlify.app/assets/sprites/logo.png",
     "homeUrl": "https://arbipinball.netlify.app",
-    "imageUrl": "https://arbipinball.netlify.app/assets/logo.png",
+    "imageUrl": "https://arbipinball.netlify.app/assets/sprites/logo.png",
     "buttonTitle": "Play Pinball!",
-    "splashImageUrl": "https://arbipinball.netlify.app/assets/logo.png",
+    "splashImageUrl": "https://arbipinball.netlify.app/assets/sprites/logo.png",
     "splashBackgroundColor": "#1b1922"
   }
 }
