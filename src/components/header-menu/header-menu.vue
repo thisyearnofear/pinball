@@ -143,10 +143,11 @@ export default {
         },
         async connectWallet(): Promise<void> {
             try {
-                await web3Service.connect('metamask');
-                this.menuOpened = false;
-                // Emit event to parent to potentially refresh state
-                this.$emit('wallet-connected');
+                const result = await web3Service.autoConnect();
+                if (result) {
+                    this.menuOpened = false;
+                    this.$emit('wallet-connected');
+                }
             } catch (error) {
                 console.error('Wallet connection failed:', error);
             }

@@ -323,17 +323,12 @@ export default {
         },
         async connectWallet(): Promise<void> {
             try {
-                // Try Farcaster auto-connect first, fallback to MetaMask
-                const result = await web3Service.connect('metamask');
+                const result = await web3Service.autoConnect();
                 if (result) {
                     this.newGameProps.playerName = result.address;
-                    
-                    // Load tournament state after connection
-                    // Note: tournamentState is initialized in header-menu mounted
                 }
             } catch (error) {
                 console.error('Wallet connection failed:', error);
-                // In Farcaster context, this might be automatically handled
             }
         },
     },

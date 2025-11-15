@@ -14,6 +14,45 @@ class Web3Service extends EventEmitter {
         super();
     }
 
+    /**
+     * Get available wallet options for the current environment
+     * Returns wallets in priority order
+     */
+    getAvailableWallets(): Array<'metamask' | 'walletconnect'> {
+        const available: Array<'metamask' | 'walletconnect'> = [];
+        
+        // Always include WalletConnect as fallback
+        available.push('walletconnect');
+        
+        // Check if MetaMask is available
+        if (window.ethereum && typeof window.ethereum.request === 'function') {
+            available.unshift('metamask');
+        }
+        
+        return available;
+    }
+
+    /**
+     * Auto-connect to the best available wallet
+     * Returns null if no wallets available, or connection fails
+     */
+    async autoConnect(): Promise<{ address: string; chainId: number } | null> {
+        const available = this.getAvailableWallets();
+        
+        for (const walletType of available) {
+            try {
+                const result = await this.connect(walletType);
+                if (result) {
+                    return result;
+                }
+            } catch (error) {
+                console.log(`Failed to auto-connect with ${walletType}, trying next...`);
+            }
+        }
+        
+        return null;
+    }
+
     async connect(walletType: 'metamask' | 'walletconnect' = 'metamask'): Promise<{ address: string; chainId: number } | null> {
         try {
             if (walletType === 'metamask') {
@@ -22,7 +61,7 @@ class Web3Service extends EventEmitter {
                 return await this.connectWalletConnect();
             }
         } catch (error) {
-            console.error('Failed to connect wallet:', error);
+            console.error(`Failed to connect with ${walletType}:`, error);
             return null;
         }
     }
