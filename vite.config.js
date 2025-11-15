@@ -32,4 +32,31 @@ export default defineConfig({
             "@@": path.resolve( __dirname, "./public/assets" ),
         },
     },
+    define: {
+        global: 'globalThis',
+        process: {
+            env: {},
+            browser: true,
+            version: ''
+        }
+    },
+    optimizeDeps: {
+        esbuildOptions: {
+            define: {
+                global: 'globalThis',
+                process: JSON.stringify({
+                    env: {},
+                    browser: true,
+                    version: ''
+                })
+            }
+        },
+        include: [
+            'buffer',
+            '@walletconnect/web3-provider',
+            'web3-provider-engine',
+            'ethereumjs-util',
+            'readable-stream'
+        ]
+    }
 });

@@ -110,6 +110,7 @@ export default {
             menuOpened: false,
             walletMenuOpen: false,
             tournamentState: null as any,
+            walletConnected: false,
         };
     },
     computed: {
@@ -117,7 +118,7 @@ export default {
             return MENU_ITEMS;
         },
         isWalletConnected(): boolean {
-            return web3Service.isConnected();
+            return this.walletConnected || web3Service.isConnected();
         },
         shortAddress(): string {
             const address = web3Service.getAddress();
@@ -194,11 +195,23 @@ export default {
             }
         }
         
+        // Listen for wallet connection/disconnection events
+        web3Service.on('connected', (data) => {
+            this.walletConnected = true;
+        });
+        
+        web3Service.on('disconnected', () => {
+            this.walletConnected = false;
+        });
+        
         // Add click outside listener
         document.addEventListener('click', this.handleClickOutside);
     },
     beforeUnmount(): void {
         document.removeEventListener('click', this.handleClickOutside);
+        // Clean up event listeners
+        web3Service.off('connected');
+        web3Service.off('disconnected');
     },
 };
 </script>
@@ -252,6 +265,8 @@ export default {
         margin-left: auto;
         margin-right: $spacing-medium;
         position: relative;
+        flex-shrink: 0;
+        min-width: 0;
         
         @include mobile() {
             display: none; // Hide in mobile hamburger menu
@@ -264,11 +279,15 @@ export default {
             background: rgba(0, 255, 136, 0.1);
             border: 1px solid rgba(0, 255, 136, 0.3);
             border-radius: 4px;
-            font-size: 12px;
+            font-size: 11px;
             color: #fff;
             font-family: monospace;
             cursor: pointer;
             transition: background 0.2s ease;
+            white-space: nowrap;
+            max-width: 140px;
+            overflow: hidden;
+            text-overflow: ellipsis;
 
             &:hover {
                 background: rgba(0, 255, 136, 0.15);
@@ -454,6 +473,7 @@ export default {
         line-height: $menu-height;
         margin: 0;
         flex: 1;
+        min-width: 0;
 
         @include large() {
             justify-content: center;

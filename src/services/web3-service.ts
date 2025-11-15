@@ -18,15 +18,15 @@ class Web3Service extends EventEmitter {
      * Get available wallet options for the current environment
      * Returns wallets in priority order
      */
-    getAvailableWallets(): Array<'metamask' | 'walletconnect'> {
-        const available: Array<'metamask' | 'walletconnect'> = [];
+    getAvailableWallets(): Array<'metamask'> {
+        // For now, only expose MetaMask/browser extension wallets
+        // WalletConnect v1 has too many compatibility issues with Vite/browser
+        // Users should install a wallet extension
+        const available: Array<'metamask'> = [];
         
-        // Always include WalletConnect as fallback
-        available.push('walletconnect');
-        
-        // Check if MetaMask is available
+        // Check if MetaMask or compatible extension is available
         if (window.ethereum && typeof window.ethereum.request === 'function') {
-            available.unshift('metamask');
+            available.push('metamask');
         }
         
         return available;
@@ -53,13 +53,9 @@ class Web3Service extends EventEmitter {
         return null;
     }
 
-    async connect(walletType: 'metamask' | 'walletconnect' = 'metamask'): Promise<{ address: string; chainId: number } | null> {
+    async connect(walletType: 'metamask' = 'metamask'): Promise<{ address: string; chainId: number } | null> {
         try {
-            if (walletType === 'metamask') {
-                return await this.connectMetaMask();
-            } else {
-                return await this.connectWalletConnect();
-            }
+            return await this.connectMetaMask();
         } catch (error) {
             console.error(`Failed to connect with ${walletType}:`, error);
             return null;
@@ -110,33 +106,34 @@ class Web3Service extends EventEmitter {
 
     private async connectWalletConnect(): Promise<{ address: string; chainId: number } | null> {
         try {
-            // Dynamic import to avoid issues if not available
-            const WalletConnectProvider = (await import('@walletconnect/web3-provider')).default;
+            // Try to use web3modal or WalletConnect if available
+            // Otherwise fall back to browser defaults
+            console.log('Attempting WalletConnect connection...');
+            
+            // For now, WalletConnect v1 has compatibility issues with Vite/browser
+            // Try to use any available provider extension
+            if (window.ethereum) {
+                // If we have a provider available (MetaMask, Brave, etc), use it
+                try {
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    if (accounts && accounts.length > 0) {
+                        this.provider = new ethers.BrowserProvider(window.ethereum);
+                        this.signer = await this.provider.getSigner();
+                        this.address = await this.signer.getAddress();
+                        const network = await this.provider.getNetwork();
+                        const chainId = Number(network.chainId);
+                        console.log('Secondary provider connected:', this.address);
+                        this.emit('connected', { address: this.address, chainId });
+                        return { address: this.address, chainId };
+                    }
+                } catch (e) {
+                    console.log('Secondary provider request failed');
+                }
+            }
 
-            this.walletConnectProvider = new WalletConnectProvider({
-                bridge: BRIDGE_URL,
-                qrcode: true,
-                rpc: {
-                    1: 'https://cloudflare-eth.com/',
-                    137: 'https://polygon-rpc.com/',
-                    56: 'https://bsc-dataseed.binance.org/',
-                },
-            });
-
-            // Enable session (shows QR code)
-            await this.walletConnectProvider.enable();
-
-            this.provider = new ethers.BrowserProvider(this.walletConnectProvider);
-            this.signer = await this.provider.getSigner();
-            this.address = await this.signer.getAddress();
-
-            const network = await this.provider.getNetwork();
-            const chainId = Number(network.chainId);
-
-            return {
-                address: this.address,
-                chainId,
-            };
+            // If no fallback provider available, show error message
+            console.error('WalletConnect v1 has compatibility issues in browser. Please use MetaMask or other browser extension.');
+            throw new Error('WalletConnect unavailable - please use a browser wallet extension');
         } catch (error) {
             console.error('WalletConnect connection failed:', error);
             return null;

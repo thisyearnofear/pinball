@@ -49,7 +49,7 @@
             <component :is="modalComponent" />
         </modal>
         <modal
-            v-else-if="!game.active"
+            v-else-if="!game.active && startPending === false"
             :dismissible="false"
         >
             <new-game-window

@@ -22,34 +22,50 @@
  */
 <template>
     <div>
-        <!-- Wallet Selector Modal -->
-        <div v-if="showWalletSelector" class="wallet-selector-overlay">
-            <div class="wallet-selector">
-                <div class="wallet-selector__header">
-                    <h3 v-t="'ui.selectWallet'"></h3>
-                    <button
-                        type="button"
-                        class="wallet-selector__close"
-                        @click="showWalletSelector = false"
-                    >&times;</button>
-                </div>
-                <div class="wallet-selector__options">
-                    <button
-                        v-for="wallet in availableWallets"
-                        :key="wallet"
-                        type="button"
-                        class="wallet-option"
-                        :class="`wallet-option--${wallet}`"
-                        :disabled="connectingWallet === wallet"
-                        @click="selectWallet(wallet)"
-                    >
-                        <span class="wallet-option__icon">{{ walletIcon(wallet) }}</span>
-                        <span class="wallet-option__name">{{ walletName(wallet) }}</span>
-                        <span v-if="connectingWallet === wallet" class="wallet-option__spinner">⟳</span>
-                    </button>
+        <!-- Wallet Selector Modal - Teleported to body to avoid parent constraints -->
+        <Teleport to="body">
+            <div v-if="showWalletSelector" class="wallet-selector-overlay">
+                <div class="wallet-selector">
+                    <div class="wallet-selector__header">
+                        <h3 v-t="'ui.selectWallet'"></h3>
+                        <button
+                            type="button"
+                            class="wallet-selector__close"
+                            @click="showWalletSelector = false"
+                        >&times;</button>
+                    </div>
+                    <div class="wallet-selector__options">
+                        <button
+                            v-for="wallet in availableWallets"
+                            :key="wallet"
+                            type="button"
+                            class="wallet-option"
+                            :class="`wallet-option--${wallet}`"
+                            :disabled="connectingWallet === wallet"
+                            @click="selectWallet(wallet)"
+                        >
+                            <span class="wallet-option__icon">{{ walletIcon(wallet) }}</span>
+                            <span class="wallet-option__name">{{ walletName(wallet) }}</span>
+                            <span v-if="connectingWallet === wallet" class="wallet-option__spinner">⟳</span>
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>
+        </Teleport>
+
+        <!-- Tournament Join Modal - Teleported to body -->
+        <Teleport to="body">
+            <div v-if="showTournamentJoin" class="modal-overlay">
+                <div class="modal-wrapper">
+                    <tournament-join-modal
+                        :tournament-id="activeTournamentId"
+                        @joined="onTournamentJoined"
+                        @cancelled="onTournamentCancelled"
+                        @play-anonymous="onPlayAnonymous"
+                    />
+                </div>
+            </div>
+        </Teleport>
 
         <fieldset
             v-if="!showWalletSelector"
@@ -65,15 +81,11 @@
             </div>
         </div>
 
-        <!-- Status Section -->
-        <div class="status-section">
-            <div v-if="isWalletConnected" class="status-badge status-badge--connected">
+        <!-- Status Section - Only show when connected -->
+        <div v-if="isWalletConnected" class="status-section">
+            <div class="status-badge status-badge--connected">
                 <span class="status-badge__indicator"></span>
                 <span class="status-badge__text">{{ shortAddress }}</span>
-            </div>
-            <div v-else class="status-badge status-badge--disconnected">
-                <span class="status-badge__icon">⚠</span>
-                <span class="status-badge__text">{{ $t('ui.walletNotConnected') }}</span>
             </div>
         </div>
 
@@ -142,6 +154,7 @@ import { PropType } from "vue";
 import Tables from "@/definitions/tables";
 import { web3Service } from "@/services/web3-service";
 import { useTournamentState } from "@/model/tournament-state";
+import TournamentJoinModal from "@/components/tournament-join/tournament-join-modal.vue";
 
 export type NewGameProps = {
     playerName: string;
@@ -150,6 +163,9 @@ export type NewGameProps = {
 };
 
 export default {
+    components: {
+        TournamentJoinModal,
+    },
     props: {
         modelValue: {
             type: Object as PropType<NewGameProps>,
@@ -159,41 +175,44 @@ export default {
     data() {
         return {
             showWalletSelector: false,
-            connectingWallet: null as 'metamask' | 'walletconnect' | null,
+            connectingWallet: null as 'metamask' | null,
+            walletConnected: false,
+            showTournamentJoin: false,
+            activeTournamentId: 1,
         };
     },
     computed: {
-        internalValue: {
-            get(): NewGameProps {
-                return this.modelValue;
-            },
-            set(value: NewGameProps): void {
-                this.$emit("update:modelValue", value);
-            }
+    internalValue: {
+        get(): NewGameProps {
+            return this.modelValue;
         },
-        isWalletConnected(): boolean {
-            return web3Service.isConnected();
-        },
-        shortAddress(): string {
-            const address = web3Service.getAddress();
-            if (!address) return '';
-            return `${address.slice(0, 6)}...${address.slice(-4)}`;
-        },
-        canSelectTable(): boolean {
-            return Tables.length > 1;
-        },
-        canPlay(): boolean {
-            return true;
-        },
-        primaryButtonText(): string {
-            if (!this.isWalletConnected) {
-                return this.$t('ui.connectForTournament');
-            }
-            return this.$t('ui.enterTournament');
-        },
-        availableWallets(): Array<'metamask' | 'walletconnect'> {
-            return web3Service.getAvailableWallets();
-        },
+        set(value: NewGameProps): void {
+            this.$emit("update:modelValue", value);
+        }
+    },
+    isWalletConnected(): boolean {
+        return this.walletConnected || web3Service.isConnected();
+    },
+    shortAddress(): string {
+        const address = web3Service.getAddress();
+        if (!address) return '';
+        return `${address.slice(0, 6)}...${address.slice(-4)}`;
+    },
+    canSelectTable(): boolean {
+        return Tables.length > 1;
+    },
+    canPlay(): boolean {
+        return true;
+    },
+    primaryButtonText(): string {
+        if (!this.isWalletConnected) {
+            return this.$t('ui.connectForTournament');
+        }
+        return this.$t('ui.enterTournament');
+    },
+    availableWallets(): Array<'metamask'> {
+    return web3Service.getAvailableWallets();
+    },
     },
     watch: {
         "internalValue.table": {
@@ -215,6 +234,9 @@ export default {
         },
     },
     mounted(): void {
+        // Initialize wallet connection state
+        this.walletConnected = web3Service.isConnected();
+        
         // Set up player name based on wallet connection
         if (this.isWalletConnected) {
             const address = web3Service.getAddress();
@@ -224,13 +246,17 @@ export default {
         }
 
         // Listen for wallet connection changes
-        web3Service.on('connected', this.onWalletConnected);
-        web3Service.on('disconnected', this.onWalletDisconnected);
+        web3Service.on('connected', () => {
+            this.walletConnected = true;
+            this.onWalletConnected();
+        });
+        web3Service.on('disconnected', () => {
+            this.walletConnected = false;
+            this.onWalletDisconnected();
+        });
     },
     beforeUnmount(): void {
-        // Clean up event listeners
-        web3Service.off('connected', this.onWalletConnected);
-        web3Service.off('disconnected', this.onWalletDisconnected);
+        // No cleanup needed - we use inline arrow functions that don't need removal
     },
     methods: {
          onWalletConnected(): void {
@@ -246,13 +272,14 @@ export default {
              if (!this.isWalletConnected) {
                  this.showWalletSelector = true;
              } else {
-                 this.startGame();
+                 // Show tournament join modal instead of starting immediately
+                 this.showTournamentJoin = true;
              }
          },
          startGame(): void {
              this.$emit("start");
          },
-         async selectWallet(walletType: 'metamask' | 'walletconnect'): Promise<void> {
+         async selectWallet(walletType: 'metamask'): Promise<void> {
              this.connectingWallet = walletType;
              try {
                  const result = await web3Service.connect(walletType);
@@ -266,11 +293,11 @@ export default {
                  this.connectingWallet = null;
              }
          },
-         walletIcon(wallet: 'metamask' | 'walletconnect'): string {
-             return wallet === 'metamask' ? '🦊' : '📱';
+         walletIcon(wallet: 'metamask'): string {
+             return '🦊';
          },
-         walletName(wallet: 'metamask' | 'walletconnect'): string {
-             return wallet === 'metamask' ? 'MetaMask' : 'WalletConnect';
+         walletName(wallet: 'metamask'): string {
+             return 'MetaMask or Browser Wallet';
          },
          previousTable(): void {
              let previous = this.internalValue.table - 1;
@@ -286,8 +313,21 @@ export default {
              }
              this.internalValue.table = next;
          },
+         onTournamentJoined(): void {
+             this.showTournamentJoin = false;
+             this.startGame();
+         },
+         onTournamentCancelled(): void {
+             this.showTournamentJoin = false;
+         },
+         onPlayAnonymous(): void {
+             this.showTournamentJoin = false;
+             // Start game without tournament entry
+             this.internalValue.playerName = 'Anonymous Player';
+             this.startGame();
+         },
      },
-};
+ };
 </script>
 
 
@@ -635,5 +675,30 @@ export default {
 @keyframes spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
+}
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1002;
+}
+
+.modal-wrapper {
+    background: $color-modal-bg;
+    border: 3px solid $color-outlines;
+    border-radius: $spacing-large;
+    padding: $spacing-large;
+    max-width: 450px;
+    width: 90vw;
+    box-shadow: 0 0 30px rgba(0, 255, 136, 0.2);
+    max-height: 90vh;
+    overflow-y: auto;
 }
 </style>
