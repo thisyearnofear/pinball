@@ -125,9 +125,7 @@ export default {
         },
     },
     data() {
-        return {
-            connectionCheckInterval: null as any,
-        };
+        return {};
     },
     computed: {
         internalValue: {
@@ -187,42 +185,50 @@ export default {
             this.internalValue.playerName = 'Anonymous Player';
         }
 
-        // Check for wallet connection changes every 500ms to ensure UI updates
-        this.connectionCheckInterval = setInterval(() => {
-            this.$forceUpdate();
-        }, 500);
+        // Listen for wallet connection changes
+        web3Service.on('connected', this.onWalletConnected);
+        web3Service.on('disconnected', this.onWalletDisconnected);
     },
     beforeUnmount(): void {
-        if (this.connectionCheckInterval) {
-            clearInterval(this.connectionCheckInterval);
-        }
+        // Clean up event listeners
+        web3Service.off('connected', this.onWalletConnected);
+        web3Service.off('disconnected', this.onWalletDisconnected);
     },
     methods: {
-        handlePrimaryAction(): void {
-            if (!this.isWalletConnected) {
-                this.$emit('request-wallet-connect');
-            } else {
-                this.startGame();
-            }
-        },
-        startGame(): void {
-            this.$emit("start");
-        },
-        previousTable(): void {
-            let previous = this.internalValue.table - 1;
-            if (previous < 0) {
-                previous = Tables.length - 1;
-            }
-            this.internalValue.table = previous;
-        },
-        nextTable(): void {
-            let next = this.internalValue.table + 1;
-            if (next > Tables.length - 1) {
-                next = 0;
-            }
-            this.internalValue.table = next;
-        },
-    },
+         onWalletConnected(): void {
+             const address = web3Service.getAddress();
+             if (address) {
+                 this.internalValue.playerName = address;
+             }
+         },
+         onWalletDisconnected(): void {
+             this.internalValue.playerName = 'Anonymous Player';
+         },
+         handlePrimaryAction(): void {
+             if (!this.isWalletConnected) {
+                 this.$emit('request-wallet-connect');
+             } else {
+                 this.startGame();
+             }
+         },
+         startGame(): void {
+             this.$emit("start");
+         },
+         previousTable(): void {
+             let previous = this.internalValue.table - 1;
+             if (previous < 0) {
+                 previous = Tables.length - 1;
+             }
+             this.internalValue.table = previous;
+         },
+         nextTable(): void {
+             let next = this.internalValue.table + 1;
+             if (next > Tables.length - 1) {
+                 next = 0;
+             }
+             this.internalValue.table = next;
+         },
+     },
 };
 </script>
 

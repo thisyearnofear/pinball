@@ -1,13 +1,18 @@
 import { ethers } from 'ethers';
+import { EventEmitter } from 'events';
 
 // WalletConnect Bridge URL (for v1)
 const BRIDGE_URL = 'https://bridge.walletconnect.org';
 
-class Web3Service {
+class Web3Service extends EventEmitter {
     private provider: ethers.BrowserProvider | null = null;
     private signer: ethers.Signer | null = null;
     private address: string | null = null;
     private walletConnectProvider: any = null;
+
+    constructor() {
+        super();
+    }
 
     async connect(walletType: 'metamask' | 'walletconnect' = 'metamask'): Promise<{ address: string; chainId: number } | null> {
         try {
@@ -50,6 +55,9 @@ class Web3Service {
             const chainId = Number(network.chainId);
 
             console.log('MetaMask connected:', this.address, 'Chain ID:', chainId);
+            
+            // Emit connection event
+            this.emit('connected', { address: this.address, chainId });
 
             return {
                 address: this.address,
@@ -104,6 +112,9 @@ class Web3Service {
         this.signer = null;
         this.address = null;
         this.walletConnectProvider = null;
+        
+        // Emit disconnection event
+        this.emit('disconnected');
     }
 
     getProvider(): ethers.BrowserProvider | null {
