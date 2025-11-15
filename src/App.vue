@@ -57,7 +57,6 @@
 </template>
 
 <script lang="ts">
-import { init as initFarcaster, getFarcasterQR } from "@farcaster/miniapp-sdk";
 import { defineAsyncComponent } from "vue";
 import type { Component } from "vue";
 import HeaderMenu from "./components/header-menu/header-menu.vue";
@@ -74,8 +73,6 @@ import { init } from "@/services/audio-service";
 import { isSupported, startGame, stopGame } from "@/services/high-scores-service";
 import { getFromStorage, setInStorage } from "@/utils/local-storage";
 import { isFullscreen, toggleFullscreen } from "@/utils/fullscreen-util";
-
-initFarcaster();
 
 interface ComponentData {
     loading: boolean;
@@ -175,7 +172,17 @@ export default {
     async mounted(): Promise<void> {
         await preloadAssets();
         this.loading = false;
-        getFarcasterQR();
+        // Farcaster SDK (guarded dynamic import to support varying SDK exports)
+        try {
+            const mod: any = await import("@farcaster/miniapp-sdk");
+            const fc = mod?.default ?? mod;
+            if (typeof fc?.init === "function") {
+                await fc.init();
+            }
+            if (typeof fc?.getFarcasterQR === "function") {
+                fc.getFarcasterQR();
+            }
+        } catch {}
 
         // unlock the AudioContext as soon as we receive a user interaction event
         const handler = ( e: Event ): void => {
