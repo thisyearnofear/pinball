@@ -24,12 +24,23 @@ class Web3Service {
 
     private async connectMetaMask(): Promise<{ address: string; chainId: number } | null> {
         if (!window.ethereum) {
+            console.error('MetaMask not installed - window.ethereum is undefined');
             throw new Error('MetaMask not installed');
+        }
+
+        // Check if it's a valid EIP-1193 provider
+        if (typeof window.ethereum.request !== 'function') {
+            console.error('window.ethereum is not a valid EIP-1193 provider');
+            throw new Error('Invalid Ethereum provider');
         }
 
         try {
             // Request account access
-            await window.ethereum.request({ method: 'eth_requestAccounts' });
+            const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+            
+            if (!accounts || accounts.length === 0) {
+                throw new Error('No accounts returned from wallet');
+            }
 
             this.provider = new ethers.BrowserProvider(window.ethereum);
             this.signer = await this.provider.getSigner();
@@ -37,6 +48,8 @@ class Web3Service {
 
             const network = await this.provider.getNetwork();
             const chainId = Number(network.chainId);
+
+            console.log('MetaMask connected:', this.address, 'Chain ID:', chainId);
 
             return {
                 address: this.address,
