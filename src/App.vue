@@ -53,6 +53,7 @@
             <new-game-window
                 v-model="newGameProps"
                 @start="initGame()"
+                @request-wallet-connect="connectWallet()"
             />
         </modal>
     </template>
@@ -301,6 +302,21 @@ export default {
         onWalletDisconnected(): void {
             // Reset to anonymous when wallet is disconnected
             this.newGameProps.playerName = 'Anonymous Player';
+        },
+        async connectWallet(): Promise<void> {
+            try {
+                // Try Farcaster auto-connect first, fallback to MetaMask
+                const result = await web3Service.connect('metamask');
+                if (result) {
+                    this.newGameProps.playerName = result.address;
+                    
+                    // Load tournament state after connection
+                    // Note: tournamentState is initialized in header-menu mounted
+                }
+            } catch (error) {
+                console.error('Wallet connection failed:', error);
+                // In Farcaster context, this might be automatically handled
+            }
         },
     },
 };

@@ -485,7 +485,7 @@ export default {
         .menu__items {
             margin: $menu-height auto 0;
             background-color: #000;
-            height: calc(100% - #{$menu-height});
+            max-height: calc(100vh - #{$menu-height});
             overflow: hidden;
             overflow-y: auto;
 

@@ -43,7 +43,7 @@
                     <button
                         class="wallet-button wallet-button--primary"
                         :disabled="connecting"
-                        @click="connectWallet()"
+                        @click="$emit('request-wallet-connect')"
                     >
                         {{ connecting ? $t('ui.connecting') : $t('ui.connectForTournament') }}
                     </button>
@@ -134,7 +134,6 @@ export default {
     data() {
         return {
             connecting: false,
-            walletAddress: null as string | null,
         };
     },
     computed: {
@@ -186,42 +185,19 @@ export default {
         },
     },
     mounted(): void {
-        // Initialize wallet state
-        this.walletAddress = web3Service.getAddress();
-        
         // Set up player name based on wallet connection
         if (this.isWalletConnected) {
-            this.internalValue.playerName = this.walletAddress || 'Connected Player';
+            const address = web3Service.getAddress();
+            this.internalValue.playerName = address || 'Connected Player';
         } else {
             this.internalValue.playerName = 'Anonymous Player';
         }
     },
     methods: {
-        async connectWallet(): Promise<void> {
-            if (this.connecting) return;
-            
-            this.connecting = true;
-            try {
-                // Try Farcaster auto-connect first, fallback to MetaMask
-                const result = await web3Service.connect('metamask');
-                if (result) {
-                    this.walletAddress = result.address;
-                    this.internalValue.playerName = result.address;
-                    
-                    // Load tournament state after connection
-                    const { load } = useTournamentState();
-                    await load();
-                }
-            } catch (error) {
-                console.error('Wallet connection failed:', error);
-                // In Farcaster context, this might be automatically handled
-            } finally {
-                this.connecting = false;
-            }
-        },
         handlePrimaryAction(): void {
             if (!this.isWalletConnected) {
-                this.connectWallet();
+                // Request wallet connection from parent
+                this.$emit('request-wallet-connect');
             } else {
                 this.startGame();
             }
