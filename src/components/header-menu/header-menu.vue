@@ -34,6 +34,28 @@
              >
                 <span>&#9776;</span>
             </div>
+            
+            <!-- Wallet Status (always visible when connected) -->
+            <div v-if="isWalletConnected" class="menu__wallet" ref="walletMenu">
+                <div class="menu__wallet-status" @click="toggleWalletMenu">
+                    <span class="menu__wallet-indicator" :class="{ 'menu__wallet-indicator--tournament': isTournamentActive }"></span>
+                    {{ shortAddress }}
+                    <span v-if="isTournamentActive" class="menu__tournament-badge">T</span>
+                    <span class="menu__wallet-chevron" :class="{ 'menu__wallet-chevron--open': walletMenuOpen }">▼</span>
+                </div>
+                <div v-if="walletMenuOpen" class="menu__wallet-dropdown">
+                    <div v-if="isTournamentActive" class="wallet-tournament-info">
+                        <span class="tournament-status">{{ $t('ui.tournamentActive') }}</span>
+                    </div>
+                    <button @click="switchWallet" class="wallet-action">
+                        {{ $t('ui.switchWallet') }}
+                    </button>
+                    <button @click="disconnectWallet" class="wallet-action wallet-action--danger">
+                        {{ $t('ui.disconnectWallet') }}
+                    </button>
+                </div>
+            </div>
+            
             <ul class="menu__items">
                 <li
                     v-for="(item, index) in menuItems"
@@ -46,6 +68,35 @@
                         @click="openScreen( item )"
                     ></button>
                 </li>
+                
+                <!-- Wallet connection/status items -->
+                <li v-if="!isWalletConnected" class="menu__wallet-connect">
+                    <button
+                        type="button"
+                        :title="$t('ui.connectWallet')"
+                        @click="connectWallet"
+                    >
+                        {{ $t('ui.connectForTournament') }}
+                    </button>
+                </li>
+                
+                <!-- Mobile wallet status (shown in hamburger menu) -->
+                <li v-else-if="isWalletConnected" class="menu__wallet-mobile">
+                    <div class="mobile-wallet-status">
+                        <div class="mobile-wallet-info">
+                            <span class="mobile-wallet-label">{{ $t('ui.connected') }}:</span>
+                            <span class="mobile-wallet-address">{{ shortAddress }}</span>
+                        </div>
+                        <div class="mobile-wallet-actions">
+                            <button @click="switchWallet" class="mobile-wallet-btn">
+                                {{ $t('ui.switchWallet') }}
+                            </button>
+                            <button @click="disconnectWallet" class="mobile-wallet-btn mobile-wallet-btn--danger">
+                                {{ $t('ui.disconnect') }}
+                            </button>
+                        </div>
+                    </div>
+                </li>
             </ul>
         </nav>
     </header>
@@ -53,6 +104,8 @@
 
 <script lang="ts">
 import { MENU_ITEMS } from "@/definitions/menu";
+import { web3Service } from "@/services/web3-service";
+import { useTournamentState } from "@/model/tournament-state";
 
 export default {
     props: {
@@ -61,12 +114,29 @@ export default {
             default: false
         }
     },
-    data: () => ({
-        menuOpened: false,
-    }),
+    data() {
+        return {
+            menuOpened: false,
+            walletMenuOpen: false,
+            tournamentState: null as any,
+        };
+    },
     computed: {
         menuItems(): string[] {
             return MENU_ITEMS;
+        },
+        isWalletConnected(): boolean {
+            return web3Service.isConnected();
+        },
+        shortAddress(): string {
+            const address = web3Service.getAddress();
+            if (!address) return '';
+            return `${address.slice(0, 6)}...${address.slice(-4)}`;
+        },
+        isTournamentActive(): boolean {
+            return this.tournamentState && 
+                   this.tournamentState.tournamentId.value !== null && 
+                   !this.tournamentState.finalized.value;
         },
     },
     methods: {
@@ -77,7 +147,64 @@ export default {
             this.$emit( "open", target );
             this.menuOpened = false;
         },
-    }
+        async connectWallet(): Promise<void> {
+            try {
+                await web3Service.connect('metamask');
+                this.menuOpened = false;
+                // Emit event to parent to potentially refresh state
+                this.$emit('wallet-connected');
+            } catch (error) {
+                console.error('Wallet connection failed:', error);
+            }
+        },
+        toggleWalletMenu(): void {
+            this.walletMenuOpen = !this.walletMenuOpen;
+        },
+        async switchWallet(): Promise<void> {
+            try {
+                // Disconnect current wallet first
+                await web3Service.disconnect();
+                this.walletMenuOpen = false;
+                // Attempt new connection
+                await web3Service.connect('metamask');
+                this.$emit('wallet-connected');
+            } catch (error) {
+                console.error('Wallet switch failed:', error);
+            }
+        },
+        async disconnectWallet(): Promise<void> {
+            try {
+                await web3Service.disconnect();
+                this.walletMenuOpen = false;
+                this.$emit('wallet-disconnected');
+            } catch (error) {
+                console.error('Wallet disconnect failed:', error);
+            }
+        },
+        handleClickOutside(event: Event): void {
+            const walletMenu = this.$refs.walletMenu as HTMLElement;
+            if (walletMenu && !walletMenu.contains(event.target as Node)) {
+                this.walletMenuOpen = false;
+            }
+        },
+    },
+    async mounted(): Promise<void> {
+        // Initialize tournament state if wallet is connected
+        if (this.isWalletConnected) {
+            this.tournamentState = useTournamentState();
+            try {
+                await this.tournamentState.load();
+            } catch (error) {
+                console.log('Tournament state loading failed:', error);
+            }
+        }
+        
+        // Add click outside listener
+        document.addEventListener('click', this.handleClickOutside);
+    },
+    beforeUnmount(): void {
+        document.removeEventListener('click', this.handleClickOutside);
+    },
 };
 </script>
 
@@ -123,6 +250,146 @@ export default {
     width: 100%;
     height: 100%;
     box-sizing: border-box;
+    display: flex;
+    align-items: center;
+
+    &__wallet {
+        margin-left: auto;
+        margin-right: $spacing-medium;
+        position: relative;
+        
+        @include mobile() {
+            display: none; // Hide in mobile hamburger menu
+        }
+
+        &-status {
+            display: flex;
+            align-items: center;
+            padding: 4px 8px;
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 4px;
+            font-size: 12px;
+            color: #fff;
+            font-family: monospace;
+            cursor: pointer;
+            transition: background 0.2s ease;
+
+            &:hover {
+                background: rgba(0, 255, 136, 0.15);
+            }
+        }
+
+        &-chevron {
+            margin-left: 6px;
+            font-size: 10px;
+            transition: transform 0.2s ease;
+
+            &--open {
+                transform: rotate(180deg);
+            }
+        }
+
+        &-badge {
+            margin-left: 4px;
+            background: #ff9500;
+            color: #000;
+            font-size: 8px;
+            font-weight: bold;
+            padding: 1px 3px;
+            border-radius: 2px;
+            line-height: 1;
+        }
+
+        &-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: #1a1a1a;
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 6px;
+            padding: 6px 0;
+            min-width: 150px;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+
+            .wallet-tournament-info {
+                padding: 8px 12px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                margin-bottom: 4px;
+
+                .tournament-status {
+                    color: #ff9500;
+                    font-size: 11px;
+                    font-weight: bold;
+                    display: flex;
+                    align-items: center;
+
+                    &::before {
+                        content: '●';
+                        margin-right: 4px;
+                        color: #ff9500;
+                        animation: pulse 2s infinite;
+                    }
+                }
+            }
+
+            .wallet-action {
+                display: block;
+                width: 100%;
+                padding: 8px 12px;
+                background: none;
+                border: none;
+                color: #fff;
+                text-align: left;
+                cursor: pointer;
+                font-size: 12px;
+                transition: background 0.2s ease;
+
+                &:hover {
+                    background: rgba(255, 255, 255, 0.1);
+                }
+
+                &--danger {
+                    color: #ff6b6b;
+
+                    &:hover {
+                        background: rgba(255, 107, 107, 0.1);
+                    }
+                }
+            }
+        }
+
+        &-indicator {
+            width: 6px;
+            height: 6px;
+            background: $color-anchors;
+            border-radius: 50%;
+            margin-right: 6px;
+            animation: pulse 2s infinite;
+
+            &--tournament {
+                background: #ff9500;
+                animation: tournament-pulse 1.5s infinite;
+            }
+        }
+    }
+
+    @keyframes tournament-pulse {
+        0%, 100% { 
+            opacity: 1; 
+            transform: scale(1);
+        }
+        50% { 
+            opacity: 0.7; 
+            transform: scale(1.1);
+        }
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
 
     &__toggle {
         position: absolute;
@@ -151,14 +418,14 @@ export default {
     }
 
     .menu__items {
-        width: 100%;
+        display: flex;
+        align-items: center;
         line-height: $menu-height;
-        vertical-align: middle;
-        margin: 0 auto;
-        display: block;
+        margin: 0;
+        flex: 1;
 
         @include large() {
-            text-align: center;
+            justify-content: center;
         }
     }
 
@@ -166,6 +433,99 @@ export default {
         display: inline;
         padding: 0;
         margin: 0 $spacing-large 0 0;
+
+        &.menu__wallet-connect {
+            margin-left: auto;
+            
+            @include mobile() {
+                margin-left: 0;
+                width: 100%;
+                margin-top: $spacing-small;
+            }
+
+            button {
+                background: linear-gradient(135deg, $color-anchors, #00cc88);
+                color: #000;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-size: 12px;
+                font-weight: bold;
+
+                &:hover {
+                    color: #000;
+                    transform: translateY(-1px);
+                }
+
+                @include mobile() {
+                    width: 100%;
+                    padding: 12px;
+                    font-size: 14px;
+                }
+            }
+        }
+
+        &.menu__wallet-mobile {
+            @include large() {
+                display: none; // Only show on mobile
+            }
+
+            .mobile-wallet-status {
+                width: 100%;
+                padding: 12px 0;
+                border-top: 1px solid #333;
+                border-bottom: 1px solid #333;
+                margin: 8px 0;
+            }
+
+            .mobile-wallet-info {
+                margin-bottom: 8px;
+
+                .mobile-wallet-label {
+                    color: $color-anchors;
+                    font-size: 12px;
+                }
+
+                .mobile-wallet-address {
+                    color: #fff;
+                    font-family: monospace;
+                    font-weight: bold;
+                    font-size: 14px;
+                    display: block;
+                    margin-top: 2px;
+                }
+            }
+
+            .mobile-wallet-actions {
+                display: flex;
+                gap: 8px;
+
+                .mobile-wallet-btn {
+                    flex: 1;
+                    padding: 8px 12px;
+                    border: 1px solid #555;
+                    background: transparent;
+                    color: #fff;
+                    border-radius: 4px;
+                    font-size: 12px;
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+
+                    &:hover {
+                        border-color: $color-anchors;
+                        color: $color-anchors;
+                    }
+
+                    &--danger {
+                        border-color: #ff6b6b;
+                        color: #ff6b6b;
+
+                        &:hover {
+                            background: rgba(255, 107, 107, 0.1);
+                        }
+                    }
+                }
+            }
+        }
 
         button, a {
             @include titleFont();
@@ -176,6 +536,7 @@ export default {
             font-size: 100%;
             text-decoration: none;
             padding: 0 $spacing-small;
+            transition: all 0.2s ease;
 
             &:hover {
                 color: $color-anchors;

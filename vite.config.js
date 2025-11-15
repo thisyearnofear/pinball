@@ -14,10 +14,16 @@ export default defineConfig({
     plugins: [
         vue(),
         viteStaticCopy({
-            targets: [{
-                src: `${dirLib}/pathseg/pathseg.js`,
-                dest: "./",
-            }]
+            targets: [
+                {
+                    src: `${dirLib}/pathseg/pathseg.js`,
+                    dest: "./",
+                },
+                {
+                    src: "public/.well-known/*",
+                    dest: ".well-known",
+                }
+            ]
         }),
     ],
     resolve: {

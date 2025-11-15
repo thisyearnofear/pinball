@@ -1,0 +1,17 @@
+{
+  "accountAssociation": {
+    "header": "eyJmaWQiOjEyMTUyLCJ0eXBlIjoiY3VzdG9keSIsImtleSI6IjB4MEJGNDVGOTY3RTkwZmZENjA2MzVkMUFDMTk1MDYyYTNBOUZjQzYyQiJ9",
+    "payload": "eyJkb21haW4iOiJhcmJpcGluYmFsbC5uZXRsaWZ5LmFwcCJ9",
+    "signature": "REPLACE_WITH_YOUR_SIGNATURE"
+  },
+  "frame": {
+    "version": "1",
+    "name": "ArbiPinball",
+    "iconUrl": "https://arbipinball.netlify.app/assets/logo.png",
+    "homeUrl": "https://arbipinball.netlify.app",
+    "imageUrl": "https://arbipinball.netlify.app/assets/logo.png",
+    "buttonTitle": "Play Pinball!",
+    "splashImageUrl": "https://arbipinball.netlify.app/assets/logo.png",
+    "splashBackgroundColor": "#1b1922"
+  }
+}

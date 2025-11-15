@@ -23,7 +23,7 @@
 <template>
     <fieldset
         class="ps-fieldset"
-        @keydown.enter="startGame()"
+        @keydown.enter="handlePrimaryAction()"
         @keyup.left="previousTable()"
         @keyup.right="nextTable()"
     >
@@ -33,27 +33,45 @@
                 <img src="@@/sprites/title_lower.png" class="title__lower" />
             </div>
         </div>
-        <div class="ps-input-wrapper">
-            <label
-                v-t="'ui.yourName'"
-                for="nameInput"
-                class="ps-input-wrapper__label"
-            ></label>
-            <input
-                id="nameInput"
-                ref="nameInput"
-                v-model="internalValue.playerName"
-                class="ps-input-wrapper__input"
-                :placeholder="$t( 'ui.playerName' )"
-            />
+
+        <!-- Wallet Connection Section (Primary for tournaments) -->
+        <div v-if="!isWalletConnected" class="wallet-section">
+            <div class="wallet-prompt">
+                <h3>{{ $t('ui.connectWallet') }}</h3>
+                <p>{{ $t('ui.walletExplanation') }}</p>
+                <div class="wallet-buttons">
+                    <button
+                        class="wallet-button wallet-button--primary"
+                        :disabled="connecting"
+                        @click="connectWallet()"
+                    >
+                        {{ connecting ? $t('ui.connecting') : $t('ui.connectForTournament') }}
+                    </button>
+                </div>
+            </div>
+            <div class="quick-play-separator">
+                <span>{{ $t('ui.or') }}</span>
+            </div>
+            <div class="quick-play-section">
+                <p class="quick-play-note">{{ $t('ui.practiceNote') }}</p>
+            </div>
         </div>
+
+        <!-- Connected State -->
+        <div v-else class="wallet-connected">
+            <div class="wallet-status">
+                <span class="wallet-label">{{ $t('ui.connected') }}:</span>
+                <span class="wallet-address">{{ shortAddress }}</span>
+            </div>
+        </div>
+
+        <!-- Table Selection (Always visible) -->
         <div
             v-if="canSelectTable"
             class="ps-input-wrapper"
         >
             <label
                 v-t="'ui.table'"
-                for="nameInput"
                 class="ps-input-wrapper__label"
             ></label>
             <div class="ps-input-wrapper__nav">
@@ -72,27 +90,33 @@
                 >{{ ">" }}</button>
             </div>
         </div>
+
+        <!-- Action Button -->
         <div class="ps-button-wrapper">
             <button
-                v-t="'ui.newGame'"
                 type="button"
-                class="ps-button-wrapper__button"
-                :disabled="!isValid"
+                class="ps-button-wrapper__button ps-button-wrapper__button--primary"
+                :disabled="!canPlay"
+                @click="handlePrimaryAction()"
+            >
+                {{ primaryButtonText }}
+            </button>
+            <button
+                v-if="!isWalletConnected"
+                v-t="'ui.playAnonymous'"
+                type="button"
+                class="ps-button-wrapper__button ps-button-wrapper__button--secondary"
                 @click="startGame()"
             ></button>
         </div>
-        <!-- <span
-            v-t="'ui.nameExplanation'"
-            class="ps-input-explanation"
-        ></span> -->
     </fieldset>
 </template>
 
 <script lang="ts">
 import { PropType } from "vue";
 import Tables from "@/definitions/tables";
-import { STORED_PLAYER_NAME } from "@/definitions/settings";
-import { getFromStorage, setInStorage } from "@/utils/local-storage";
+import { web3Service } from "@/services/web3-service";
+import { useTournamentState } from "@/model/tournament-state";
 
 export type NewGameProps = {
     playerName: string;
@@ -107,6 +131,12 @@ export default {
             required: true,
         },
     },
+    data() {
+        return {
+            connecting: false,
+            walletAddress: null as string | null,
+        };
+    },
     computed: {
         internalValue: {
             get(): NewGameProps {
@@ -116,15 +146,25 @@ export default {
                 this.$emit( "update:modelValue", value );
             }
         },
-        isValid(): boolean {
-            if ( this.modelValue.playerName.length === 0 ) {
-                return true;
-            }
-            const { playerName } = this.modelValue;
-            return playerName.trim( "" ).length > 0;
+        isWalletConnected(): boolean {
+            return web3Service.isConnected();
+        },
+        shortAddress(): string {
+            const address = web3Service.getAddress();
+            if (!address) return '';
+            return `${address.slice(0, 6)}...${address.slice(-4)}`;
         },
         canSelectTable(): boolean {
             return Tables.length > 1;
+        },
+        canPlay(): boolean {
+            return true; // Always can play (either connected for tournaments or anonymous)
+        },
+        primaryButtonText(): string {
+            if (!this.isWalletConnected) {
+                return this.$t('ui.connectForTournament');
+            }
+            return this.$t('ui.enterTournament');
         },
     },
     watch: {
@@ -134,20 +174,59 @@ export default {
                 this.internalValue.tableName = Tables[ value ].name;
             },
         },
+        isWalletConnected: {
+            immediate: true,
+            handler(connected: boolean): void {
+                if (connected) {
+                    // Use wallet address as player name
+                    const address = web3Service.getAddress();
+                    this.internalValue.playerName = address || 'Connected Player';
+                }
+            },
+        },
     },
     mounted(): void {
-        this.internalValue.playerName = getFromStorage( STORED_PLAYER_NAME ) || "";
-
-        this.$refs.nameInput.focus();
-    },
-    beforeUnmount(): void {
-        setInStorage( STORED_PLAYER_NAME, this.internalValue.playerName );
+        // Initialize wallet state
+        this.walletAddress = web3Service.getAddress();
+        
+        // Set up player name based on wallet connection
+        if (this.isWalletConnected) {
+            this.internalValue.playerName = this.walletAddress || 'Connected Player';
+        } else {
+            this.internalValue.playerName = 'Anonymous Player';
+        }
     },
     methods: {
-        startGame(): void {
-            if ( !this.isValid ) {
-                return;
+        async connectWallet(): Promise<void> {
+            if (this.connecting) return;
+            
+            this.connecting = true;
+            try {
+                // Try Farcaster auto-connect first, fallback to MetaMask
+                const result = await web3Service.connect('metamask');
+                if (result) {
+                    this.walletAddress = result.address;
+                    this.internalValue.playerName = result.address;
+                    
+                    // Load tournament state after connection
+                    const { load } = useTournamentState();
+                    await load();
+                }
+            } catch (error) {
+                console.error('Wallet connection failed:', error);
+                // In Farcaster context, this might be automatically handled
+            } finally {
+                this.connecting = false;
             }
+        },
+        handlePrimaryAction(): void {
+            if (!this.isWalletConnected) {
+                this.connectWallet();
+            } else {
+                this.startGame();
+            }
+        },
+        startGame(): void {
             this.$emit( "start" );
         },
         previousTable(): void {
@@ -194,6 +273,111 @@ export default {
     }
 }
 
+.wallet-section {
+    margin: $spacing-large 0;
+    text-align: center;
+
+    .wallet-prompt {
+        h3 {
+            @include titleFont(20px);
+            color: $color-anchors;
+            margin: 0 0 $spacing-small;
+        }
+
+        p {
+            color: #ccc;
+            margin: 0 0 $spacing-medium;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+    }
+
+    .wallet-buttons {
+        margin: $spacing-medium 0;
+    }
+
+    .wallet-button {
+        @include titleFont(16px);
+        padding: 12px 24px;
+        background: linear-gradient(135deg, $color-anchors, #00cc88);
+        border: none;
+        border-radius: 6px;
+        color: #000;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        width: 100%;
+        max-width: 280px;
+
+        &:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 255, 136, 0.3);
+        }
+
+        &:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+    }
+}
+
+.quick-play-separator {
+    margin: $spacing-large 0;
+    position: relative;
+    text-align: center;
+
+    &::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: #444;
+    }
+
+    span {
+        background: $color-bg;
+        padding: 0 $spacing-medium;
+        color: #888;
+        font-size: 12px;
+        text-transform: uppercase;
+    }
+}
+
+.quick-play-section {
+    .quick-play-note {
+        color: #888;
+        font-size: 12px;
+        margin: 0;
+        font-style: italic;
+    }
+}
+
+.wallet-connected {
+    margin: $spacing-medium 0;
+    text-align: center;
+
+    .wallet-status {
+        padding: $spacing-small $spacing-medium;
+        background: rgba(0, 255, 136, 0.1);
+        border: 1px solid rgba(0, 255, 136, 0.3);
+        border-radius: 6px;
+        font-size: 14px;
+
+        .wallet-label {
+            color: $color-anchors;
+            margin-right: $spacing-small;
+        }
+
+        .wallet-address {
+            color: #fff;
+            font-family: monospace;
+            font-weight: bold;
+        }
+    }
+}
+
 .ps-input-wrapper {
     &__nav {
         display: flex;
@@ -226,6 +410,50 @@ export default {
 
         &__nav {
             width: calc(100% - 170px);
+        }
+    }
+}
+
+.ps-button-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-small;
+    margin-top: $spacing-large;
+
+    &__button {
+        &--primary {
+            background: linear-gradient(135deg, $color-anchors, #00cc88);
+            color: #000;
+            font-weight: bold;
+
+            &:hover:not(:disabled) {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(0, 255, 136, 0.3);
+            }
+        }
+
+        &--secondary {
+            background: transparent;
+            border: 1px solid #666;
+            color: #ccc;
+            font-size: 14px;
+
+            &:hover:not(:disabled) {
+                border-color: #999;
+                color: #fff;
+            }
+        }
+    }
+
+    @include mobile() {
+        &__button {
+            &--secondary {
+                order: 1; // Show secondary button first on mobile
+            }
+            
+            &--primary {
+                order: 2;
+            }
         }
     }
 }

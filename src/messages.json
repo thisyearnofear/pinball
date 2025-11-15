@@ -17,7 +17,20 @@
             "nameExplanation": "*Entering your name is only mandatory if you wish to compete in the high scores list",
             "roundUp": "Round up",
             "totalPoints": "Total points",
-            "remainingBalls": "Remaining balls"
+            "remainingBalls": "Remaining balls",
+            "connectWallet": "Connect Wallet to Enter Tournament",
+            "walletExplanation": "Connect your wallet to compete in tournaments and win prizes from the weekly pot.",
+            "connectForTournament": "Connect & Enter Tournament",
+            "connecting": "Connecting...",
+            "connected": "Connected",
+            "or": "or",
+            "practiceNote": "Practice without competing for prizes",
+            "playAnonymous": "Practice Mode",
+            "enterTournament": "Enter Tournament",
+            "switchWallet": "Switch Wallet",
+            "disconnectWallet": "Disconnect Wallet",
+            "disconnect": "Disconnect",
+            "tournamentActive": "Tournament Active"
         },
         "messages": {
             "gotLucky": "Got lucky",

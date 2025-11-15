@@ -1,0 +1,77 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            width: 600px;
+            height: 400px;
+            background: linear-gradient(135deg, #1b1922 0%, #2a2530 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Arial', sans-serif;
+            position: relative;
+            overflow: hidden;
+        }
+        .title-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            z-index: 2;
+        }
+        .title-text {
+            color: #00ff88;
+            font-size: 48px;
+            font-weight: bold;
+            text-shadow: 0 0 20px #00ff88;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        .subtitle {
+            color: #ffffff;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        .cta {
+            color: #ff9500;
+            font-size: 32px;
+            font-weight: bold;
+            text-shadow: 0 0 15px #ff9500;
+        }
+        .logo {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 80px;
+            height: 80px;
+            background: #00ff88;
+            border-radius: 50%;
+            opacity: 0.3;
+        }
+        .glow {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 400px;
+            height: 200px;
+            background: radial-gradient(ellipse, rgba(0, 255, 136, 0.1), transparent);
+            z-index: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="glow"></div>
+    <div class="logo"></div>
+    <div class="title-container">
+        <div class="title-text">ARBIPINBALL</div>
+        <div class="subtitle">Tournament Pinball on Arbitrum</div>
+        <div class="cta">Play Pinball!</div>
+    </div>
+</body>
+</html>
+  

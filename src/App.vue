@@ -26,6 +26,8 @@
         <header-menu
             :collapsable="game.active"
             @open="activeScreen = $event"
+            @wallet-connected="onWalletConnected"
+            @wallet-disconnected="onWalletDisconnected"
         />
         <PinballTable
             v-model="game"
@@ -171,18 +173,11 @@ export default {
     },
     async mounted(): Promise<void> {
         await preloadAssets();
+        
+        // Initialize Farcaster SDK and attempt auto-connect
+        await this.initializeFarcaster();
+        
         this.loading = false;
-        // Farcaster SDK (guarded dynamic import to support varying SDK exports)
-        try {
-            const mod: any = await import("@farcaster/miniapp-sdk");
-            const fc = mod?.default ?? mod;
-            if (typeof fc?.init === "function") {
-                await fc.init();
-            }
-            if (typeof fc?.getFarcasterQR === "function") {
-                fc.getFarcasterQR();
-            }
-        } catch {}
 
         // unlock the AudioContext as soon as we receive a user interaction event
         const handler = ( e: Event ): void => {
@@ -234,6 +229,45 @@ export default {
             this.game.paused  = false;
 
             setInStorage( STORED_HAS_VIEWED_TUTORIAL, "true" );
+        },
+        async initializeFarcaster(): Promise<void> {
+            // Farcaster SDK (guarded dynamic import to support varying SDK exports)
+            try {
+                const mod: any = await import("@farcaster/miniapp-sdk");
+                const fc = mod?.default ?? mod;
+                if (typeof fc?.init === "function") {
+                    await fc.init();
+                }
+                
+                // In Farcaster context, try auto-connecting wallet
+                if (typeof fc?.wallet?.connect === "function") {
+                    try {
+                        await fc.wallet.connect();
+                        // If successful, update our game props
+                        const address = fc.wallet.address;
+                        if (address) {
+                            this.newGameProps.playerName = address;
+                        }
+                    } catch (error) {
+                        console.log('Auto-connect not available or failed:', error);
+                        // This is expected in many cases, not an error
+                    }
+                }
+            } catch (error) {
+                console.log('Farcaster SDK not available:', error);
+                // Expected when not in Farcaster context
+            }
+        },
+        onWalletConnected(): void {
+            // Refresh the new game props when wallet is connected
+            const address = web3Service.getAddress();
+            if (address) {
+                this.newGameProps.playerName = address;
+            }
+        },
+        onWalletDisconnected(): void {
+            // Reset to anonymous when wallet is disconnected
+            this.newGameProps.playerName = 'Anonymous Player';
         },
     },
 };
