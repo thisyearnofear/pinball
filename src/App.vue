@@ -26,6 +26,7 @@
         <header-menu
             :collapsable="game.active"
             :show-connect-button="game.active"
+            :is-farcaster="isFarcaster"
             @open="activeScreen = $event"
             @wallet-connected="onWalletConnected"
             @wallet-disconnected="onWalletDisconnected"
@@ -86,6 +87,7 @@ interface ComponentData {
     startPending: boolean;
     hasTouchScreen: boolean;
     showTutorial: boolean;
+    isFarcaster: boolean;
     config: {
         useVHS: boolean;
     };
@@ -113,6 +115,7 @@ export default {
         startPending: false,
         hasTouchScreen: false,
         showTutorial: false,
+        isFarcaster: false,
         config: {
             useVHS: getFromStorage( STORED_DISABLE_VHS_EFFECT ) !== "true"
         },
@@ -234,20 +237,23 @@ export default {
             setInStorage( STORED_HAS_VIEWED_TUTORIAL, "true" );
         },
         async initializeFarcaster(): Promise<void> {
-             // Farcaster SDK (guarded dynamic import to support varying SDK exports)
-             try {
-                 const mod: any = await import("@farcaster/miniapp-sdk");
-                 const fc = mod?.default ?? mod;
-                 
-                 // Initialize the SDK if init function exists
-                 if (typeof fc?.init === "function") {
-                     await fc.init();
-                 }
-                 
-                 // Notify Farcaster Mini App that the app is ready to render (hide splash)
-                 if (typeof fc?.actions?.ready === "function") {
-                     await fc.actions.ready();
-                 }
+            // Farcaster SDK (guarded dynamic import to support varying SDK exports)
+            try {
+                const mod: any = await import("@farcaster/miniapp-sdk");
+                const fc = mod?.default ?? mod;
+                
+                // Initialize the SDK if init function exists
+                if (typeof fc?.init === "function") {
+                    await fc.init();
+                }
+                
+                // Mark that we're in Farcaster context
+                this.isFarcaster = true;
+                
+                // Notify Farcaster Mini App that the app is ready to render (hide splash)
+                if (typeof fc?.actions?.ready === "function") {
+                    await fc.actions.ready();
+                }
                  
                  // In Farcaster context, try auto-connecting wallet
                  if (typeof fc?.wallet?.getEthereumProvider === "function") {

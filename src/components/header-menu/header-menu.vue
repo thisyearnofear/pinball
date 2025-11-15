@@ -25,7 +25,8 @@
         class="header"
         :class="{
             'header--expanded': menuOpened,
-            'header--collapsable': collapsable
+            'header--collapsable': collapsable,
+            'header--farcaster': forceMobileMenu
         }"
     >
         <nav class="menu">
@@ -98,6 +99,10 @@ export default {
         showConnectButton: {
             type: Boolean,
             default: false
+        },
+        isFarcaster: {
+            type: Boolean,
+            default: false
         }
     },
     data() {
@@ -123,6 +128,9 @@ export default {
             return this.tournamentState && 
                    this.tournamentState.tournamentId.value !== null && 
                    !this.tournamentState.finalized.value;
+        },
+        forceMobileMenu(): boolean {
+            return this.isFarcaster;
         },
     },
     methods: {
@@ -375,6 +383,42 @@ export default {
     @keyframes pulse {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.5; }
+    }
+
+    // Force mobile menu layout in Farcaster context
+    &--farcaster {
+        .menu__toggle {
+            display: block;
+        }
+
+        .menu__items {
+            position: fixed;
+            overflow: hidden;
+            width: 100%;
+            height: auto;
+            top: $menu-height;
+            left: 0;
+            max-height: calc(100vh - #{$menu-height});
+            overflow-y: auto;
+            background-color: #000;
+            flex-direction: column;
+
+            li {
+                display: block;
+                font-size: 24px;
+                margin: $spacing-small 0 0;
+                width: 100%;
+                line-height: $spacing-xlarge;
+                padding: 0 $spacing-medium;
+                box-sizing: border-box;
+            }
+        }
+
+        .menu__wallet {
+            display: block;
+            margin: $spacing-small $spacing-medium 0 0;
+            margin-right: auto;
+        }
     }
 
     &__toggle {
