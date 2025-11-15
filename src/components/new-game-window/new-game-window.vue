@@ -35,27 +35,18 @@
         </div>
 
         <!-- Wallet Connection Section (Primary for tournaments) -->
-        <div v-if="!isWalletConnected" class="wallet-section">
-            <div class="wallet-prompt">
-                <h3>{{ $t('ui.connectWallet') }}</h3>
-                <p>{{ $t('ui.walletExplanation') }}</p>
-                <div class="wallet-buttons">
-                    <button
-                        class="wallet-button wallet-button--primary"
-                        :disabled="connecting"
-                        @click="$emit('request-wallet-connect')"
-                    >
-                        {{ connecting ? $t('ui.connecting') : $t('ui.connectForTournament') }}
-                    </button>
-                </div>
-            </div>
-            <div class="quick-play-separator">
-                <span>{{ $t('ui.or') }}</span>
-            </div>
-            <div class="quick-play-section">
-                <p class="quick-play-note">{{ $t('ui.practiceNote') }}</p>
-            </div>
-        </div>
+         <div v-if="!isWalletConnected" class="wallet-section">
+             <div class="wallet-prompt">
+                 <h3>{{ $t('ui.connectWallet') }}</h3>
+                 <p>{{ $t('ui.walletExplanation') }}</p>
+             </div>
+             <div class="quick-play-separator">
+                 <span>{{ $t('ui.or') }}</span>
+             </div>
+             <div class="quick-play-section">
+                 <p class="quick-play-note">{{ $t('ui.practiceNote') }}</p>
+             </div>
+         </div>
 
         <!-- Connected State -->
         <div v-else class="wallet-connected">
@@ -132,10 +123,8 @@ export default {
         },
     },
     data() {
-        return {
-            connecting: false,
-        };
-    },
+         return {};
+     },
     computed: {
         internalValue: {
             get(): NewGameProps {
@@ -268,33 +257,7 @@ export default {
         }
     }
 
-    .wallet-buttons {
-        margin: $spacing-medium 0;
-    }
 
-    .wallet-button {
-        @include titleFont(16px);
-        padding: 12px 24px;
-        background: linear-gradient(135deg, $color-anchors, #00cc88);
-        border: none;
-        border-radius: 6px;
-        color: #000;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        width: 100%;
-        max-width: 280px;
-
-        &:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 255, 136, 0.3);
-        }
-
-        &:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-    }
 }
 
 .quick-play-separator {
