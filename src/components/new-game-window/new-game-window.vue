@@ -34,71 +34,73 @@
             </div>
         </div>
 
-        <!-- Wallet Connection Section (Primary for tournaments) -->
-         <div v-if="!isWalletConnected" class="wallet-section">
-             <div class="wallet-prompt">
-                 <h3>{{ $t('ui.connectWallet') }}</h3>
-                 <p>{{ $t('ui.walletExplanation') }}</p>
-             </div>
-             <div class="quick-play-separator">
-                 <span>{{ $t('ui.or') }}</span>
-             </div>
-             <div class="quick-play-section">
-                 <p class="quick-play-note">{{ $t('ui.practiceNote') }}</p>
-             </div>
-         </div>
-
-        <!-- Connected State -->
-        <div v-else class="wallet-connected">
-            <div class="wallet-status">
-                <span class="wallet-label">{{ $t('ui.connected') }}:</span>
-                <span class="wallet-address">{{ shortAddress }}</span>
+        <!-- Status Section -->
+        <div class="status-section">
+            <div v-if="isWalletConnected" class="status-badge status-badge--connected">
+                <span class="status-badge__indicator"></span>
+                <span class="status-badge__text">{{ shortAddress }}</span>
+            </div>
+            <div v-else class="status-badge status-badge--disconnected">
+                <span class="status-badge__icon">⚠</span>
+                <span class="status-badge__text">{{ $t('ui.walletNotConnected') }}</span>
             </div>
         </div>
 
-        <!-- Table Selection (Always visible) -->
-        <div
-            v-if="canSelectTable"
-            class="ps-input-wrapper"
-        >
-            <label
-                v-t="'ui.table'"
-                class="ps-input-wrapper__label"
-            ></label>
-            <div class="ps-input-wrapper__nav">
-                <button
-                    type="button"
-                    :title="$t('ui.selectPrevious')"
-                    class="ps-input-wrapper__nav-button"
-                    @click="previousTable()"
-                >{{ "<" }}</button>
-                <span class="ps-input-wrapper__nav-item">{{ internalValue.tableName }}</span>
-                <button
-                    type="button"
-                    :title="$t('ui.selectNext')"
-                    class="ps-input-wrapper__nav-button"
-                    @click="nextTable()"
-                >{{ ">" }}</button>
+        <!-- Game Options Section -->
+        <div class="game-options">
+            <!-- Table Selection (Always visible) -->
+            <div v-if="canSelectTable" class="table-selector">
+                <label class="table-selector__label" v-t="'ui.table'"></label>
+                <div class="table-selector__controls">
+                    <button
+                        type="button"
+                        :title="$t('ui.selectPrevious')"
+                        class="table-selector__btn"
+                        @click="previousTable()"
+                    >&lt;</button>
+                    <span class="table-selector__name">{{ internalValue.tableName }}</span>
+                    <button
+                        type="button"
+                        :title="$t('ui.selectNext')"
+                        class="table-selector__btn"
+                        @click="nextTable()"
+                    >&gt;</button>
+                </div>
             </div>
-        </div>
 
-        <!-- Action Button -->
-        <div class="ps-button-wrapper">
-            <button
-                type="button"
-                class="ps-button-wrapper__button ps-button-wrapper__button--primary"
-                :disabled="!canPlay"
-                @click="handlePrimaryAction()"
-            >
-                {{ primaryButtonText }}
-            </button>
-            <button
-                v-if="!isWalletConnected"
-                v-t="'ui.playAnonymous'"
-                type="button"
-                class="ps-button-wrapper__button ps-button-wrapper__button--secondary"
-                @click="startGame()"
-            ></button>
+            <!-- Game Mode Buttons -->
+            <div class="game-mode-buttons">
+                <button
+                    type="button"
+                    class="game-mode-btn game-mode-btn--primary"
+                    :disabled="!canPlay"
+                    @click="handlePrimaryAction()"
+                    :title="isWalletConnected ? $t('ui.enterTournament') : $t('ui.connectForTournament')"
+                >
+                    <span class="game-mode-btn__icon">{{ isWalletConnected ? '🏆' : '🔐' }}</span>
+                    <span class="game-mode-btn__label">{{ primaryButtonText }}</span>
+                </button>
+                <button
+                    v-if="!isWalletConnected"
+                    type="button"
+                    class="game-mode-btn game-mode-btn--secondary"
+                    @click="startGame()"
+                    :title="$t('ui.playAnonymous')"
+                >
+                    <span class="game-mode-btn__icon">🎮</span>
+                    <span class="game-mode-btn__label">{{ $t('ui.playAnonymous') }}</span>
+                </button>
+            </div>
+
+            <!-- Info Text -->
+            <div class="mode-info">
+                <p v-if="isWalletConnected" class="mode-info__text">
+                    {{ $t('ui.competingForPrizes') }}
+                </p>
+                <p v-else class="mode-info__text">
+                    {{ $t('ui.practiceOrCompete') }}
+                </p>
+            </div>
         </div>
     </fieldset>
 </template>
@@ -123,15 +125,17 @@ export default {
         },
     },
     data() {
-         return {};
-     },
+        return {
+            connectionCheckInterval: null as any,
+        };
+    },
     computed: {
         internalValue: {
             get(): NewGameProps {
                 return this.modelValue;
             },
-            set( value: NewGameProps ): void {
-                this.$emit( "update:modelValue", value );
+            set(value: NewGameProps): void {
+                this.$emit("update:modelValue", value);
             }
         },
         isWalletConnected(): boolean {
@@ -146,7 +150,7 @@ export default {
             return Tables.length > 1;
         },
         canPlay(): boolean {
-            return true; // Always can play (either connected for tournaments or anonymous)
+            return true;
         },
         primaryButtonText(): string {
             if (!this.isWalletConnected) {
@@ -158,17 +162,18 @@ export default {
     watch: {
         "internalValue.table": {
             immediate: true,
-            handler( value: number ): void {
-                this.internalValue.tableName = Tables[ value ].name;
+            handler(value: number): void {
+                this.internalValue.tableName = Tables[value].name;
             },
         },
         isWalletConnected: {
             immediate: true,
             handler(connected: boolean): void {
                 if (connected) {
-                    // Use wallet address as player name
                     const address = web3Service.getAddress();
                     this.internalValue.playerName = address || 'Connected Player';
+                } else {
+                    this.internalValue.playerName = 'Anonymous Player';
                 }
             },
         },
@@ -181,29 +186,38 @@ export default {
         } else {
             this.internalValue.playerName = 'Anonymous Player';
         }
+
+        // Check for wallet connection changes every 500ms to ensure UI updates
+        this.connectionCheckInterval = setInterval(() => {
+            this.$forceUpdate();
+        }, 500);
+    },
+    beforeUnmount(): void {
+        if (this.connectionCheckInterval) {
+            clearInterval(this.connectionCheckInterval);
+        }
     },
     methods: {
         handlePrimaryAction(): void {
             if (!this.isWalletConnected) {
-                // Request wallet connection from parent
                 this.$emit('request-wallet-connect');
             } else {
                 this.startGame();
             }
         },
         startGame(): void {
-            this.$emit( "start" );
+            this.$emit("start");
         },
         previousTable(): void {
             let previous = this.internalValue.table - 1;
-            if ( previous < 0 ) {
+            if (previous < 0) {
                 previous = Tables.length - 1;
             }
             this.internalValue.table = previous;
         },
         nextTable(): void {
             let next = this.internalValue.table + 1;
-            if ( next > Tables.length - 1 ) {
+            if (next > Tables.length - 1) {
                 next = 0;
             }
             this.internalValue.table = next;
@@ -238,162 +252,196 @@ export default {
     }
 }
 
-.wallet-section {
-    margin: $spacing-large 0;
-    text-align: center;
-
-    .wallet-prompt {
-        h3 {
-            @include titleFont(20px);
-            color: $color-anchors;
-            margin: 0 0 $spacing-small;
-        }
-
-        p {
-            color: #ccc;
-            margin: 0 0 $spacing-medium;
-            font-size: 14px;
-            line-height: 1.4;
-        }
-    }
-
-
+.status-section {
+    margin: $spacing-large auto $spacing-medium;
+    display: flex;
+    justify-content: center;
 }
 
-.quick-play-separator {
-    margin: $spacing-large 0;
-    position: relative;
-    text-align: center;
+.status-badge {
+    display: flex;
+    align-items: center;
+    gap: $spacing-small;
+    padding: $spacing-small $spacing-medium;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: monospace;
+    font-weight: 500;
+    max-width: 300px;
 
-    &::before {
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 0;
-        right: 0;
-        height: 1px;
-        background: #444;
+    &--connected {
+        background: rgba(0, 255, 136, 0.15);
+        border: 1px solid rgba(0, 255, 136, 0.4);
+        color: #00ff88;
+
+        .status-badge__indicator {
+            width: 8px;
+            height: 8px;
+            background: #00ff88;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
     }
 
-    span {
-        background: $color-bg;
-        padding: 0 $spacing-medium;
-        color: #888;
-        font-size: 12px;
-        text-transform: uppercase;
-    }
-}
+    &--disconnected {
+        background: rgba(255, 100, 100, 0.1);
+        border: 1px solid rgba(255, 100, 100, 0.3);
+        color: #ffaaaa;
 
-.quick-play-section {
-    .quick-play-note {
-        color: #888;
-        font-size: 12px;
+        .status-badge__icon {
+            font-size: 16px;
+        }
+    }
+
+    &__text {
         margin: 0;
-        font-style: italic;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 }
 
-.wallet-connected {
-    margin: $spacing-medium 0;
-    text-align: center;
-
-    .wallet-status {
-        padding: $spacing-small $spacing-medium;
-        background: rgba(0, 255, 136, 0.1);
-        border: 1px solid rgba(0, 255, 136, 0.3);
-        border-radius: 6px;
-        font-size: 14px;
-
-        .wallet-label {
-            color: $color-anchors;
-            margin-right: $spacing-small;
-        }
-
-        .wallet-address {
-            color: #fff;
-            font-family: monospace;
-            font-weight: bold;
-        }
-    }
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
 }
 
-.ps-input-wrapper {
-    &__nav {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        width: 100%;
-
-        &-button {
-            @include titleFont();
-            cursor: pointer;
-            background: none;
-            border: none;
-            color: #FFF;
-
-            &:hover {
-                color: $color-anchors;
-            }
-        }
-
-        &-item {
-            @include titleFont( 24px );
-            color: $color-anchors;
-        }
-    }
-
-    @include large() {
-        &__label {
-            width: 170px;
-        }
-
-        &__nav {
-            width: calc(100% - 170px);
-        }
-    }
+.game-options {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-large;
+    margin-top: $spacing-large;
 }
 
-.ps-button-wrapper {
+.table-selector {
     display: flex;
     flex-direction: column;
     gap: $spacing-small;
-    margin-top: $spacing-large;
 
-    &__button {
-        &--primary {
-            background: linear-gradient(135deg, $color-anchors, #00cc88);
-            color: #000;
-            font-weight: bold;
+    &__label {
+        @include titleFont(14px);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #ccc;
+        text-align: center;
+    }
 
-            &:hover:not(:disabled) {
-                transform: translateY(-2px);
-                box-shadow: 0 4px 12px rgba(0, 255, 136, 0.3);
-            }
+    &__controls {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: $spacing-medium;
+    }
+
+    &__btn {
+        @include titleFont(18px);
+        background: none;
+        border: none;
+        color: #fff;
+        cursor: pointer;
+        padding: $spacing-small;
+        transition: all 0.2s ease;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+
+        &:hover {
+            color: $color-anchors;
+            background: rgba(0, 255, 136, 0.1);
         }
 
-        &--secondary {
-            background: transparent;
-            border: 1px solid #666;
-            color: #ccc;
-            font-size: 14px;
-
-            &:hover:not(:disabled) {
-                border-color: #999;
-                color: #fff;
-            }
+        &:active {
+            transform: scale(0.95);
         }
     }
 
-    @include mobile() {
-        &__button {
-            &--secondary {
-                order: 1; // Show secondary button first on mobile
-            }
-            
-            &--primary {
-                order: 2;
-            }
+    &__name {
+        @include titleFont(20px);
+        color: $color-anchors;
+        min-width: 150px;
+        text-align: center;
+    }
+}
+
+.game-mode-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-medium;
+}
+
+.game-mode-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: $spacing-small;
+    padding: $spacing-medium;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+
+    &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    &:not(:disabled) {
+        &:hover {
+            transform: translateY(-2px);
         }
+
+        &:active {
+            transform: translateY(0);
+        }
+    }
+
+    &--primary {
+        background: linear-gradient(135deg, $color-anchors, #00cc88);
+        color: #000;
+        box-shadow: 0 4px 15px rgba(0, 255, 136, 0.2);
+
+        &:not(:disabled):hover {
+            box-shadow: 0 6px 20px rgba(0, 255, 136, 0.4);
+        }
+    }
+
+    &--secondary {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: #fff;
+
+        &:not(:disabled):hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.4);
+        }
+    }
+
+    &__icon {
+        font-size: 18px;
+    }
+
+    &__label {
+        display: inline;
+    }
+}
+
+.mode-info {
+    text-align: center;
+    margin-top: $spacing-medium;
+
+    &__text {
+        @include titleFont(12px);
+        color: #999;
+        margin: 0;
+        line-height: 1.4;
+        letter-spacing: 0.5px;
     }
 }
 </style>
