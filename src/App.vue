@@ -44,6 +44,7 @@
             v-if="showCelebration"
             :score="game.score || 0"
             :is-practice-mode="isPracticeMode"
+            :last-submitted-scores="lastSubmittedScores"
             @dismiss="showCelebration = false"
             @play-again="initGame()"
             @play-tournament="startTournamentMode()"
@@ -92,6 +93,7 @@ import { preloadAssets } from "@/services/asset-preloader";
 import { init } from "@/services/audio-service";
 import { isSupported, startGame, stopGame } from "@/services/high-scores-service";
 import { web3Service } from "@/services/web3-service";
+import { getContractsConfig } from "@/config/contracts";
 import { getFromStorage, setInStorage } from "@/utils/local-storage";
 import { isFullscreen, toggleFullscreen } from "@/utils/fullscreen-util";
 
@@ -149,6 +151,7 @@ export default {
         game: {
             active: false,
         },
+        lastSubmittedScores: null,
     }),
     computed: {
         hasScreen(): boolean {
@@ -194,9 +197,13 @@ export default {
             if ( !value && prevValue && this.game.score > 0 ) {
                 if ( this.canUseHighScores && !this.isPracticeMode ) {
                     // Tournament mode - submit score and show celebration
-                    stopGame( this.game.id, this.game.score, this.newGameProps.playerName, this.newGameProps.tableName ).then(() => {
+                    stopGame( this.game.id, this.game.score, this.newGameProps.playerName, this.newGameProps.tableName ).then((scores) => {
+                        // Store the updated scores to pass to celebration component
+                        this.lastSubmittedScores = scores;
                         this.showCelebration = true;
-                    }).catch(() => {
+                    }).catch((error) => {
+                        console.error('Score submission failed:', error);
+                        this.showToast(`Score submission failed: ${error.message || 'Unknown error'}`, 'error');
                         this.showCelebration = true;
                     });
                 } else {
@@ -248,6 +255,33 @@ export default {
                 toggleFullscreen();
             }
             this.startPending = true;
+            
+            // Check if wallet is connected and on correct chain before tournament mode
+            if (this.canUseHighScores && !this.isPracticeMode) {
+                try {
+                    // Verify wallet is connected
+                    if (!web3Service.isConnected()) {
+                        throw new Error('Wallet not connected for tournament play');
+                    }
+                    
+                    // Verify correct chain
+                    const config = getContractsConfig();
+                    const currentNetwork = await web3Service.getProvider().getNetwork();
+                    const currentChainId = Number(currentNetwork.chainId);
+                    const requiredChainId = config.chainId;
+                    
+                    if (currentChainId !== requiredChainId) {
+                        await web3Service.switchChain(requiredChainId);
+                    }
+                } catch (error) {
+                    console.error('Tournament setup failed:', error);
+                    // Show user-friendly error and fallback to practice mode
+                    this.showToast('Please connect to the correct network (Arbitrum One) for tournament mode', 'error');
+                    this.newGameProps.playerName = 'Anonymous Player';
+                    // Continue with practice mode
+                }
+            }
+            
             try {
                 const id = this.canUseHighScores ? await startGame() : null;
                 this.showTutorial = getFromStorage( STORED_HAS_VIEWED_TUTORIAL ) !== "true";
@@ -261,7 +295,9 @@ export default {
                     multiplier: 1,
                     underworld: false,
                 };
-            } catch {
+            } catch (error) {
+                console.error('Game initialization failed:', error);
+                this.showToast('Failed to initialize game. Please try again.', 'error');
                 this.startPending = false;
             }
         },
@@ -390,6 +426,16 @@ export default {
                 this.newGameProps.playerName = address;
             }
             // The new game window will now show tournament mode
+        },
+        
+        showToast(message: string, type: 'info' | 'error' | 'success' = 'info'): void {
+            // Dispatch a custom event that can be handled by the toast component
+            this.$nextTick(() => {
+                const event = new CustomEvent('toast', { 
+                    detail: { message, type }
+                });
+                document.dispatchEvent(event);
+            });
         },
     },
 };

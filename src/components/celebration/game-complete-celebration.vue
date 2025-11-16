@@ -90,6 +90,7 @@ export default {
   props: {
     score: { type: Number, required: true },
     isPracticeMode: { type: Boolean, default: false },
+    lastSubmittedScores: { type: Array, default: null },
   },
   data: () => ({
     me: web3Service.getAddress() || '',
@@ -222,16 +223,27 @@ export default {
   async loadTournamentData(): Promise<void> {
     try {
       // Try to load tournament data using the direct client methods (like high-scores component)
-      const { getActiveTournamentId, fetchLeaderboard, getTournamentInfo, getPrizeBps } = await import('@/services/contracts/tournament-client');
+      const { getActiveTournamentId, fetchLeaderboard, fetchLeaderboardWithRetry, getTournamentInfo, getPrizeBps } = await import('@/services/contracts/tournament-client');
       
       const tournamentId = await getActiveTournamentId();
-      const [info, leaderboard, prizeBps] = await Promise.all([
+      
+      // For celebration after score submission, use enhanced fetch with retry logic
+      // This helps with blockchain finality issues where the score might not be immediately visible
+      let leaderboard;
+      if (this.lastSubmittedScores) {
+        // If we just submitted a score, use retry logic to wait for it to appear on chain
+        leaderboard = await fetchLeaderboardWithRetry(tournamentId, 0, 100);
+      } else {
+        leaderboard = await fetchLeaderboard(tournamentId, 0, 100);
+      }
+      
+      const [info, prizeBps] = await Promise.all([
         getTournamentInfo(tournamentId),
-        fetchLeaderboard(tournamentId, 0, 100),
         getPrizeBps(tournamentId).catch(() => []) // Fallback to empty array if prizeBps fails
       ]);
       
       this.entries = leaderboard.slice(0, 10);
+      
       this.totalPotWei = info.totalPot;
       this.prizeBps = prizeBps;
       

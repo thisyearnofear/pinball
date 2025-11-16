@@ -107,6 +107,39 @@ export async function fetchLeaderboard(
   }
 }
 
+// Enhanced version with retry logic for better reliability after score submission
+export async function fetchLeaderboardWithRetry(
+  tournamentId: number,
+  offset = 0,
+  limit = 100,
+  maxRetries = 3,
+  delayMs = 2000
+): Promise<{ address: string; score: number }[]> {
+  let lastError;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await fetchLeaderboard(tournamentId, offset, limit);
+      // If successful, return the result
+      return result;
+    } catch (error) {
+      lastError = error;
+      console.log(`Leaderboard fetch attempt ${attempt + 1} failed:`, error);
+      
+      // If this was the last attempt, throw the error
+      if (attempt === maxRetries) {
+        break;
+      }
+      
+      // Wait before retrying (exponential backoff could be implemented here)
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+  
+  // If all retries failed, throw the last error
+  throw lastError;
+}
+
 async function _fetchLeaderboard(
   contract: ethers.Contract,
   tournamentId: number,
