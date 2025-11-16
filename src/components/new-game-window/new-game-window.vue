@@ -76,8 +76,8 @@
         >
         <div class="title">
             <div class="title__wrapper">
-                <img src="@@/sprites/title_upper.png" class="title__upper" />
-                <img src="@@/sprites/title_lower.png" class="title__lower" />
+                <img src="/assets/sprites/title_upper.png" class="title__upper" />
+                <img src="/assets/sprites/title_lower.png" class="title__lower" />
             </div>
         </div>
 
@@ -144,6 +144,16 @@
                 >
                     <span class="game-mode-btn__icon">🎮</span>
                     <span class="game-mode-btn__label">{{ $t('ui.playAnonymous') }}</span>
+                </button>
+                <button
+                    v-if="isWalletConnected"
+                    type="button"
+                    class="game-mode-btn game-mode-btn--secondary"
+                    @click="startPracticeGame()"
+                    :title="$t('ui.practiceMode')"
+                >
+                    <span class="game-mode-btn__icon">🎮</span>
+                    <span class="game-mode-btn__label">{{ $t('ui.practiceMode') }}</span>
                 </button>
             </div>
 
@@ -365,6 +375,16 @@ export default {
         },
          startGame(): void {
              this.$emit("start");
+         },
+         startPracticeGame(): void {
+             // Start game in practice mode (without tournament entry)
+             const originalPlayerName = this.internalValue.playerName;
+             this.internalValue.playerName = 'Practice Mode';
+             this.$emit("start");
+             // Restore original player name for future tournament games
+             this.$nextTick(() => {
+                 this.internalValue.playerName = originalPlayerName;
+             });
          },
          async selectWallet(walletType: 'metamask'): Promise<void> {
              this.connectingWallet = walletType;

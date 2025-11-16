@@ -1,15 +1,14 @@
 import { ref, computed } from 'vue';
 import { web3Service } from '@/services/web3-service';
-import { getActiveTournamentId, getEntryFeeWei, getTournamentInfo, getWinners, getPrizeBps, enterTournament, claimReward } from '@/services/contracts/tournament-client';
+import { getActiveTournamentId, getEntryFeeWei, getTournamentInfo, getWinners, getPrizeBps, enterTournament, claimReward, fetchLeaderboard } from '@/services/contracts/tournament-client';
 import { estimatedPrizeBps } from '@/services/prize';
-import { getHighScores } from '@/services/high-scores-service';
 
 const tournamentId = ref<number | null>(null);
 const entryFeeWei = ref<bigint>(0n);
 const finalized = ref<boolean>(false);
 const winners = ref<string[]>([]);
 const address = ref<string | null>(null);
-const scores = ref<{ name: string; score: number; duration: number }[]>([]);
+const leaderboard = ref<{ address: string; score: number }[]>([]);
 const entered = ref<boolean>(false);
 const totalPotWei = ref<bigint>(0n);
 const startTime = ref<number | null>(null);
@@ -19,34 +18,53 @@ const prizeBps = ref<number[]>([]);
 
 export function useTournamentState() {
   async function load() {
-    address.value = web3Service.getAddress();
-    const id = await getActiveTournamentId();
-    tournamentId.value = id;
-    entryFeeWei.value = await getEntryFeeWei();
-    const info = await getTournamentInfo(id);
-    finalized.value = info.finalized;
-    totalPotWei.value = info.totalPot;
-    startTime.value = info.startTime;
-    endTime.value = info.endTime;
-    topN.value = info.topN;
-    winners.value = await getWinners(id);
     try {
-      prizeBps.value = await getPrizeBps(id);
-    } catch {
-      prizeBps.value = estimatedPrizeBps(topN.value);
-    }
-    scores.value = await getHighScores();
-    // Lightweight 'entered' inference: if address appears in leaderboard or winners
-    if (address.value) {
-      entered.value = scores.value.some(s => (s as any).address?.toLowerCase?.() === address.value!.toLowerCase())
-        || winners.value.map(a => a.toLowerCase()).includes(address.value.toLowerCase());
-    } else {
+      address.value = web3Service.getAddress();
+      const id = await getActiveTournamentId();
+      tournamentId.value = id;
+      entryFeeWei.value = await getEntryFeeWei();
+      const info = await getTournamentInfo(id);
+      finalized.value = info.finalized;
+      totalPotWei.value = info.totalPot;
+      startTime.value = info.startTime;
+      endTime.value = info.endTime;
+      topN.value = info.topN;
+      winners.value = await getWinners(id);
+      try {
+        prizeBps.value = await getPrizeBps(id);
+      } catch {
+        prizeBps.value = estimatedPrizeBps(topN.value);
+      }
+      leaderboard.value = id != null ? await fetchLeaderboard(id, 0, 100) : [];
+      if (address.value) {
+        const addr = address.value.toLowerCase();
+        entered.value = leaderboard.value.some(r => r.address.toLowerCase() === addr)
+          || winners.value.map(a => a.toLowerCase()).includes(addr);
+      } else {
+        entered.value = false;
+      }
+    } catch (error: any) {
+      console.log('Failed to load tournament state:', error.message);
+      // Set default values so the UI can still render
+      tournamentId.value = null;
+      entryFeeWei.value = 0n;
+      finalized.value = false;
+      totalPotWei.value = 0n;
+      startTime.value = null;
+      endTime.value = null;
+      topN.value = 0;
+      winners.value = [];
+      prizeBps.value = [];
+      leaderboard.value = [];
       entered.value = false;
+      address.value = null;
+      throw error; // Re-throw so caller can handle appropriately
     }
   }
 
   async function refreshLeaderboard() {
-    scores.value = await getHighScores();
+    const id = tournamentId.value;
+    leaderboard.value = id != null ? await fetchLeaderboard(id, 0, 100) : [];
   }
 
   const isWinner = computed(() => {
@@ -76,7 +94,7 @@ export function useTournamentState() {
     finalized,
     winners,
     address,
-    scores,
+    leaderboard,
     entered,
     totalPotWei,
     startTime,

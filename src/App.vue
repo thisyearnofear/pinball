@@ -26,15 +26,28 @@
         <header-menu
             :collapsable="game.active"
             :show-connect-button="game.active"
+            :game-active="game.active"
             :is-farcaster="isFarcaster"
             @open="activeScreen = $event"
             @wallet-connected="onWalletConnected"
             @wallet-disconnected="onWalletDisconnected"
+            @return-to-menu="returnToMenu"
         />
         <PinballTable
             v-model="game"
             :game-active="game.active"
             :use-vhs="config.useVHS"
+            :is-farcaster="isFarcaster"
+            :touchscreen="hasTouchScreen"
+        />
+        <GameCompleteCelebration
+            v-if="showCelebration"
+            :score="game.score || 0"
+            :is-practice-mode="isPracticeMode"
+            @dismiss="showCelebration = false"
+            @play-again="initGame()"
+            @play-tournament="startTournamentMode()"
+            @view-leaderboard="activeScreen = 'highScores'"
         />
         <Tutorial
             v-if="showTutorial"
@@ -49,7 +62,7 @@
             <component :is="modalComponent" />
         </modal>
         <modal
-            v-else-if="!game.active && startPending === false"
+            v-else-if="!game.active && startPending === false && !showCelebration"
             :dismissible="false"
         >
             <new-game-window
@@ -112,6 +125,9 @@ export default {
         Tutorial: defineAsyncComponent(() => {
             return import( "./components/tutorial/tutorial.vue" );
         }),
+        GameCompleteCelebration: defineAsyncComponent(() => {
+            return import( "./components/celebration/game-complete-celebration.vue" );
+        }),
     },
     data: () => ({
         loading: true,
@@ -120,6 +136,7 @@ export default {
         startPending: false,
         hasTouchScreen: false,
         showTutorial: false,
+        showCelebration: false,
         isFarcaster: false,
         config: {
             useVHS: getFromStorage( STORED_DISABLE_VHS_EFFECT ) !== "true"
@@ -162,6 +179,9 @@ export default {
         canUseHighScores(): boolean {
             return isSupported() && this.newGameProps.playerName.length > 0;
         },
+        isPracticeMode(): boolean {
+            return !this.canUseHighScores;
+        },
     },
     watch: {
         "game.active"( value: boolean, prevValue: boolean ): void {
@@ -171,8 +191,18 @@ export default {
                     this.hasPlayed = true;
                 }
             }
-            if ( !value && prevValue && this.canUseHighScores && this.game.score > 0 ) {
-                stopGame( this.game.id, this.game.score, this.newGameProps.playerName, this.newGameProps.tableName );
+            if ( !value && prevValue && this.game.score > 0 ) {
+                if ( this.canUseHighScores && !this.isPracticeMode ) {
+                    // Tournament mode - submit score and show celebration
+                    stopGame( this.game.id, this.game.score, this.newGameProps.playerName, this.newGameProps.tableName ).then(() => {
+                        this.showCelebration = true;
+                    }).catch(() => {
+                        this.showCelebration = true;
+                    });
+                } else {
+                    // Practice mode - just show celebration
+                    this.showCelebration = true;
+                }
             }
         },
         activeScreen( value: string | null, lastValue?: string | null  ): void {
@@ -324,6 +354,14 @@ export default {
         onWalletDisconnected(): void {
             // Reset to anonymous when wallet is disconnected
             this.newGameProps.playerName = 'Anonymous Player';
+            // End current game if active and return to initial screen
+            if (this.game.active) {
+                this.game.active = false;
+                this.game.paused = false;
+            }
+            // Close any open screens
+            this.activeScreen = null;
+            this.showCelebration = false;
         },
         async connectWallet(): Promise<void> {
             try {
@@ -334,6 +372,24 @@ export default {
             } catch (error) {
                 console.error('Wallet connection failed:', error);
             }
+        },
+        returnToMenu(): void {
+            // End current game and return to menu
+            this.game.active = false;
+            this.game.paused = false;
+            // Close any open screens
+            this.activeScreen = null;
+            this.showCelebration = false;
+        },
+        startTournamentMode(): void {
+            // Switch from practice mode to tournament mode
+            this.showCelebration = false;
+            const address = web3Service.getAddress();
+            if (address) {
+                // Restore wallet address for tournament play
+                this.newGameProps.playerName = address;
+            }
+            // The new game window will now show tournament mode
         },
     },
 };
@@ -356,3 +412,4 @@ body {
     background-color: $color-bg;
 }
 </style>
+import GameCompleteCelebration from "@/components/celebration/game-complete-celebration.vue";

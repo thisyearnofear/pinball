@@ -31,6 +31,14 @@
             <Toggle v-model="playMusic" />
         </div>
         <div class="settings-wrapper">
+            <label v-t="'settings.quickHints'"></label>
+            <Toggle v-model="quickHints" />
+        </div>
+        <div class="settings-wrapper">
+            <label v-t="'settings.haptics'"></label>
+            <Toggle v-model="haptics" />
+        </div>
+        <div class="settings-wrapper">
             <label v-t="'settings.vhs'"></label>
             <Toggle v-model="useVHS" />
         </div>
@@ -47,10 +55,11 @@
 <script lang="ts">
 import Bowser from "bowser";
 import Toggle from "@vueform/toggle";
-import { STORED_DISABLE_VHS_EFFECT, STORED_FULLSCREEN } from "@/definitions/settings";
+import { STORED_DISABLE_VHS_EFFECT, STORED_FULLSCREEN, STORED_HAPTICS_ENABLED, STORED_QUICK_HINTS } from "@/definitions/settings";
 import { getFxMuted, setFxMuted, getMusicMuted, setMusicMuted } from "@/services/audio-service";
 import { isFullscreen, toggleFullscreen } from "@/utils/fullscreen-util";
 import { getFromStorage, setInStorage } from "@/utils/local-storage";
+import { setEnabled as setHapticsEnabled } from "@/utils/haptics";
 
 export default {
     components: {
@@ -60,6 +69,8 @@ export default {
         useVHS: getFromStorage( STORED_DISABLE_VHS_EFFECT ) !== "true",
         playSound: !getFxMuted(),
         playMusic: !getMusicMuted(),
+        haptics: getFromStorage( STORED_HAPTICS_ENABLED ) !== "false",
+        quickHints: getFromStorage( STORED_QUICK_HINTS ) !== "false",
         fullscreen: getFromStorage( STORED_FULLSCREEN ) === "true",
     }),
     computed: {
@@ -76,6 +87,12 @@ export default {
         },
         playMusic( value: boolean ): void {
             setMusicMuted( !value );
+        },
+        haptics( value: boolean ): void {
+            setHapticsEnabled( value );
+        },
+        quickHints( value: boolean ): void {
+            setInStorage( STORED_QUICK_HINTS, value.toString() );
         },
         fullscreen( value: boolean ): void {
             const isFull = isFullscreen();

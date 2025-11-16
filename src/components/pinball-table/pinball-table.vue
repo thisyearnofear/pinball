@@ -56,21 +56,33 @@
         </div>
         <div
             class="touch-area touch-area--left"
-            @touchstart="handleTouch( $event, true )"
-            @touchend="handleTouch( $event, true )"
-            @touchcancel="handleTouch( $event, true )"
+            @touchstart="onTouchStart( $event, true )"
+            @touchend="onTouchEnd( $event, true )"
+            @touchcancel="onTouchEnd( $event, true )"
         ></div>
         <div
             class="touch-area touch-area--right"
-            @touchstart="handleTouch( $event, false )"
-            @touchend="handleTouch( $event, false )"
-            @touchcancel="handleTouch( $event, false )"
+            @touchstart="onTouchStart( $event, false )"
+            @touchend="onTouchEnd( $event, false )"
+            @touchcancel="onTouchEnd( $event, false )"
         ></div>
+        <div class="thumb-pad thumb-pad--left" :class="{ 'thumb-pad--active': leftPadActive }"></div>
+        <div class="thumb-pad thumb-pad--right" :class="{ 'thumb-pad--active': rightPadActive }"></div>
+        <button v-if="showBumpButton" class="bump-button" @click="onBumpClick">+</button>
         <div
             v-if="useVhs"
             ref="vhsOverlay"
             class="vhs-overlay"
         ></div>
+        <div
+            v-if="showHints"
+            class="quick-hints"
+            @click="dismissHints()"
+        >
+            <span class="quick-hints__text">
+                {{ quickHintsText }}
+            </span>
+        </div>
     </div>
 </template>
 
@@ -84,6 +96,10 @@ import { init, scaleCanvas, setFlipperState, bumpTable, update, panViewport, set
 import SpriteCache from "@/utils/sprite-cache";
 import RoundResults from "./round-results.vue";
 import { i18nForMessage } from "./message-localizer";
+import { createInputController } from "@/utils/input-controller";
+import * as haptics from "@/utils/haptics";
+import { getFromStorage, setInStorage } from "@/utils/local-storage";
+import { STORED_QUICK_HINTS, STORED_TUT_LAST_SEEN } from "@/definitions/settings";
 
 const touchStart = {
     y: 0,
@@ -103,6 +119,8 @@ interface ComponentData {
         ended: boolean;
         tableHeight: number;
     }
+    leftPadActive: boolean;
+    rightPadActive: boolean;
 };
 
 export default {
@@ -122,6 +140,14 @@ export default {
             type: Boolean,
             default: false,
         },
+        isFarcaster: {
+            type: Boolean,
+            default: false,
+        },
+        touchscreen: {
+            type: Boolean,
+            default: false,
+        },
     },
     data: (): ComponentData => ({
         message: "",
@@ -134,6 +160,9 @@ export default {
             ended: false,
             tableHeight: 0,
         },
+        leftPadActive: false,
+        rightPadActive: false,
+        showHints: false,
     }),
     watch: {
         "modelValue.id"( gameId: string, prevGameId?: string ): void {
@@ -168,8 +197,28 @@ export default {
         this.bumpHandler = throttle((): void => {
             bumpTable( this.modelValue );
         }, 150 );
-
-        this.keyListener = this.handleKey.bind( this );
+        this.inputController = createInputController({
+            onLeftFlip: (isDown: boolean) => {
+                this.leftPadActive = isDown;
+                setFlipperState( ActorTypes.LEFT_FLIPPER, isDown );
+                if ( isDown ) { haptics.flip(); }
+            },
+            onRightFlip: (isDown: boolean) => {
+                this.rightPadActive = isDown;
+                setFlipperState( ActorTypes.RIGHT_FLIPPER, isDown );
+                if ( isDown ) { haptics.flip(); }
+            },
+            onBump: () => {
+                this.bumpHandler();
+                haptics.bump();
+            },
+            onPan: (delta: number) => {
+                panViewport( delta );
+            },
+            onTogglePause: () => {
+                this.modelValue.paused = !this.modelValue.paused;
+            }
+        });
     },
     beforeUnmount(): void {
         this.removeListeners();
@@ -190,17 +239,16 @@ export default {
             this.addListeners();
             await this.$nextTick();
             this.handleResize();
+            this.evaluateHints();
         },
         addListeners(): void {
-            window.addEventListener( "keydown", this.keyListener );
-            window.addEventListener( "keyup",   this.keyListener );
+            this.inputController.addListeners();
             window.addEventListener( "resize",  this.handleResize );
 
             this.inited = true;
         },
         removeListeners(): void {
-            window.removeEventListener( "keydown", this.keyListener );
-            window.removeEventListener( "keyup",   this.keyListener );
+            this.inputController.removeListeners();
             window.removeEventListener( "resize",  this.handleResize );
 
             this.inited = false;
@@ -224,66 +272,19 @@ export default {
                 vhsOverlay.style.height = `${canvasHeight + statusHeight}px`;
             }
         },
-        handleTouch( event: TouchEvent, isLeft: boolean ): void {
-            switch ( event.type ) {
-                default: // touch(cancel|end)
-                    setFlipperState( isLeft ? ActorTypes.LEFT_FLIPPER : ActorTypes.RIGHT_FLIPPER, false );
-                    if ( event.type === "touchend" && ( window.performance.now() - touchStart.time ) < 400 ) {
-                        const movedBy = event.changedTouches[ 0 ]?.pageY - touchStart.y;
-                        if ( movedBy < -100 ) {
-                            this.bumpHandler();
-                        }
-                    }
-                    break;
-                case "touchstart":
-                    setFlipperState( isLeft ? ActorTypes.LEFT_FLIPPER : ActorTypes.RIGHT_FLIPPER, true );
-                    for ( touch of event.touches ) {
-                        touchStart.y = touch.pageY;
-                        touchStart.time = window.performance.now();
-                    }
-                    break;
-            }
+        onTouchStart( event: TouchEvent, isLeft: boolean ): void {
+            this.inputController.handleTouchStart( isLeft, event );
             event.preventDefault();
             event.stopPropagation();
         },
-        handleKey( event: KeyboardEvent ): void {
-            const { type, keyCode } = event;
-            switch ( keyCode ) {
-                default:
-                    // @ts-expect-error Property 'env' does not exist on type 'ImportMeta', Vite takes care of it
-                    if ( import.meta.env.MODE !== "production" ) {
-                        if ( type === "keyup" ) {
-                            return;
-                        }
-                        // some debug interactions
-                        switch ( keyCode ) {
-                            case 80: // P
-                                this.modelValue.paused = !this.modelValue.paused;
-                                break;
-                            case 38: // up
-                                panViewport( -25 );
-                                break;
-                            case 40: // down
-                                panViewport( 25 );
-                                break;
-                        }
-                    }
-                    return;
-                case 32:
-                    if ( type === "keydown" ) {
-                        this.bumpHandler();
-                    }
-                    event.preventDefault();
-                    break;
-                case 37:
-                    setFlipperState( ActorTypes.LEFT_FLIPPER, type === "keydown" );
-                    event.preventDefault();
-                    break;
-                case 39:
-                    setFlipperState( ActorTypes.RIGHT_FLIPPER, type === "keydown" );
-                    event.preventDefault();
-                    break;
-            }
+        onTouchEnd( event: TouchEvent, isLeft: boolean ): void {
+            this.inputController.handleTouchEnd( isLeft, event );
+            event.preventDefault();
+            event.stopPropagation();
+        },
+        onBumpClick(): void {
+            this.bumpHandler();
+            haptics.bump();
         },
         handleRoundEnd( readyCallback: () => void, timeout: number ): void {
             if ( changeTimeout !== null ) {
@@ -320,6 +321,17 @@ export default {
             this.messageTimeout = null;
             this.message = null;
         },
+    },
+    computed: {
+        showBumpButton(): boolean {
+            return this.isFarcaster || this.touchscreen;
+        },
+        quickHintsText(): string {
+            if ( this.touchscreen ) {
+                return this.$t( 'howToPlay.touchscreenDescr' ) as string;
+            }
+            return this.$t( 'howToPlay.keyboardDescr' ) as string;
+        }
     }
 };
 </script>
@@ -423,6 +435,63 @@ export default {
     }
 }
 
+.thumb-pad {
+    position: fixed;
+    bottom: 110px;
+    width: 120px;
+    height: 120px;
+    border-radius: 60px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    transition: background-color .1s, border-color .1s;
+    pointer-events: none;
+
+    &--left { left: 5%; }
+    &--right { right: 5%; }
+    &--active {
+        background: rgba(255,255,255,0.12);
+        border-color: rgba(255,255,255,0.25);
+    }
+
+    @include large() {
+        display: none;
+    }
+}
+
+.bump-button {
+    position: fixed;
+    bottom: 95px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 64px;
+    height: 64px;
+    border-radius: 32px;
+    border: 1px solid rgba(255,255,255,0.25);
+    background: rgba(255,255,255,0.08);
+    color: #FFF;
+    font-size: 24px;
+    line-height: 64px;
+    text-align: center;
+}
+
+.quick-hints {
+    position: fixed;
+    top: 12%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.6);
+    color: #FFF;
+    padding: $spacing-small $spacing-medium;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 8px;
+    z-index: 5;
+    @include displayFont();
+
+    &__text {
+        font-size: 14px;
+    }
+}
+
 .vhs-overlay {
     @include noEvents();
     position: fixed;
@@ -457,3 +526,15 @@ export default {
     }
 }
 </style>
+        evaluateHints(): void {
+            const enabled = getFromStorage( STORED_QUICK_HINTS ) !== "false";
+            this.showHints = enabled;
+            if ( this.showHints ) {
+                clearTimeout( this.hintsTimeout );
+                this.hintsTimeout = setTimeout( this.dismissHints, 2500 );
+            }
+        },
+        dismissHints(): void {
+            this.showHints = false;
+            setInStorage( STORED_TUT_LAST_SEEN, Math.floor( Date.now() / 1000 ).toString() );
+        },

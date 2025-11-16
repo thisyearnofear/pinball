@@ -23,7 +23,9 @@
 <template>
     <section
         class="tutorial"
-        @click="nextSlide()"
+        @click="onOverlayClick()"
+        @touchstart="onTouchStart($event)"
+        @touchend="onTouchEnd($event)"
     >
         <div class="tutorial__wrapper">
             <h3 v-t="'tutorial.tutorial'" class="tutorial__title"></h3>
@@ -61,6 +63,9 @@ export default {
         activeSlide: 0,
         totalSlides: 0,
         fadeOut: false,
+        awaitingAction: false,
+        touchStartY: 0,
+        touchStartTime: 0,
     }),
     computed: {
         tutorialKeys(): string[] {
@@ -83,7 +88,17 @@ export default {
             if ( e.key === "Escape" ) {
                 this.close();
             } else {
-                this.nextSlide( !INSTANT_SWITCH_KEYS.includes( e.keyCode ) );
+                if ( this.awaitingAction ) {
+                    if ( this.activeSlide === 0 && e.keyCode === 37 ) {
+                        this.advanceImmediate();
+                    } else if ( this.activeSlide === 1 && e.keyCode === 39 ) {
+                        this.advanceImmediate();
+                    } else if ( this.activeSlide === 2 && e.keyCode === 32 ) {
+                        this.advanceImmediate();
+                    }
+                } else {
+                    this.nextSlide( !INSTANT_SWITCH_KEYS.includes( e.keyCode ) );
+                }
             }
         };
         document.addEventListener( "keyup", this.keyHandler );
@@ -93,9 +108,13 @@ export default {
     },
     methods: {
         runSlides(): void {
-            this.slideTimeout = setTimeout(() => {
-                this.nextSlide();
-            }, SLIDE_TIMEOUT );
+            if ( this.activeSlide <= 2 ) {
+                this.awaitingAction = true;
+            } else {
+                this.slideTimeout = setTimeout(() => {
+                    this.nextSlide();
+                }, SLIDE_TIMEOUT );
+            }
         },
         nextSlide( animate = true ): void {
             clearTimeout( this.slideTimeout );
@@ -109,17 +128,64 @@ export default {
                 if ( !animate ) {
                     this.fadeOut = false;
                     ++this.activeSlide;
+                    this.awaitingAction = false;
                     this.runSlides();
                 } else {
                     this.fadeOut = true;
                     this.fadeTimeout = setTimeout(() => {
                         ++this.activeSlide;
+                        this.awaitingAction = false;
                         this.runSlides();
 
                         this.fadeOut = false;
                     }, FADE_OUT_TIMEOUT );
                 }
             }
+        },
+        onOverlayClick(): void {
+            if ( this.awaitingAction ) {
+                const half = window.innerWidth / 2;
+                const x = (window as any).lastClickX ?? half;
+                if ( this.activeSlide === 0 && x < half ) {
+                    this.advanceImmediate();
+                    return;
+                }
+                if ( this.activeSlide === 1 && x >= half ) {
+                    this.advanceImmediate();
+                    return;
+                }
+                return;
+            }
+            this.nextSlide();
+        },
+        onTouchStart( e: TouchEvent ): void {
+            const t = e.touches[0];
+            if ( t ) {
+                this.touchStartY = t.pageY;
+                this.touchStartTime = window.performance.now();
+                (window as any).lastClickX = t.pageX;
+            }
+        },
+        onTouchEnd( e: TouchEvent ): void {
+            if ( this.awaitingAction ) {
+                if ( this.activeSlide <= 1 ) {
+                    this.onOverlayClick();
+                    return;
+                }
+                if ( this.activeSlide === 2 ) {
+                    const movedBy = e.changedTouches[0]?.pageY - this.touchStartY;
+                    const dt = window.performance.now() - this.touchStartTime;
+                    if ( dt < 400 && movedBy < -100 ) {
+                        this.advanceImmediate();
+                        return;
+                    }
+                }
+                return;
+            }
+            this.nextSlide();
+        },
+        advanceImmediate(): void {
+            this.nextSlide(false);
         },
         close(): void {
             this.$emit( "completed" );

@@ -28,12 +28,41 @@ function getContract(): ethers.Contract {
   return new ethers.Contract(tournamentManager.address, TOURNAMENT_MANAGER_ABI, runner);
 }
 
+// Public read-only contract that doesn't require wallet connection
+function getPublicContract(): ethers.Contract {
+  const { chainId, tournamentManager } = getContractsConfig();
+  // Use public RPC provider for read-only operations
+  let rpcUrl: string;
+  if (chainId === 42161) { // Arbitrum One
+    rpcUrl = 'https://arb1.arbitrum.io/rpc';
+  } else if (chainId === 421614) { // Arbitrum Sepolia
+    rpcUrl = 'https://sepolia-rollup.arbitrum.io/rpc';
+  } else {
+    throw new Error(`Unsupported chain ID: ${chainId}`);
+  }
+  
+  const provider = new ethers.JsonRpcProvider(rpcUrl);
+  return new ethers.Contract(tournamentManager.address, TOURNAMENT_MANAGER_ABI, provider);
+}
+
 export async function getActiveTournamentId(): Promise<number> {
-  const c = getContract();
+  try {
+    const c = getContract();
+    return await _getActiveTournamentId(c);
+  } catch (error: any) {
+    if (error.message === 'Wallet not connected') {
+      const c = getPublicContract();
+      return await _getActiveTournamentId(c);
+    }
+    throw error;
+  }
+}
+
+async function _getActiveTournamentId(contract: ethers.Contract): Promise<number> {
   // naive assumption: active tournament is lastTournamentId and within time window
-  const lastId: bigint = await c.lastTournamentId();
+  const lastId: bigint = await contract.lastTournamentId();
   if (lastId === 0n) throw new Error('No tournaments created');
-  const t = await c.tournaments(lastId);
+  const t = await contract.tournaments(lastId);
   const nowSec = Math.floor(Date.now() / 1000);
   const isActive = Number(t[1]) <= nowSec && nowSec <= Number(t[2]) && !Boolean(t[4]);
   if (!isActive) throw new Error('No active tournament currently');
@@ -66,8 +95,25 @@ export async function fetchLeaderboard(
   offset = 0,
   limit = 100
 ): Promise<{ address: string; score: number }[]> {
-  const c = getContract();
-  const [addrs, scores]: [string[], bigint[]] = await c.viewLeaderboard(tournamentId, offset, limit);
+  try {
+    const c = getContract();
+    return await _fetchLeaderboard(c, tournamentId, offset, limit);
+  } catch (error: any) {
+    if (error.message === 'Wallet not connected') {
+      const c = getPublicContract();
+      return await _fetchLeaderboard(c, tournamentId, offset, limit);
+    }
+    throw error;
+  }
+}
+
+async function _fetchLeaderboard(
+  contract: ethers.Contract,
+  tournamentId: number,
+  offset = 0,
+  limit = 100
+): Promise<{ address: string; score: number }[]> {
+  const [addrs, scores]: [string[], bigint[]] = await contract.viewLeaderboard(tournamentId, offset, limit);
   const rows = addrs.map((a, i) => ({ address: a, score: Number(scores[i] || 0n) }));
   // client-side sort desc to avoid on-chain sort costs
   rows.sort((a, b) => b.score - a.score);
@@ -75,18 +121,38 @@ export async function fetchLeaderboard(
 }
 
 export async function getEntryFeeWei(): Promise<bigint> {
-  const c = getContract();
-  return await c.entryFeeWei();
+  try {
+    const c = getContract();
+    return await c.entryFeeWei();
+  } catch (error: any) {
+    if (error.message === 'Wallet not connected') {
+      const c = getPublicContract();
+      return await c.entryFeeWei();
+    }
+    throw error;
+  }
 }
 
 export async function getTournamentInfo(tournamentId: number, retries = 3): Promise<{ startTime: number; endTime: number; topN: number; finalized: boolean; totalPot: bigint; }>{
+  try {
+    const c = getContract();
+    return await _getTournamentInfo(c, tournamentId, retries);
+  } catch (error: any) {
+    if (error.message === 'Wallet not connected') {
+      const c = getPublicContract();
+      return await _getTournamentInfo(c, tournamentId, retries);
+    }
+    throw error;
+  }
+}
+
+async function _getTournamentInfo(contract: ethers.Contract, tournamentId: number, retries = 3): Promise<{ startTime: number; endTime: number; topN: number; finalized: boolean; totalPot: bigint; }>{
   let lastError: any;
   
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      const c = getContract();
       // Result is a tuple, access as t
-      const t = await c.tournaments(tournamentId);
+      const t = await contract.tournaments(tournamentId);
       
       return {
         startTime: Number(t[1]),
@@ -112,17 +178,36 @@ export async function getTournamentInfo(tournamentId: number, retries = 3): Prom
 }
 
 export async function getWinners(tournamentId: number): Promise<string[]> {
-  const c = getContract();
-  const w: string[] = await c.getWinners(tournamentId);
-  return w;
+  try {
+    const c = getContract();
+    const w: string[] = await c.getWinners(tournamentId);
+    return w;
+  } catch (error: any) {
+    if (error.message === 'Wallet not connected') {
+      const c = getPublicContract();
+      const w: string[] = await c.getWinners(tournamentId);
+      return w;
+    }
+    throw error;
+  }
 }
 
 export async function getPrizeBps(tournamentId: number): Promise<number[]> {
-  const c = getContract();
   try {
+    const c = getContract();
     const arr: bigint[] = await c.getPrizeBps(tournamentId);
     return arr.map(n => Number(n));
   } catch (error: any) {
+    if (error.message === 'Wallet not connected') {
+      try {
+        const c = getPublicContract();
+        const arr: bigint[] = await c.getPrizeBps(tournamentId);
+        return arr.map(n => Number(n));
+      } catch (publicError: any) {
+        // Fallback so UI can function even if not deployed yet
+        throw publicError;
+      }
+    }
     // Fallback so UI can function even if not deployed yet
     throw error;
   }

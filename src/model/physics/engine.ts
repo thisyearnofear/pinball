@@ -20,12 +20,12 @@
  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-import Matter from "matter-js";
+import * as Matter from "matter-js";
 // @ts-expect-error no type definitions for matter-attractors
 import MatterAttractors from "matter-attractors";
 import type { Point } from "zcanvas";
 import {
-    GRAVITY, FLIPPER_FORCE, MAX_SPEED, LAUNCH_SPEED,
+    GRAVITY, FLIPPER_FORCE, MAX_SPEED,
     ActorTypes, ActorLabels
 } from "@/definitions/game";
 import type { TableDef } from "@/definitions/game";

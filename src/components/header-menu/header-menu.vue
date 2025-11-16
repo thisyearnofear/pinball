@@ -58,6 +58,17 @@
             </div>
             
             <ul class="menu__items">
+                <!-- Return to Menu button when game is active -->
+                <li v-if="showReturnToMenu" class="menu__return-to-menu">
+                    <button
+                        type="button"
+                        :title="$t('ui.returnToMenu')"
+                        @click="returnToMenu"
+                    >
+                        {{ $t('ui.returnToMenu') }}
+                    </button>
+                </li>
+                
                 <li
                     v-for="(item, index) in menuItems"
                     :key="`menu_item_${index}`"
@@ -103,6 +114,10 @@ export default {
         isFarcaster: {
             type: Boolean,
             default: false
+        },
+        gameActive: {
+            type: Boolean,
+            default: false
         }
     },
     data() {
@@ -132,6 +147,9 @@ export default {
         },
         forceMobileMenu(): boolean {
             return this.isFarcaster;
+        },
+        showReturnToMenu(): boolean {
+            return this.gameActive && this.isWalletConnected;
         },
     },
     methods: {
@@ -182,6 +200,10 @@ export default {
             if (walletMenu && !walletMenu.contains(event.target as Node)) {
                 this.walletMenuOpen = false;
             }
+        },
+        returnToMenu(): void {
+            this.$emit('return-to-menu');
+            this.menuOpened = false;
         },
     },
     async mounted(): Promise<void> {
@@ -504,6 +526,38 @@ export default {
 
                 &:hover {
                     color: #000;
+                    transform: translateY(-1px);
+                }
+
+                @include mobile() {
+                    width: 100%;
+                    padding: 12px;
+                    font-size: 14px;
+                }
+            }
+        }
+
+        &.menu__return-to-menu {
+            margin-right: auto;
+            
+            @include mobile() {
+                margin-left: 0;
+                width: 100%;
+                margin-top: $spacing-small;
+            }
+
+            button {
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                color: #fff;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-size: 12px;
+                font-weight: bold;
+
+                &:hover {
+                    background: rgba(255, 255, 255, 0.15);
+                    border-color: rgba(255, 255, 255, 0.4);
                     transform: translateY(-1px);
                 }
 

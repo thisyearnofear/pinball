@@ -55,7 +55,9 @@
             "unknownError": "An unknown error occurred. Please try again.",
             "loadingTournament": "Loading Tournament",
             "fetchingDetails": "Fetching tournament details...",
-            "entryFee": "Entry Fee"
+            "entryFee": "Entry Fee",
+            "returnToMenu": "Return to Menu",
+            "practiceMode": "Practice Mode"
         },
         "messages": {
             "gotLucky": "Got lucky",
@@ -74,6 +76,8 @@
         "settings": {
             "sound": "Play sound effects",
             "music": "Play music",
+            "haptics": "Haptic feedback",
+            "quickHints": "Quick control hints",
             "vhs": "VHS effects",
             "fullscreen": "Fullscreen mode"
         },

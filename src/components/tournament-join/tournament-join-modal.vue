@@ -208,14 +208,54 @@ export default {
         async handleSwitchChain(): Promise<void> {
             try {
                 const config = getContractsConfig();
+                
+                // Show loading state during switch
+                this.isLoading = true;
+                showToast('Switching to Arbitrum One...', 'info');
+                
                 await web3Service.switchChain(config.chainId);
-                // Wait for network to stabilize before checking
-                await new Promise(resolve => setTimeout(resolve, 800));
-                await this.checkNetwork();
-            } catch (error) {
+                
+                // Wait for network to stabilize and retry check with backoff
+                let retries = 0;
+                const maxRetries = 5;
+                
+                while (retries < maxRetries) {
+                    await new Promise(resolve => setTimeout(resolve, 800 + (retries * 400)));
+                    await this.checkNetwork();
+                    
+                    if (!this.wrongChain) {
+                        showToast('Successfully switched to Arbitrum One!', 'success');
+                        // Reload tournament details now that we're on the correct network
+                        await this.loadTournamentDetails();
+                        break;
+                    }
+                    
+                    retries++;
+                }
+                
+                if (this.wrongChain) {
+                    throw new Error('Network switch verification failed after multiple attempts');
+                }
+            } catch (error: any) {
                 console.error('Failed to switch chain:', error);
-                this.errorMessage = 'Failed to switch network. Please try again.';
-                this.state = 'error';
+                
+                // Provide user-friendly error messages
+                let errorMessage = 'Failed to switch network. ';
+                
+                if (error.code === 4001) {
+                    errorMessage += 'You rejected the network switch request.';
+                } else if (error.code === 4902) {
+                    errorMessage += 'Arbitrum One needs to be added to your wallet first.';
+                } else if (error.message?.includes('User rejected')) {
+                    errorMessage += 'You rejected the network switch request.';
+                } else {
+                    errorMessage += 'Please try switching manually in your wallet.';
+                }
+                
+                showToast(errorMessage, 'error');
+                this.errorMessage = errorMessage;
+            } finally {
+                this.isLoading = false;
             }
         },
         async loadTournamentDetails(): Promise<void> {

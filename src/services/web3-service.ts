@@ -141,16 +141,35 @@ class Web3Service extends EventEmitter {
     }
 
     async disconnect(): Promise<void> {
-        if (this.walletConnectProvider) {
-            await this.walletConnectProvider.disconnect();
+        try {
+            // For WalletConnect providers
+            if (this.walletConnectProvider) {
+                await this.walletConnectProvider.disconnect();
+            }
+            
+            // For MetaMask and other browser wallets, we can't programmatically disconnect
+            // but we can clear our local state and let the user know they need to disconnect manually
+            // from their wallet if they want to completely disconnect
+            
+            // Clear all local state
+            this.provider = null;
+            this.signer = null;
+            this.address = null;
+            this.walletConnectProvider = null;
+            
+            console.log('Wallet disconnected from application');
+            
+        } catch (error) {
+            console.warn('Error during wallet disconnect:', error);
+            // Still clear local state even if disconnect fails
+            this.provider = null;
+            this.signer = null;
+            this.address = null;
+            this.walletConnectProvider = null;
+        } finally {
+            // Always emit disconnection event
+            this.emit('disconnected');
         }
-        this.provider = null;
-        this.signer = null;
-        this.address = null;
-        this.walletConnectProvider = null;
-        
-        // Emit disconnection event
-        this.emit('disconnected');
     }
 
     getProvider(): ethers.BrowserProvider | null {
@@ -177,15 +196,60 @@ class Web3Service extends EventEmitter {
     }
 
     async switchChain(chainId: number): Promise<void> {
-        if (!this.provider) return;
+        if (!this.provider || !window.ethereum) return;
 
+        const chainIdHex = `0x${chainId.toString(16)}`;
+        
         try {
-            await window.ethereum?.request({
+            // First, try to switch to the chain
+            await window.ethereum.request({
                 method: 'wallet_switchEthereumChain',
-                params: [{ chainId: `0x${chainId.toString(16)}` }],
+                params: [{ chainId: chainIdHex }],
             });
-        } catch (error) {
-            console.error('Failed to switch chain:', error);
+        } catch (switchError: any) {
+            // If the chain is not added to MetaMask, add it
+            if (switchError.code === 4902 || switchError.code === -32603) {
+                try {
+                    await this.addChainToWallet(chainId);
+                    // After adding, try switching again
+                    await window.ethereum.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: chainIdHex }],
+                    });
+                } catch (addError) {
+                    console.error('Failed to add and switch chain:', addError);
+                    throw addError;
+                }
+            } else {
+                console.error('Failed to switch chain:', switchError);
+                throw switchError;
+            }
+        }
+    }
+
+    private async addChainToWallet(chainId: number): Promise<void> {
+        if (!window.ethereum) throw new Error('No wallet provider available');
+
+        const chainIdHex = `0x${chainId.toString(16)}`;
+        
+        // Arbitrum One network configuration
+        if (chainId === 42161) {
+            await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [{
+                    chainId: chainIdHex,
+                    chainName: 'Arbitrum One',
+                    rpcUrls: ['https://arb1.arbitrum.io/rpc'],
+                    nativeCurrency: {
+                        name: 'Ethereum',
+                        symbol: 'ETH',
+                        decimals: 18,
+                    },
+                    blockExplorerUrls: ['https://arbiscan.io'],
+                }],
+            });
+        } else {
+            throw new Error(`Unsupported chain ID: ${chainId}`);
         }
     }
 }
