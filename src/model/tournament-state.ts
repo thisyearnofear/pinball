@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue';
 import { web3Service } from '@/services/web3-service';
-import { getActiveTournamentId, getEntryFeeWei, getTournamentInfo, getWinners, enterTournament, claimReward } from '@/services/contracts/tournament-client';
+import { getActiveTournamentId, getEntryFeeWei, getTournamentInfo, getWinners, getPrizeBps, enterTournament, claimReward } from '@/services/contracts/tournament-client';
+import { estimatedPrizeBps } from '@/services/prize';
 import { getHighScores } from '@/services/high-scores-service';
 
 const tournamentId = ref<number | null>(null);
@@ -14,6 +15,7 @@ const totalPotWei = ref<bigint>(0n);
 const startTime = ref<number | null>(null);
 const endTime = ref<number | null>(null);
 const topN = ref<number>(0);
+const prizeBps = ref<number[]>([]);
 
 export function useTournamentState() {
   async function load() {
@@ -28,6 +30,11 @@ export function useTournamentState() {
     endTime.value = info.endTime;
     topN.value = info.topN;
     winners.value = await getWinners(id);
+    try {
+      prizeBps.value = await getPrizeBps(id);
+    } catch {
+      prizeBps.value = estimatedPrizeBps(topN.value);
+    }
     scores.value = await getHighScores();
     // Lightweight 'entered' inference: if address appears in leaderboard or winners
     if (address.value) {
@@ -75,6 +82,7 @@ export function useTournamentState() {
     startTime,
     endTime,
     topN,
+    prizeBps,
     timeRemainingSec,
     isWinner,
     load,

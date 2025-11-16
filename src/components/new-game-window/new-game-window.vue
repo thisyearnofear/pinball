@@ -91,6 +91,18 @@
 
         <!-- Game Options Section -->
         <div class="game-options">
+            <div class="tournament-card" v-if="activeTournamentId">
+                <div class="tournament-card__header">
+                    <span class="tournament-card__title">Active Tournament #{{ activeTournamentId }}</span>
+                    <span class="tournament-card__countdown" v-if="endTime">Ends in {{ timeRemainingLabel }}</span>
+                </div>
+                <div class="tournament-card__body">
+                    <div class="tournament-card__fee" v-if="displayEntryFee">Entry Fee: {{ displayEntryFee }}</div>
+                    <div class="tournament-card__fee" v-if="displayPot">Current Pot: {{ displayPot }}</div>
+                    <div class="tournament-card__loading" v-if="detailsLoading">Loading details…</div>
+                    <div class="tournament-card__prize" v-if="prizeSplitLabel">Prize Split: {{ prizeSplitLabel }}</div>
+                </div>
+            </div>
             <!-- Table Selection (Always visible) -->
             <div v-if="canSelectTable" class="table-selector">
                 <label class="table-selector__label" v-t="'ui.table'"></label>
@@ -153,8 +165,10 @@
 import { PropType } from "vue";
 import Tables from "@/definitions/tables";
 import { web3Service } from "@/services/web3-service";
-import { useTournamentState } from "@/model/tournament-state";
 import TournamentJoinModal from "@/components/tournament-join/tournament-join-modal.vue";
+import { getEntryFeeWei, getTournamentInfo, getActiveTournamentId, getPrizeBps } from "@/services/contracts/tournament-client";
+import { ethers } from "ethers";
+import { estimatedPrizeBps } from "@/services/prize";
 
 export type NewGameProps = {
     playerName: string;
@@ -178,7 +192,13 @@ export default {
             connectingWallet: null as 'metamask' | null,
             walletConnected: false,
             showTournamentJoin: false,
-            activeTournamentId: 1,
+            activeTournamentId: null as number | null,
+            detailsLoading: false,
+            entryFeeWei: 0n,
+            endTime: null as number | null,
+            nowSec: Math.floor(Date.now() / 1000),
+            totalPotWei: 0n,
+            prizeBps: [] as number[],
         };
     },
     computed: {
@@ -203,6 +223,44 @@ export default {
     },
     canPlay(): boolean {
         return true;
+    },
+    timeRemainingLabel(): string {
+        if (!this.endTime) return '';
+        const s = Math.max(0, this.endTime - this.nowSec);
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const sec = s % 60;
+        const parts: string[] = [];
+        if (h) parts.push(`${h}h`);
+        if (m) parts.push(`${m}m`);
+        if (!h && !m) parts.push(`${sec}s`);
+        return parts.join(' ');
+    },
+    displayEntryFee(): string {
+        try {
+            const eth = ethers.formatEther(this.entryFeeWei);
+            return `${eth} ETH`;
+        } catch {
+            return '';
+        }
+    },
+    displayPot(): string {
+        try {
+            const eth = ethers.formatEther(this.totalPotWei);
+            return `${eth} ETH`;
+        } catch {
+            return '';
+        }
+    },
+    prizeSplitLabel(): string {
+        if (!this.prizeBps || !this.prizeBps.length || !this.totalPotWei) return '';
+        const parts = this.prizeBps.map((bps, idx) => {
+            const wei = (this.totalPotWei * BigInt(bps)) / 10000n;
+            const eth = Number(ethers.formatEther(wei)).toFixed(3);
+            const rank = `${idx + 1}${idx === 0 ? 'st' : idx === 1 ? 'nd' : idx === 2 ? 'rd' : 'th'}`;
+            return `${rank}: ${eth} ETH`;
+        });
+        return parts.join(' • ');
     },
     primaryButtonText(): string {
         if (!this.isWalletConnected) {
@@ -249,11 +307,18 @@ export default {
         web3Service.on('connected', () => {
             this.walletConnected = true;
             this.onWalletConnected();
+            this.prefetchTournamentDetails();
         });
         web3Service.on('disconnected', () => {
             this.walletConnected = false;
             this.onWalletDisconnected();
         });
+
+        this.prefetchTournamentDetails();
+
+        setInterval(() => {
+            this.nowSec = Math.floor(Date.now() / 1000);
+        }, 1000);
     },
     beforeUnmount(): void {
         // No cleanup needed - we use inline arrow functions that don't need removal
@@ -268,14 +333,36 @@ export default {
          onWalletDisconnected(): void {
              this.internalValue.playerName = 'Anonymous Player';
          },
-         handlePrimaryAction(): void {
-             if (!this.isWalletConnected) {
-                 this.showWalletSelector = true;
-             } else {
-                 // Show tournament join modal instead of starting immediately
-                 this.showTournamentJoin = true;
-             }
-         },
+        handlePrimaryAction(): void {
+            if (!this.isWalletConnected) {
+                this.showWalletSelector = true;
+            } else {
+                // Show tournament join modal instead of starting immediately
+                this.showTournamentJoin = true;
+            }
+        },
+        async prefetchTournamentDetails(): Promise<void> {
+            try {
+                this.detailsLoading = true;
+                const id = await getActiveTournamentId().catch(() => null);
+                this.activeTournamentId = id;
+                if (id != null) {
+                  this.entryFeeWei = await getEntryFeeWei();
+                  const info = await getTournamentInfo(id);
+                  this.endTime = info.endTime;
+                  this.totalPotWei = info.totalPot;
+                  try {
+                    this.prizeBps = await getPrizeBps(id);
+                  } catch {
+                    this.prizeBps = estimatedPrizeBps(info.topN);
+                  }
+                }
+            } catch {
+                // silent fail; UI will still allow play/enter
+            } finally {
+                this.detailsLoading = false;
+            }
+        },
          startGame(): void {
              this.$emit("start");
          },
@@ -417,6 +504,28 @@ export default {
     gap: $spacing-large;
     margin-top: $spacing-large;
 }
+
+.tournament-card {
+    background: rgba(0, 255, 136, 0.05);
+    border: 1px solid rgba(0, 255, 136, 0.2);
+    border-radius: 10px;
+    padding: $spacing-medium;
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-small;
+}
+
+.tournament-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.tournament-card__title { @include titleFont(14px); color: $color-anchors; }
+.tournament-card__countdown { @include titleFont(12px); color: #ccc; }
+.tournament-card__fee { font-family: monospace; color: #00ff88; }
+.tournament-card__prize { font-family: monospace; color: #ffb84d; }
+.tournament-card__loading { font-size: 12px; color: #999; }
 
 .table-selector {
     display: flex;

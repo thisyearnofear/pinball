@@ -113,10 +113,10 @@
 
 <script lang="ts">
 import { web3Service } from '@/services/web3-service';
-import { joinTournament, getTournamentDetails } from '@/services/contracts/tournament-entry';
-import { getEntryFeeWei, getTournamentInfo } from '@/services/contracts/tournament-client';
+import { enterTournament as joinTournament, getEntryFeeWei, getTournamentInfo } from '@/services/contracts/tournament-client';
 import { getContractsConfig } from '@/config/contracts';
 import { ethers } from 'ethers';
+import { showToast } from '@/services/toast';
 
 type ModalState = 'loading-details' | 'confirm' | 'loading' | 'success' | 'error';
 
@@ -243,10 +243,12 @@ export default {
             try {
                 await joinTournament(this.tournamentId);
                 this.state = 'success';
+                showToast(this.$t('ui.tournamentJoined') as string, 'success');
             } catch (error) {
                 console.error('Tournament join error:', error);
                 this.state = 'error';
                 this.errorMessage = this.formatErrorMessage(error);
+                showToast(this.errorMessage, 'error');
             } finally {
                 this.isLoading = false;
             }
@@ -269,13 +271,15 @@ export default {
                 return error.reason;
             }
             if (error.message) {
-                // Clean up contract error messages
                 const msg = error.message;
                 if (msg.includes('insufficient funds')) {
                     return this.$t('ui.insufficientFunds');
                 }
                 if (msg.includes('already entered')) {
                     return this.$t('ui.alreadyEntered');
+                }
+                if ((error.code && error.code === 'BAD_DATA') || msg.includes('could not decode result data')) {
+                    return 'Unable to load tournament details. Please refresh and try again.';
                 }
                 return msg;
             }

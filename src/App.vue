@@ -58,6 +58,7 @@
                 @request-wallet-connect="connectWallet()"
             />
         </modal>
+        <Toast />
     </template>
 </template>
 
@@ -102,6 +103,9 @@ export default {
         Loader,
         Modal,
         NewGameWindow,
+        Toast: defineAsyncComponent(() => {
+            return import( "./components/toast/toast.vue" );
+        }),
         PinballTable: defineAsyncComponent(() => {
             return import( "./components/pinball-table/pinball-table.vue" );
         }),

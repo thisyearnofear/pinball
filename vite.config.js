@@ -32,6 +32,17 @@ export default defineConfig({
             "@@": path.resolve( __dirname, "./public/assets" ),
         },
     },
+    build: {
+        rollupOptions: {
+            output: {
+                manualChunks: {
+                    vendor_ethers: ['ethers'],
+                    vendor_physics: ['matter-js'],
+                    vendor_farcaster: ['@farcaster/miniapp-sdk']
+                }
+            }
+        }
+    },
     define: {
         global: 'globalThis',
         process: {
@@ -51,12 +62,6 @@ export default defineConfig({
                 })
             }
         },
-        include: [
-            'buffer',
-            '@walletconnect/web3-provider',
-            'web3-provider-engine',
-            'ethereumjs-util',
-            'readable-stream'
-        ]
+        include: ['buffer']
     }
 });

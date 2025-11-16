@@ -6,8 +6,9 @@ import { web3Service } from '../web3-service';
 export const TOURNAMENT_MANAGER_ABI = [
   "function entryFeeWei() view returns (uint256)",
   "function scoreSigner() view returns (address)",
-  "function tournaments(uint256) view returns (uint256 id, uint64 startTime, uint64 endTime, uint16 topN, bool finalized, uint16[] prizeBps, uint256 totalPot)",
+  "function tournaments(uint256) view returns (tuple(uint256,uint64,uint64,uint16,bool,uint256) t)",
   "function lastTournamentId() view returns (uint256)",
+  "function getPrizeBps(uint256 id) view returns (uint16[])",
   "function enterTournament(uint256 id) payable",
   "function submitScoreWithSignature(uint256 id, uint256 score, string name, string metadata, bytes signature)",
   "function viewLeaderboard(uint256 id, uint256 offset, uint256 limit) view returns (address[] addrs, uint256[] scores)",
@@ -34,7 +35,7 @@ export async function getActiveTournamentId(): Promise<number> {
   if (lastId === 0n) throw new Error('No tournaments created');
   const t = await c.tournaments(lastId);
   const nowSec = Math.floor(Date.now() / 1000);
-  const isActive = Number(t.startTime) <= nowSec && nowSec <= Number(t.endTime) && !t.finalized;
+  const isActive = Number(t[1]) <= nowSec && nowSec <= Number(t[2]) && !Boolean(t[4]);
   if (!isActive) throw new Error('No active tournament currently');
   return Number(lastId);
 }
@@ -78,22 +79,53 @@ export async function getEntryFeeWei(): Promise<bigint> {
   return await c.entryFeeWei();
 }
 
-export async function getTournamentInfo(tournamentId: number): Promise<{ startTime: number; endTime: number; topN: number; finalized: boolean; totalPot: bigint; }>{
-  const c = getContract();
-  const t = await c.tournaments(tournamentId);
-  return {
-    startTime: Number(t.startTime),
-    endTime: Number(t.endTime),
-    topN: Number(t.topN),
-    finalized: Boolean(t.finalized),
-    totalPot: BigInt(t.totalPot),
-  };
+export async function getTournamentInfo(tournamentId: number, retries = 3): Promise<{ startTime: number; endTime: number; topN: number; finalized: boolean; totalPot: bigint; }>{
+  let lastError: any;
+  
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const c = getContract();
+      // Result is a tuple, access as t
+      const t = await c.tournaments(tournamentId);
+      
+      return {
+        startTime: Number(t[1]),
+        endTime: Number(t[2]),
+        topN: Number(t[3]),
+        finalized: Boolean(t[4]),
+        totalPot: BigInt(t[5]),
+      };
+    } catch (error: any) {
+      lastError = error;
+      
+      // Only retry on BAD_DATA errors (decoding issues), not other errors
+      if (error.code !== 'BAD_DATA' || attempt === retries - 1) {
+        throw error;
+      }
+      
+      // Wait before retrying (exponential backoff: 200ms, 400ms, etc.)
+      await new Promise(resolve => setTimeout(resolve, 200 * (attempt + 1)));
+    }
+  }
+  
+  throw lastError;
 }
 
 export async function getWinners(tournamentId: number): Promise<string[]> {
   const c = getContract();
   const w: string[] = await c.getWinners(tournamentId);
   return w;
+}
+
+export async function getPrizeBps(tournamentId: number): Promise<number[]> {
+  const c = getContract();
+  try {
+    const arr: bigint[] = await c.getPrizeBps(tournamentId);
+    return arr.map(n => Number(n));
+  } catch (error: any) {
+    // Fallback so UI can function even if not deployed yet
+    throw error;
+  }
 }
 
 export async function claimReward(tournamentId: number): Promise<string> {

@@ -219,6 +219,12 @@ contract TournamentManager {
         return winners[id];
     }
 
+    function getPrizeBps(uint256 id) external view returns (uint16[] memory) {
+        Tournament storage t = tournaments[id];
+        require(t.id == id, "NO_TOURNAMENT");
+        return t.prizeBps;
+    }
+
     function _rankOf(uint256 id, address player) internal view returns (uint16) {
         address[] storage w = winners[id];
         for (uint16 i = 0; i < w.length; i++) {

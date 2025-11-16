@@ -21,8 +21,6 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 import Matter from "matter-js";
-// @ts-expect-error no type definitions for matter-attractors
-import MatterAttractors from "matter-attractors";
 import type { Point } from "zcanvas";
 import {
     GRAVITY, FLIPPER_FORCE, MAX_SPEED, LAUNCH_SPEED,
@@ -32,7 +30,7 @@ import type { TableDef } from "@/definitions/game";
 import type Actor from "@/model/actor";
 import { loadVertices } from "@/services/svg-loader";
 
-Matter.use( MatterAttractors );
+// Removed matter-attractors plugin; we apply forces directly in beforeUpdate
 
 enum FlipperPositions {
     UP,
@@ -82,12 +80,35 @@ export const createEngine = async (
 
     Matter.Events.on( engine, "collisionStart", collisionHandler );
     Matter.Events.on( engine, "beforeUpdate", beforeUpdateHandler );
+    // internal flipper force application
+    const applyFlipperForces = (): void => {
+        const k = FLIPPER_FORCE;
+        const apply = (flipper: Matter.Body, active: boolean): void => {
+            if (!active || !flipper) return;
+            // apply a gentle attraction for nearby balls
+            for (const b of balls){
+                const dx = flipper.position.x - b.position.x;
+                const dy = flipper.position.y - b.position.y;
+                const distSq = dx*dx + dy*dy;
+                if (distSq > 0 && distSq < 40000){ // ~200px radius
+                    const invDist = 1 / Math.sqrt(distSq);
+                    const fx = dx * k * invDist;
+                    const fy = dy * k * invDist;
+                    Matter.Body.applyForce(b, b.position, { x: fx, y: fy });
+                }
+            }
+        };
+        if (leftFlipperBody) apply(leftFlipperBody, isLeftFlipperUp);
+        if (rightFlipperBody) apply(rightFlipperBody, isRightFlipperUp);
+    };
+    Matter.Events.on( engine, "beforeUpdate", applyFlipperForces );
 
     let isLeftFlipperUp  = false;
     let isRightFlipperUp = false;
 
     // collision group to be ignored by all circular Actors
     const ignoreGroup = Matter.Body.nextGroup( true );
+    const balls: Matter.Body[] = [];
 
     const createIgnorable = ( x: number, y: number, radius: number, optPlugin?: any ): Matter.Body => {
         return Matter.Bodies.circle( x, y, radius, {
@@ -169,40 +190,17 @@ export const createEngine = async (
                         stiffness: 0
                     });
 
-                    const plugin = ( position: FlipperPositions ): any => ({
-                        attractors: [
-                            ( a: Matter.Body, b: Matter.Body ): Point => {
-                                if ( b.id !== id ) {
-                                    return;
-                                }
-                                const isFlipperUp = isLeftFlipper ? isLeftFlipperUp : isRightFlipperUp;
-                                if ( position === FlipperPositions.UP && isFlipperUp ||
-                                     position === FlipperPositions.DOWN && !isFlipperUp )
-                                 {
-                                    return {
-                                        x: ( a.position.x - b.position.x ) * FLIPPER_FORCE,
-                                        y: ( a.position.y - b.position.y ) * FLIPPER_FORCE,
-                                    };
-                                }
-                            }
-                        ]
-                    });
-                    // we restrict the area of movement by using non-visible circles that cannot collide with the balls
-                    const ignorableX = isLeftFlipper ? pivotX + 30 : pivotX - 20;
-                    const lowerMult  = isLeftFlipper ? 0.8 : 0.7;
-
-                    const ignore1 = createIgnorable( ignorableX, pivotY - width, height * 1.5, plugin( FlipperPositions.UP ));
-                    const ignore2 = createIgnorable( ignorableX, pivotY + width * lowerMult, height, plugin( FlipperPositions.DOWN ));
-
-                    Matter.World.add( engine.world, [ ignore1, ignore2 ]); // otherwise attractors won't work
-
-                    const composite = Matter.Composite.add( Matter.Composite.create(), [ body, pivot, constraint, ignore1, ignore2 ]);
+                    const composite = Matter.Composite.add( Matter.Composite.create(), [ body, pivot, constraint ]);
                     Matter.Composite.rotate( composite, actor.angle, { x: pivotX, y: pivotY });
 
                     Matter.World.add( engine.world, composite );
+                    if (isLeftFlipper) leftFlipperBody = body; else rightFlipperBody = body;
                     return body;
             }
             Matter.World.add( engine.world, body );
+            if (label === ActorLabels.BALL) {
+                balls.push(body);
+            }
             return body;
         },
         removeBody( body: Matter.Body ): void {
