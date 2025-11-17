@@ -184,8 +184,8 @@ See existing table files for examples.
 ### Backend Endpoints
 
 - `POST /api/scores/sign`: Sign a tournament score submission
-  - Body: `{ tournamentId: number, address: string, score: number, name?: string, metadata?: string }`
-  - Returns: `{ signature: string }`
+  - Body: `{ tournamentId: number, address: string, score: number, name?: string, metadata?: string }` (metadata must be a valid JSON string)
+  - Returns: `{ signature: string, nonce: string }`
 
 ## Security
 

@@ -472,9 +472,26 @@ export default {
             this.showSubmissionOverlay = true;
             this.submissionStep = 'validating';
             this.submissionErrorMessage = '';
-            
+
+            // Build metadata object with relevant game data
+            const metadata = {
+                // Include table information if available
+                tableId: this.newGameProps.table,
+                tableName: this.newGameProps.tableName,
+                // Include game metrics if available
+                ballsUsed: this.game.balls !== undefined ? 3 - this.game.balls : undefined, // Assuming 3 balls per game
+                // Include client version
+                clientVersion: 'v1.0.0', // Could be made dynamic
+                timestamp: Date.now(),
+            };
+
             try {
-                const scores = await stopGame( this.game.id, this.game.score, this.newGameProps.playerName, this.newGameProps.tableName );
+                const scores = await stopGame(
+                    this.game.id,
+                    this.game.score,
+                    this.newGameProps.playerName,
+                    JSON.stringify(metadata)
+                );
                 // Store the updated scores to pass to celebration component
                 this.lastSubmittedScores = scores;
                 // Give user a moment to see the success state before showing celebration

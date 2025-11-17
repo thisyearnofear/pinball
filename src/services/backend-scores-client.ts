@@ -8,7 +8,7 @@ if (!API_BASE) {
 
 export type ScoreSignatureResponse = {
   signature: string;
-  nonce: number;
+  nonce: string; // Nonce is returned as a string from the backend
 };
 
 export async function requestScoreSignature(params: {

@@ -4,13 +4,14 @@ Minimal Fastify service for validating and signing scores for on-chain submissio
 
 ## Endpoints
 - POST /api/scores/sign
-  - Body: { tournamentId: number, address: string, score: number, name?: string, metadata?: string }
-  - Returns: { signature: string }
+  - Body: { tournamentId: number, address: string, score: number, name?: string, metadata?: string } (metadata must be a valid JSON string)
+  - Returns: { signature: string, nonce: string }
 
 ## Security
 - SCORE_SIGNER_PK must be kept secret and only configured as an environment variable on the VPS.
 - Configure ALLOWED_ORIGINS for CORS.
-- Add anti-cheat checks in src/routes/scores.ts.
+- Metadata field must be a valid JSON string with optional fields: duration (number), ballsUsed (number), tableId (number), clientVersion (string), timestamp (number).
+- Rate limiting and replay protection implemented with nonce tracking.
 
 ## Local development
 - cd backend

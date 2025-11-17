@@ -125,7 +125,7 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
         
         notifySubmissionState('signing');
         let signature: string;
-        let nonce: number;
+        let nonce: string;
         try {
             const response = await requestScoreSignature({ tournamentId, address, score, name: playerName || '', metadata });
             signature = response.signature;
@@ -135,10 +135,12 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
             notifySubmissionState('error', 'Backend signature service unavailable');
             throw err;
         }
-        
+
         notifySubmissionState('ready');
         try {
-            await submitScoreWithSignature(tournamentId, score, nonce, playerName || '', metadata, signature);
+            // Convert nonce string to number for the blockchain function
+            const nonceAsBigInt = BigInt(nonce);
+            await submitScoreWithSignature(tournamentId, score, nonceAsBigInt, playerName || '', metadata, signature);
             showToast('Score submitted!', 'success');
             try {
                 const submittedRaw = getFromStorage('ps_submitted_scores') || '[]';
