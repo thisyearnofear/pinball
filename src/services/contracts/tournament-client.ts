@@ -6,7 +6,7 @@ import { web3Service } from '../web3-service';
 export const TOURNAMENT_MANAGER_ABI = [
   "function entryFeeWei() view returns (uint256)",
   "function scoreSigner() view returns (address)",
-  "function tournaments(uint256) view returns (tuple(uint256,uint64,uint64,uint16,bool,uint256) t)",
+  "function tournaments(uint256) view returns (uint256 id, uint64 startTime, uint64 endTime, uint16 topN, bool finalized, uint16[] prizeBps, uint256 totalPot)",
   "function lastTournamentId() view returns (uint256)",
   "function getPrizeBps(uint256 id) view returns (uint16[])",
   "function enterTournament(uint256 id) payable",
@@ -65,7 +65,8 @@ async function _getActiveTournamentId(contract: ethers.Contract): Promise<number
   if (lastId === 0n) throw new Error('No tournaments created');
   const t = await contract.tournaments(lastId);
   const nowSec = Math.floor(Date.now() / 1000);
-  const isActive = Number(t[1]) <= nowSec && nowSec <= Number(t[2]) && !Boolean(t[4]);
+  // t is now: [id, startTime, endTime, topN, finalized, prizeBps, totalPot]
+  const isActive = Number(t.startTime) <= nowSec && nowSec <= Number(t.endTime) && !Boolean(t.finalized);
   if (!isActive) throw new Error('No active tournament currently');
   return Number(lastId);
 }
@@ -189,15 +190,15 @@ async function _getTournamentInfo(contract: ethers.Contract, tournamentId: numbe
   
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      // Result is a tuple, access as t
+      // Result is now: [id, startTime, endTime, topN, finalized, prizeBps, totalPot]
       const t = await contract.tournaments(tournamentId);
       
       return {
-        startTime: Number(t[1]),
-        endTime: Number(t[2]),
-        topN: Number(t[3]),
-        finalized: Boolean(t[4]),
-        totalPot: BigInt(t[5]),
+        startTime: Number(t.startTime),
+        endTime: Number(t.endTime),
+        topN: Number(t.topN),
+        finalized: Boolean(t.finalized),
+        totalPot: BigInt(t.totalPot),
       };
     } catch (error: any) {
       lastError = error;
