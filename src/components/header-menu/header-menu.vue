@@ -632,6 +632,7 @@ export default {
         left: 0;
 
         .menu__items {
+            display: none; // Hidden by default on mobile
             margin: $menu-height auto 0;
             background-color: #000;
             max-height: calc(100vh - #{$menu-height});
@@ -652,6 +653,16 @@ export default {
         &__toggle {
             display: block; // only visible in mobile view
             height: $menu-height;
+        }
+    }
+
+    // Show menu items when expanded on mobile
+    .header--expanded & {
+        @include mobile() {
+            .menu__items {
+                display: flex;
+                flex-direction: column;
+            }
         }
     }
 
