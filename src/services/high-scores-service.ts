@@ -198,33 +198,16 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
 
         notifySubmissionState('ready');
         try {
-            // Wait briefly to ensure any pending transactions (like entry) have time to process
-            await new Promise(resolve => setTimeout(resolve, 3000));
-
-            // Verify the tournament is still active before submitting score
-            try {
-                const { startTime, endTime, finalized } = await getTournamentInfo(tournamentId);
-                const now = Math.floor(Date.now() / 1000);
-
-                if (now < startTime) {
-                    throw new Error(`Tournament starts at ${new Date(startTime * 1000).toLocaleString()}`);
-                }
-                if (now > endTime) {
-                    throw new Error(`Tournament ended at ${new Date(endTime * 1000).toLocaleString()}`);
-                }
-                if (finalized) {
-                    throw new Error('Tournament has been finalized');
-                }
-
-                console.log('Tournament validation passed - still active and not finalized');
-            } catch (validationError) {
-                console.error('Tournament validation failed:', validationError);
-                throw validationError;
-            }
-
             // Convert nonce string to number for the blockchain function
             const nonceAsBigInt = BigInt(nonce);
-            console.log('Submitting score to blockchain contract...');
+            console.log('Submitting score to blockchain contract with params:', {
+                tournamentId,
+                score,
+                nonce: nonceAsBigInt.toString(),
+                playerName: playerName || '',
+                metadata,
+                signatureLength: signature.length
+            });
             await submitScoreWithSignature(tournamentId, score, nonceAsBigInt, playerName || '', metadata, signature);
             console.log('Score successfully submitted to blockchain');
             showToast('Score submitted!', 'success');
@@ -251,15 +234,21 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
             if (err instanceof Error) {
                 const errorStr = err.message.toLowerCase();
                 if (errorStr.includes('tournament') || errorStr.includes('active')) {
-                    errorMessage = 'Tournament may not be active or you may need to enter first';
+                    errorMessage = 'Tournament may not be active';
+                } else if (errorStr.includes('not_active')) {
+                    errorMessage = 'Tournament is not active for score submission';
+                } else if (errorStr.includes('not_entered')) {
+                    errorMessage = 'You have not entered this tournament';
+                } else if (errorStr.includes('invalid_nonce')) {
+                    errorMessage = 'Invalid nonce - score submission rejected';
+                } else if (errorStr.includes('bad_sig') || errorStr.includes('bad_sig')) {
+                    errorMessage = 'Invalid signature - score verification failed';
                 } else if (errorStr.includes('require') || errorStr.includes('revert')) {
-                    errorMessage = 'Transaction failed - you may need to enter the tournament first or tournament conditions not met';
+                    errorMessage = 'Transaction failed - common causes: not entered, tournament inactive, or invalid signature';
                 } else if (errorStr.includes('gas') || errorStr.includes('estimate')) {
                     errorMessage = 'Transaction failed - check gas settings or balance';
                 } else if (errorStr.includes('user rejected') || errorStr.includes('denied')) {
                     errorMessage = 'Transaction was rejected';
-                } else if (errorStr.includes('not registered') || errorStr.includes('not entered')) {
-                    errorMessage = 'You are not registered in this tournament';
                 }
             }
 
