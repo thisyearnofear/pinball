@@ -11,6 +11,7 @@ import { web3Service } from './web3-service';
 import { getActiveTournamentId, fetchLeaderboard, submitScoreWithSignature } from './contracts/tournament-client';
 import { requestScoreSignature } from './backend-scores-client';
 import { getContractsConfig } from '../config/contracts';
+import { showToast } from '@/services/toast';
 
 export type HighScoreDef = {
     name: string; // currently we don't store names on-chain; keep field for compatibility
@@ -63,7 +64,12 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
         const currentChainId = Number(currentNetwork.chainId);
         
         if (currentChainId !== config.chainId) {
-            throw new Error(`Please switch to chain ID ${config.chainId} (${getChainName(config.chainId)}) to submit scores`);
+            try {
+                await web3Service.switchChain(config.chainId);
+            } catch {
+                showToast(`Please switch to ${getChainName(config.chainId)} to submit scores`, 'error');
+                throw new Error(`Wrong chain: ${currentChainId}`);
+            }
         }
         
         // Expect metaData to contain a JSON string with { signature: string, metadata?: string }
@@ -78,8 +84,20 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
         }
         const address = web3Service.getAddress();
         if (!address) throw new Error('No wallet address');
-        const signature = await requestScoreSignature({ tournamentId, address, score, name: playerName || '', metadata });
-        await submitScoreWithSignature(tournamentId, score, playerName || '', metadata, signature);
+        let signature: string;
+        try {
+            signature = await requestScoreSignature({ tournamentId, address, score, name: playerName || '', metadata });
+        } catch (err) {
+            showToast('Score server unavailable — please try again later', 'error');
+            throw err;
+        }
+        try {
+            await submitScoreWithSignature(tournamentId, score, playerName || '', metadata, signature);
+            showToast('Score submitted!', 'success');
+        } catch (err) {
+            showToast('Score submission failed — please retry', 'error');
+            throw err;
+        }
         // Return updated leaderboard top slice
         const rows = await fetchLeaderboard(tournamentId, 0, 100);
         const scores: HighScoreDef[] = rows.map(r => ({ name: '', score: r.score, duration: 0 }));
