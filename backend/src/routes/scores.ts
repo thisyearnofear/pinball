@@ -88,7 +88,7 @@ export async function scoresRoutes(app: FastifyInstance) {
         s,
         nonce,
         n,
-        JSON.stringify(m) // Convert back to string
+        metadata // Use original metadata string, not JSON.stringify(m)
       );
 
       app.log.info({
