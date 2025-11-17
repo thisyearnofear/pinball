@@ -455,65 +455,6 @@ export default {
         50% { opacity: 0.5; }
     }
 
-    // Force mobile menu layout in Farcaster context
-    &--farcaster {
-        .menu__toggle {
-            display: block;
-        }
-
-        // Hide header content initially in Farcaster (only show hamburger menu)
-        .menu__wallet {
-            display: none;
-        }
-
-        // Hide menu items by default in Farcaster context
-        .menu__items {
-            display: none;
-            position: fixed;
-            overflow: hidden;
-            width: 100%;
-            height: auto;
-            top: $menu-height;
-            left: 0;
-            max-height: calc(100vh - #{$menu-height});
-            overflow-y: auto;
-            background-color: #000;
-            flex-direction: column;
-            z-index: 1000;
-
-            li {
-                display: block;
-                font-size: 18px; // Smaller font size for mobile
-                margin: $spacing-xsmall 0 0;
-                width: 100%;
-                line-height: $spacing-large;
-                padding: 0 $spacing-medium;
-                box-sizing: border-box;
-
-                button {
-                    width: 100%;
-                    text-align: left;
-                    padding: $spacing-small;
-                    font-size: 16px !important;
-                    background: none;
-                    border: none;
-                    color: #fff;
-                    
-                    &:hover {
-                        background: rgba(255, 255, 255, 0.1);
-                    }
-                }
-            }
-        }
-
-        // Show menu when expanded
-        &.header--expanded {
-            .menu__items {
-                display: flex;
-                flex-direction: column;
-            }
-        }
-    }
 
     &__toggle {
         position: absolute;
@@ -707,6 +648,66 @@ export default {
         &__toggle {
             display: block; // only visible in mobile view
             height: $menu-height;
+        }
+    }
+
+    // Force mobile menu layout in Farcaster context - placed at end for specificity
+    &--farcaster {
+        .menu__toggle {
+            display: block !important;
+        }
+
+        // Hide header content initially in Farcaster (only show hamburger menu)
+        .menu__wallet {
+            display: none !important;
+        }
+
+        // Hide menu items by default in Farcaster context
+        .menu__items {
+            display: none !important;
+            position: fixed;
+            overflow: hidden;
+            width: 100%;
+            height: auto;
+            top: $menu-height;
+            left: 0;
+            max-height: calc(100vh - #{$menu-height});
+            overflow-y: auto;
+            background-color: #000;
+            flex-direction: column;
+            z-index: 1000;
+
+            li {
+                display: block !important;
+                font-size: 18px !important; // Smaller font size for mobile
+                margin: $spacing-xsmall 0 0 !important;
+                width: 100% !important;
+                line-height: $spacing-large !important;
+                padding: 0 $spacing-medium !important;
+                box-sizing: border-box;
+
+                button {
+                    width: 100% !important;
+                    text-align: left !important;
+                    padding: $spacing-small !important;
+                    font-size: 16px !important;
+                    background: none !important;
+                    border: none !important;
+                    color: #fff !important;
+                    
+                    &:hover {
+                        background: rgba(255, 255, 255, 0.1) !important;
+                    }
+                }
+            }
+        }
+
+        // Show menu when expanded - this needs to override the display: none
+        &.header--expanded {
+            .menu__items {
+                display: flex !important;
+                flex-direction: column !important;
+            }
         }
     }
 }

@@ -152,10 +152,11 @@ export default {
         loading: true,
         scores: [],
         tournamentInfo: null,
+        walletConnected: false,
     }),
     computed: {
         isWalletConnected(): boolean {
-            return web3Service.isConnected();
+            return this.walletConnected;
         },
         formattedScores(): HighScoreDef[] {
             const filteredScores = this.scores.filter(({ score }) => score > 0 );
@@ -227,7 +228,7 @@ export default {
     methods: {
         async onRefresh() {
             try {
-                await this.loadTournamentInfo();
+                await (this.$options as any).loadTournamentInfo.call(this);
                 this.scores = await getHighScores();
             } catch (error) {
                 console.log('Refresh failed:', error);
@@ -238,6 +239,7 @@ export default {
                 await web3Service.connect('metamask');
                 // Load scores after connection
                 if (web3Service.isConnected()) {
+                    this.walletConnected = true;
                     this.scores = await getHighScores();
                 }
             } catch (error) {
@@ -248,7 +250,7 @@ export default {
     async mounted(): Promise<void> {
         try {
             // Load tournament information first (works without wallet)
-            await this.loadTournamentInfo();
+            await (this.$options as any).loadTournamentInfo.call(this);
             
             // Then try to load scores for social proof
             this.scores = await getHighScores();
@@ -257,6 +259,10 @@ export default {
             // If tournament data fails, we can still show the component
             this.scores = [];
         }
+        this.walletConnected = web3Service.isConnected();
+        web3Service.on('connected', () => { this.walletConnected = true; });
+        web3Service.on('disconnected', () => { this.walletConnected = false; });
+
         this.loading = false;
     },
     
