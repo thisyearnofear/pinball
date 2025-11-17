@@ -6,14 +6,37 @@
       
       <!-- Practice Mode Information -->
       <div v-if="isPracticeMode" class="celebration__practice-info">
-        <div class="celebration__practice-title">🎯 Tournament Preview</div>
-        <div class="celebration__practice-text">Your score would rank {{ practiceRank }} on the leaderboard!</div>
-        <div class="celebration__pot" v-if="displayPot">Current Pot: {{ displayPot }}</div>
-        <div class="celebration__potential-earnings" v-if="potentialEarnings">
-          You could have earned: {{ potentialEarnings }}
+        <div class="celebration__practice-title">🎯 Practice Complete</div>
+        
+        <!-- Show ranking if real tournament data is available -->
+        <div v-if="entries.length > 0" class="celebration__practice-ranking">
+          <div class="celebration__practice-rank">
+            Your score would rank <strong>{{ practiceRank }}</strong> in the current tournament!
+          </div>
+          <div class="celebration__practice-pot" v-if="displayPot">
+            Current Prize Pool: <strong>{{ displayPot }}</strong>
+            <span v-if="timeLabel"> • ⏰ {{ timeLabel }}</span>
+          </div>
+          <div v-if="potentialEarnings" class="celebration__practice-earnings">
+            💰 You could have won <strong>{{ potentialEarnings }}</strong>
+          </div>
         </div>
-        <div class="celebration__cta">
-          <strong>🚀 Ready to compete for real prizes?</strong>
+        
+        <!-- Explain how tournaments work if no data available -->
+        <div v-else class="celebration__practice-explainer">
+          <div class="celebration__explainer-text">
+            🏆 <strong>Tournament Mode:</strong> Players pay entry fees that build a prize pool. 
+            Top finishers split the winnings based on rank.
+          </div>
+          <div class="celebration__explainer-link">
+            <button @click="$emit('view-leaderboard')" class="celebration__about-link">
+              View current tournament →
+            </button>
+          </div>
+        </div>
+        
+        <div class="celebration__practice-cta">
+          🚀 <strong>Ready to compete for real prizes?</strong>
         </div>
       </div>
       
@@ -217,46 +240,10 @@ export default {
     },
   },
   async mounted(): Promise<void> {
-    await this.loadTournamentData();
-  },
-  
-  async loadTournamentData(): Promise<void> {
-    try {
-      // Try to load tournament data using the direct client methods (like high-scores component)
-      const { getActiveTournamentId, fetchLeaderboard, fetchLeaderboardWithRetry, getTournamentInfo, getPrizeBps } = await import('@/services/contracts/tournament-client');
-      
-      const tournamentId = await getActiveTournamentId();
-      
-      // For celebration after score submission, use enhanced fetch with retry logic
-      // This helps with blockchain finality issues where the score might not be immediately visible
-      let leaderboard;
-      if (this.lastSubmittedScores) {
-        // If we just submitted a score, use retry logic to wait for it to appear on chain
-        leaderboard = await fetchLeaderboardWithRetry(tournamentId, 0, 100);
-      } else {
-        leaderboard = await fetchLeaderboard(tournamentId, 0, 100);
-      }
-      
-      const [info, prizeBps] = await Promise.all([
-        getTournamentInfo(tournamentId),
-        getPrizeBps(tournamentId).catch(() => []) // Fallback to empty array if prizeBps fails
-      ]);
-      
-      this.entries = leaderboard.slice(0, 10);
-      
-      this.totalPotWei = info.totalPot;
-      this.prizeBps = prizeBps;
-      
-      const now = Math.floor(Date.now() / 1000);
-      this.timeRemainingSec = info.endTime > now ? info.endTime - now : null;
-      
-    } catch (error) {
-      console.log('Tournament data not available for celebration:', error);
-      // For practice mode, we can still show the celebration even if tournament data isn't available
-      this.entries = [];
-      this.totalPotWei = 0n;
-      this.prizeBps = [];
-      this.timeRemainingSec = null;
+    if (this.isPracticeMode) {
+      await this.loadRealTournamentData();
+    } else {
+      await this.loadTournamentData();
     }
   },
   methods: {
@@ -280,6 +267,76 @@ export default {
         await navigator.clipboard.writeText(text);
         alert('Copied score to clipboard!');
       } catch {}
+    },
+    
+    async loadRealTournamentData(): Promise<void> {
+      // Only load real on-chain tournament data for practice mode preview
+      try {
+        const { getActiveTournamentId, fetchLeaderboard, getTournamentInfo, getPrizeBps } = await import('@/services/contracts/tournament-client');
+        
+        const tournamentId = await getActiveTournamentId();
+        const [leaderboard, info, prizeBps] = await Promise.all([
+          fetchLeaderboard(tournamentId, 0, 20),
+          getTournamentInfo(tournamentId),
+          getPrizeBps(tournamentId)
+        ]);
+        
+        // Only use real tournament data
+        this.entries = leaderboard;
+        this.totalPotWei = info.totalPot;
+        this.prizeBps = prizeBps;
+        
+        const now = Math.floor(Date.now() / 1000);
+        this.timeRemainingSec = info.endTime > now ? info.endTime - now : null;
+        
+      } catch (error) {
+        console.log('Tournament data not available for practice mode:', error);
+        // No mock data - just empty state
+        this.entries = [];
+        this.totalPotWei = 0n;
+        this.prizeBps = [];
+        this.timeRemainingSec = null;
+      }
+    },
+    
+    async loadTournamentData(): Promise<void> {
+      try {
+        // Try to load tournament data using the direct client methods (like high-scores component)
+        const { getActiveTournamentId, fetchLeaderboard, fetchLeaderboardWithRetry, getTournamentInfo, getPrizeBps } = await import('@/services/contracts/tournament-client');
+        
+        const tournamentId = await getActiveTournamentId();
+        
+        // For celebration after score submission, use enhanced fetch with retry logic
+        // This helps with blockchain finality issues where the score might not be immediately visible
+        let leaderboard;
+        if (this.lastSubmittedScores) {
+          // If we just submitted a score, use retry logic to wait for it to appear on chain
+          leaderboard = await fetchLeaderboardWithRetry(tournamentId, 0, 100);
+        } else {
+          leaderboard = await fetchLeaderboard(tournamentId, 0, 100);
+        }
+        
+        const [info, prizeBps] = await Promise.all([
+          getTournamentInfo(tournamentId),
+          getPrizeBps(tournamentId).catch(() => []) // Fallback to empty array if prizeBps fails
+        ]);
+        
+        this.entries = leaderboard.slice(0, 10);
+        
+        this.totalPotWei = info.totalPot;
+        this.prizeBps = prizeBps;
+        
+        const now = Math.floor(Date.now() / 1000);
+        this.timeRemainingSec = info.endTime > now ? info.endTime - now : null;
+        
+      } catch (error) {
+        console.log('Tournament data not available for celebration:', error);
+        // For practice mode, we can still show the celebration even if tournament data isn't available
+        this.entries = [];
+        this.totalPotWei = 0n;
+        this.prizeBps = [];
+        this.timeRemainingSec = null;
+      }
     },
   },
 };
@@ -365,6 +422,78 @@ export default {
   &__btn--tournament { background: linear-gradient(135deg, #FFD700, #FFA500); color: #000; border-color: #FFD700; font-weight: bold; }
   &__btn--tournament:hover { background: linear-gradient(135deg, #FFF700, #FFB500); }
   &__confetti { position: absolute; inset: 0; pointer-events: none; background-image: radial-gradient(circle, rgba(255,255,255,0.08) 1px, transparent 1px); background-size: 20px 20px; animation: confetti 2s linear infinite; }
+
+  // Simplified practice mode styles
+  &__practice-ranking {
+    margin: $spacing-medium 0;
+  }
+
+  &__practice-rank {
+    font-size: 16px;
+    margin-bottom: $spacing-small;
+    color: #FFF;
+    
+    strong {
+      color: $color-anchors;
+    }
+  }
+
+  &__practice-pot {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.9);
+    margin: $spacing-small 0;
+    
+    strong {
+      color: #FFD700;
+    }
+  }
+
+  &__practice-earnings {
+    font-size: 14px;
+    color: #FFD700;
+    margin: $spacing-small 0;
+    
+    strong {
+      color: #FFD700;
+    }
+  }
+
+  &__practice-explainer {
+    margin: $spacing-medium 0;
+  }
+
+  &__explainer-text {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.8);
+    line-height: 1.4;
+    margin-bottom: $spacing-small;
+  }
+
+  &__explainer-link {
+    margin-top: $spacing-small;
+  }
+
+  &__about-link {
+    background: none;
+    border: 1px solid rgba(0, 204, 136, 0.3);
+    color: $color-anchors;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    
+    &:hover {
+      background: rgba(0, 204, 136, 0.1);
+      border-color: rgba(0, 204, 136, 0.5);
+    }
+  }
+
+  &__practice-cta {
+    margin-top: $spacing-medium;
+    font-size: 14px;
+    color: $color-anchors;
+  }
 }
 
 @keyframes confetti { 0% { background-position: 0% 0%; } 100% { background-position: 100% 100%; } }

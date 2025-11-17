@@ -374,17 +374,12 @@ export default {
             }
         },
          startGame(): void {
-             this.$emit("start");
+             // Anonymous play when no wallet connected
+             this.$emit("start-practice");
          },
          startPracticeGame(): void {
-             // Start game in practice mode (without tournament entry)
-             const originalPlayerName = this.internalValue.playerName;
-             this.internalValue.playerName = 'Practice Mode';
-             this.$emit("start");
-             // Restore original player name for future tournament games
-             this.$nextTick(() => {
-                 this.internalValue.playerName = originalPlayerName;
-             });
+             // Start game in practice mode (even with wallet connected)
+             this.$emit("start-practice");
          },
          async selectWallet(walletType: 'metamask'): Promise<void> {
              this.connectingWallet = walletType;
@@ -422,16 +417,15 @@ export default {
          },
          onTournamentJoined(): void {
              this.showTournamentJoin = false;
-             this.startGame();
+             this.$emit("start-tournament");
          },
          onTournamentCancelled(): void {
              this.showTournamentJoin = false;
          },
          onPlayAnonymous(): void {
              this.showTournamentJoin = false;
-             // Start game without tournament entry
-             this.internalValue.playerName = 'Anonymous Player';
-             this.startGame();
+             // Start game without tournament entry (practice mode)
+             this.$emit("start-practice");
          },
      },
  };

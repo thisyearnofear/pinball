@@ -69,6 +69,8 @@
             <new-game-window
                 v-model="newGameProps"
                 @start="initGame()"
+                @start-practice="startPracticeMode()"
+                @start-tournament="startTournamentModeFromWindow()"
                 @request-wallet-connect="connectWallet()"
             />
         </modal>
@@ -148,6 +150,7 @@ export default {
             table: START_TABLE_INDEX,
             tableName: "",
         },
+        isTournamentMode: false, // Explicit tournament mode flag
         game: {
             active: false,
         },
@@ -183,9 +186,8 @@ export default {
             return isSupported() && this.newGameProps.playerName.length > 0;
         },
         isPracticeMode(): boolean {
-            // Practice mode is when user doesn't want to pay for tournament mode
-            // Even if wallet is connected, they might choose practice mode
-            return this.newGameProps.playerName === 'Anonymous Player' || this.newGameProps.playerName === '';
+            // Practice mode unless user explicitly chooses tournament mode
+            return !this.isTournamentMode;
         },
     },
     watch: {
@@ -415,14 +417,32 @@ export default {
             this.showCelebration = false;
         },
         startTournamentMode(): void {
-            // Switch from practice mode to tournament mode
+            // Switch from practice mode to tournament mode (called from celebration)
             this.showCelebration = false;
+            this.isTournamentMode = true;
             const address = web3Service.getAddress();
             if (address) {
                 // Restore wallet address for tournament play
                 this.newGameProps.playerName = address;
+            } else {
+                // Reset to empty so new game window shows wallet connect option
+                this.newGameProps.playerName = "";
             }
             // The new game window will now show tournament mode
+        },
+        
+        startTournamentModeFromWindow(): void {
+            // Start tournament mode from new game window
+            this.isTournamentMode = true;
+            // Player name should already be set by the wallet connection
+            this.initGame();
+        },
+        
+        startPracticeMode(): void {
+            // Start practice mode
+            this.isTournamentMode = false;
+            this.newGameProps.playerName = 'Anonymous Player';
+            this.initGame();
         },
         
         showToast(message: string, type: 'info' | 'error' | 'success' = 'info'): void {
