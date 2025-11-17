@@ -466,7 +466,9 @@ export default {
             display: none;
         }
 
+        // Hide menu items by default in Farcaster context
         .menu__items {
+            display: none;
             position: fixed;
             overflow: hidden;
             width: 100%;
@@ -477,10 +479,7 @@ export default {
             overflow-y: auto;
             background-color: #000;
             flex-direction: column;
-            transform: translateX(-100%);
-            transition: transform 0.3s ease-in-out;
-            opacity: 0;
-            pointer-events: none;
+            z-index: 1000;
 
             li {
                 display: block;
@@ -496,6 +495,13 @@ export default {
                     text-align: left;
                     padding: $spacing-small;
                     font-size: 16px !important;
+                    background: none;
+                    border: none;
+                    color: #fff;
+                    
+                    &:hover {
+                        background: rgba(255, 255, 255, 0.1);
+                    }
                 }
             }
         }
@@ -503,24 +509,8 @@ export default {
         // Show menu when expanded
         &.header--expanded {
             .menu__items {
-                transform: translateX(0);
-                opacity: 1;
-                pointer-events: auto;
-            }
-
-            // Show wallet in the dropdown menu when expanded
-            .menu__wallet {
-                display: block;
-                position: static;
-                margin: $spacing-small $spacing-medium;
-                background: rgba(255, 255, 255, 0.05);
-                border-radius: 4px;
-                padding: $spacing-small;
-
-                .menu__wallet-status {
-                    max-width: none;
-                    justify-content: space-between;
-                }
+                display: flex;
+                flex-direction: column;
             }
         }
     }
