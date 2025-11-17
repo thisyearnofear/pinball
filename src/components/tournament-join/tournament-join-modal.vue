@@ -286,9 +286,18 @@ export default {
                 showToast(this.$t('ui.tournamentJoined') as string, 'success');
             } catch (error) {
                 console.error('Tournament join error:', error);
-                this.state = 'error';
-                this.errorMessage = this.formatErrorMessage(error);
-                showToast(this.errorMessage, 'error');
+                
+                // Check if this is an "already entered" error which is fine
+                if (error instanceof Error && (error.message.includes('already') || error.message.includes('duplicate') || error.message.includes('NOT_ENTERED'))) {
+                    // User is already entered, treat as success
+                    this.state = 'success';
+                    showToast(this.$t('ui.alreadyEntered') as string, 'success');
+                } else {
+                    // Actual error
+                    this.state = 'error';
+                    this.errorMessage = this.formatErrorMessage(error);
+                    showToast(this.errorMessage, 'error');
+                }
             } finally {
                 this.isLoading = false;
             }

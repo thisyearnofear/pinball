@@ -59,24 +59,12 @@ export const isSupported = (): boolean => {
 };
 
 /**
- * Invoke when starting a new game; enters tournament if needed and returns active tournament id as the session id.
+ * Invoke when starting a new game; returns active tournament id as the session id.
+ * Note: Does not automatically enter tournament - user must explicitly join via modal.
  */
 export const startGame = async (): Promise<string | null> => {
     try {
         const id = await getActiveTournamentId();
-
-        // Check if the player is already in the tournament or needs to enter
-        if (web3Service.isConnected()) {
-            // Try to enter the tournament if not already entered
-            // The contract will handle duplicate entries gracefully
-            try {
-                await enterTournamentIfNotEntered(id);
-            } catch (entryError) {
-                console.error('Tournament entry failed (may already be entered):', entryError);
-                // Continue anyway - user might already be entered or other valid state
-            }
-        }
-
         return String(id);
     } catch (e) {
         console.error('startGame failed:', e);
@@ -84,33 +72,7 @@ export const startGame = async (): Promise<string | null> => {
     }
 };
 
-/**
- * Helper function to enter tournament if not already entered
- */
-async function enterTournamentIfNotEntered(tournamentId: number): Promise<void> {
-    // Check if entry fee is required
-    const fee = await getEntryFeeWei();
 
-    // Attempt to enter the tournament regardless of fee amount
-    // (some tournaments might be free but still require registration)
-    try {
-        console.log(`Attempting to enter tournament ${tournamentId} with fee: ${fee} wei`);
-        await enterTournament(tournamentId);
-        console.log(`Successfully entered tournament ${tournamentId}`);
-
-        // Wait a moment to ensure the transaction has been processed
-        await new Promise(resolve => setTimeout(resolve, 2000));
-    } catch (error) {
-        console.error(`Failed to enter tournament ${tournamentId}:`, error);
-        // Check if this is just a "already entered" error which is fine
-        if (error instanceof Error && !error.message.includes('already') && !error.message.includes('duplicate')) {
-            // For any other error, throw it to stop the process
-            throw error;
-        } else {
-            console.log(`User may already be entered in tournament ${tournamentId}`);
-        }
-    }
-}
 
 // NOTE: To submit a score we require a server signature proving validity.
 // The caller must obtain `signature` out-of-band (server API) and pass via metaData (or adapt as needed).
