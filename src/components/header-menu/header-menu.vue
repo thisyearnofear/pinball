@@ -37,7 +37,7 @@
             </div>
             
             <!-- Unified Wallet Interface -->
-            <div v-if="isWalletConnected" class="menu__wallet" ref="walletMenu">
+            <div v-if="isWalletConnected && !forceMobileMenu" class="menu__wallet" ref="walletMenu">
                 <div class="menu__wallet-status" @click="toggleWalletMenu">
                     <span class="menu__wallet-indicator" :class="{ 'menu__wallet-indicator--tournament': isTournamentActive }"></span>
                     {{ shortAddress }}
@@ -248,6 +248,10 @@ export default {
         // Listen for wallet connection/disconnection events
         web3Service.on('connected', (data) => {
             this.walletConnected = true;
+            if (!this.tournamentState) {
+                this.tournamentState = useTournamentState();
+            }
+            this.tournamentState.load().catch(() => {});
         });
         
         web3Service.on('disconnected', () => {

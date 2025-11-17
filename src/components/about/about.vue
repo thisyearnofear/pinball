@@ -76,6 +76,12 @@ export default {
                 author: "igorski",
                 type: "Programming",
                 url: "https://www.igorski.nl",
+            },
+            {
+                title: "Onchainification",
+                author: "papa",
+                type: "Web3 Integration",
+                url: "https://farcaster.xyz/papa",
             }
         ];
     },
