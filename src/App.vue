@@ -183,7 +183,9 @@ export default {
             return isSupported() && this.newGameProps.playerName.length > 0;
         },
         isPracticeMode(): boolean {
-            return !this.canUseHighScores;
+            // Practice mode is when user doesn't want to pay for tournament mode
+            // Even if wallet is connected, they might choose practice mode
+            return this.newGameProps.playerName === 'Anonymous Player' || this.newGameProps.playerName === '';
         },
     },
     watch: {
@@ -195,7 +197,7 @@ export default {
                 }
             }
             if ( !value && prevValue && this.game.score > 0 ) {
-                if ( this.canUseHighScores && !this.isPracticeMode ) {
+                if ( !this.isPracticeMode && this.canUseHighScores ) {
                     // Tournament mode - submit score and show celebration
                     stopGame( this.game.id, this.game.score, this.newGameProps.playerName, this.newGameProps.tableName ).then((scores) => {
                         // Store the updated scores to pass to celebration component
@@ -207,7 +209,8 @@ export default {
                         this.showCelebration = true;
                     });
                 } else {
-                    // Practice mode - just show celebration
+                    // Practice mode - just show celebration (no score submission)
+                    this.lastSubmittedScores = null; // Ensure no scores are passed to celebration
                     this.showCelebration = true;
                 }
             }
@@ -257,7 +260,7 @@ export default {
             this.startPending = true;
             
             // Check if wallet is connected and on correct chain before tournament mode
-            if (this.canUseHighScores && !this.isPracticeMode) {
+            if (!this.isPracticeMode && this.canUseHighScores) {
                 try {
                     // Verify wallet is connected
                     if (!web3Service.isConnected()) {
@@ -283,7 +286,7 @@ export default {
             }
             
             try {
-                const id = this.canUseHighScores ? await startGame() : null;
+                const id = (!this.isPracticeMode && this.canUseHighScores) ? await startGame() : null;
                 this.showTutorial = getFromStorage( STORED_HAS_VIEWED_TUTORIAL ) !== "true";
                 this.game = {
                     id: id ?? Math.random().toString(),
