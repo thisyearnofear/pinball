@@ -8,7 +8,7 @@
 // Keeps the same public API (startGame, stopGame, getHighScores)
 
 import { web3Service } from './web3-service';
-import { getActiveTournamentId, fetchLeaderboard, submitScoreWithSignature } from './contracts/tournament-client';
+import { getActiveTournamentId, fetchLeaderboard, submitScoreWithSignature, enterTournament, getEntryFeeWei } from './contracts/tournament-client';
 import { requestScoreSignature } from './backend-scores-client';
 import { getContractsConfig } from '../config/contracts';
 import { showToast } from '@/services/toast';
@@ -56,11 +56,24 @@ export const isSupported = (): boolean => {
 };
 
 /**
- * Invoke when starting a new game; returns active tournament id as the session id.
+ * Invoke when starting a new game; enters tournament if needed and returns active tournament id as the session id.
  */
 export const startGame = async (): Promise<string | null> => {
     try {
         const id = await getActiveTournamentId();
+
+        // Check if the player is already in the tournament or needs to enter
+        if (web3Service.isConnected()) {
+            // Try to enter the tournament if not already entered
+            // The contract will handle duplicate entries gracefully
+            try {
+                await enterTournamentIfNotEntered(id);
+            } catch (entryError) {
+                console.error('Tournament entry failed (may already be entered):', entryError);
+                // Continue anyway - user might already be entered or other valid state
+            }
+        }
+
         return String(id);
     } catch (e) {
         console.error('startGame failed:', e);
@@ -68,20 +81,41 @@ export const startGame = async (): Promise<string | null> => {
     }
 };
 
+/**
+ * Helper function to enter tournament if not already entered
+ */
+async function enterTournamentIfNotEntered(tournamentId: number): Promise<void> {
+    // Check if entry fee is required and user hasn't entered yet
+    const fee = await getEntryFeeWei();
+    if (fee > 0n) {
+        // Attempt to enter the tournament (contract handles checking if already entered)
+        try {
+            await enterTournament(tournamentId);
+            console.log(`Entered tournament ${tournamentId}`);
+        } catch (error) {
+            console.error(`Failed to enter tournament ${tournamentId}:`, error);
+            // Re-throw if it's not a "already entered" error
+            if (error instanceof Error && !error.message.includes('already')) {
+                throw error;
+            }
+        }
+    }
+}
+
 // NOTE: To submit a score we require a server signature proving validity.
 // The caller must obtain `signature` out-of-band (server API) and pass via metaData (or adapt as needed).
 export const stopGame = async ( gameId: string, score: number, playerName?: string, metaData?: string ): Promise<HighScoreDef[]> => {
     try {
         const tournamentId = Number(gameId);
         if (!web3Service.isConnected()) throw new Error('Wallet not connected');
-        
+
         notifySubmissionState('validating');
-        
+
         // Verify we're on the correct chain
         const config = getContractsConfig();
         const currentNetwork = await web3Service.getProvider().getNetwork();
         const currentChainId = Number(currentNetwork.chainId);
-        
+
         if (currentChainId !== config.chainId) {
             try {
                 await web3Service.switchChain(config.chainId);
@@ -91,7 +125,7 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
                 throw new Error(`Wrong chain: ${currentChainId}`);
             }
         }
-        
+
         // Expect metaData to contain a JSON string with { signature: string, metadata?: string }
         let metadata = '';
         if (metaData) {
@@ -104,6 +138,16 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
         }
         const address = web3Service.getAddress();
         if (!address) throw new Error('No wallet address');
+
+        // Log debugging information
+        console.log('Submitting score to tournament:', {
+            tournamentId,
+            score,
+            address,
+            playerName: playerName || '',
+            metadata
+        });
+
         // Prevent duplicate or lower-score resubmissions when user already has equal/higher score
         try {
             const existing = await fetchLeaderboard(tournamentId, 0, 100);
@@ -112,7 +156,11 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
                 showToast('You already have an equal or higher score on the leaderboard', 'info');
                 return [];
             }
-        } catch {}
+        } catch (leaderboardError) {
+            console.warn('Could not fetch leaderboard for duplicate check:', leaderboardError);
+            // Continue anyway - just couldn't check for duplicates
+        }
+
         const submissionKey = `${tournamentId}:${address}:${score}`;
         try {
             const submittedRaw = getFromStorage('ps_submitted_scores') || '[]';
@@ -121,15 +169,20 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
                 showToast('This score was already submitted', 'info');
                 return [];
             }
-        } catch {}
-        
+        } catch (storageError) {
+            console.warn('Could not check storage for duplicate submission:', storageError);
+            // Continue anyway - just couldn't check local storage
+        }
+
         notifySubmissionState('signing');
         let signature: string;
         let nonce: string;
         try {
+            console.log('Requesting score signature from backend...');
             const response = await requestScoreSignature({ tournamentId, address, score, name: playerName || '', metadata });
             signature = response.signature;
             nonce = response.nonce;
+            console.log('Received signature and nonce from backend:', { nonce });
         } catch (err) {
             showToast('Score server unavailable — please try again later', 'error');
             notifySubmissionState('error', 'Backend signature service unavailable');
@@ -140,7 +193,9 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
         try {
             // Convert nonce string to number for the blockchain function
             const nonceAsBigInt = BigInt(nonce);
+            console.log('Submitting score to blockchain contract...');
             await submitScoreWithSignature(tournamentId, score, nonceAsBigInt, playerName || '', metadata, signature);
+            console.log('Score successfully submitted to blockchain');
             showToast('Score submitted!', 'success');
             try {
                 const submittedRaw = getFromStorage('ps_submitted_scores') || '[]';
@@ -149,10 +204,37 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
                 setInStorage('ps_submitted_scores', JSON.stringify(submitted));
             } catch {}
         } catch (err) {
+            // More detailed error logging
+            console.error('Score submission to blockchain failed:', {
+                error: err,
+                tournamentId,
+                score,
+                address,
+                playerName: playerName || '',
+                nonce,
+                metadata
+            });
+
+            // Provide more specific error messages based on common failure reasons
+            let errorMessage = 'Failed to submit to blockchain';
+            if (err instanceof Error) {
+                const errorStr = err.message.toLowerCase();
+                if (errorStr.includes('tournament') || errorStr.includes('active')) {
+                    errorMessage = 'Tournament may not be active or you may need to enter first';
+                } else if (errorStr.includes('require') || errorStr.includes('revert')) {
+                    errorMessage = 'Transaction failed - you may need to enter the tournament first';
+                } else if (errorStr.includes('gas') || errorStr.includes('estimate')) {
+                    errorMessage = 'Transaction failed - check gas settings or balance';
+                } else if (errorStr.includes('user rejected') || errorStr.includes('denied')) {
+                    errorMessage = 'Transaction was rejected';
+                }
+            }
+
             showToast('Score submission failed — please retry', 'error');
-            notifySubmissionState('error', 'Failed to submit to blockchain');
+            notifySubmissionState('error', errorMessage);
             throw err;
         }
+
         // Return updated leaderboard top slice
         const rows = await fetchLeaderboard(tournamentId, 0, 100);
         const scores: HighScoreDef[] = rows.map(r => ({ name: '', score: r.score, duration: 0 }));
