@@ -10,7 +10,8 @@ export const TOURNAMENT_MANAGER_ABI = [
   "function lastTournamentId() view returns (uint256)",
   "function getPrizeBps(uint256 id) view returns (uint16[])",
   "function enterTournament(uint256 id) payable",
-  "function submitScoreWithSignature(uint256 id, uint256 score, string name, string metadata, bytes signature)",
+  "function submitScoreWithSignature(uint256 id, uint256 score, uint256 nonce, string name, string metadata, bytes signature)",
+  "function submitScoreWithSignatureV1(uint256 id, uint256 score, string name, string metadata, bytes signature)",
   "function viewLeaderboard(uint256 id, uint256 offset, uint256 limit) view returns (address[] addrs, uint256[] scores)",
   "function finalize(uint256 id)",
   "function getWinners(uint256 id) view returns (address[])",
@@ -80,12 +81,13 @@ export async function enterTournament(tournamentId: number): Promise<string> {
 export async function submitScoreWithSignature(
   tournamentId: number,
   score: number,
+  nonce: number,
   name: string,
   metadata: string,
   signature: string
 ): Promise<string> {
   const c = getContract();
-  const tx = await c.submitScoreWithSignature(tournamentId, score, name, metadata, signature);
+  const tx = await c.submitScoreWithSignature(tournamentId, score, nonce, name, metadata, signature);
   const receipt = await tx.wait();
   return receipt?.hash as string;
 }

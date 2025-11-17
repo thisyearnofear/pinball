@@ -125,8 +125,11 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
         
         notifySubmissionState('signing');
         let signature: string;
+        let nonce: number;
         try {
-            signature = await requestScoreSignature({ tournamentId, address, score, name: playerName || '', metadata });
+            const response = await requestScoreSignature({ tournamentId, address, score, name: playerName || '', metadata });
+            signature = response.signature;
+            nonce = response.nonce;
         } catch (err) {
             showToast('Score server unavailable — please try again later', 'error');
             notifySubmissionState('error', 'Backend signature service unavailable');
@@ -135,7 +138,7 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
         
         notifySubmissionState('ready');
         try {
-            await submitScoreWithSignature(tournamentId, score, playerName || '', metadata, signature);
+            await submitScoreWithSignature(tournamentId, score, nonce, playerName || '', metadata, signature);
             showToast('Score submitted!', 'success');
             try {
                 const submittedRaw = getFromStorage('ps_submitted_scores') || '[]';

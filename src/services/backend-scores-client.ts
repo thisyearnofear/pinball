@@ -6,16 +6,24 @@ if (!API_BASE) {
   console.warn('VITE_BACKEND_URL not set: backend client disabled');
 }
 
+export type ScoreSignatureResponse = {
+  signature: string;
+  nonce: number;
+};
+
 export async function requestScoreSignature(params: {
   tournamentId: number;
   address: string;
   score: number;
   name?: string;
   metadata?: string;
-}): Promise<string> {
+}): Promise<ScoreSignatureResponse> {
   if (!API_BASE) throw new Error('Backend URL not configured');
   const { data } = await axios.post(`${API_BASE}/api/scores/sign`, params, {
     headers: { 'Content-Type': 'application/json' },
   });
-  return data.signature as string;
+  return {
+    signature: data.signature as string,
+    nonce: data.nonce as number,
+  };
 }
