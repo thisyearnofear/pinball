@@ -14,6 +14,9 @@ import { getContractsConfig } from '../config/contracts';
 import { showToast } from '@/services/toast';
 import { getFromStorage, setInStorage } from '@/utils/local-storage';
 
+// Import ethers for direct contract access if needed
+import { ethers } from 'ethers';
+
 // Submission state tracking for UI feedback
 export type SubmissionStep = 'validating' | 'signing' | 'ready' | 'error';
 export type SubmissionStateCallback = (step: SubmissionStep, errorMessage?: string) => void;
@@ -198,6 +201,11 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
 
         notifySubmissionState('ready');
         try {
+            // Wait briefly to ensure the entry transaction has been processed by the blockchain
+            // This is important as blockchain state changes need time to propagate
+            console.log('Waiting for potential tournament entry transaction to settle...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
             // Convert nonce string to number for the blockchain function
             const nonceAsBigInt = BigInt(nonce);
             console.log('Submitting score to blockchain contract with params:', {
@@ -206,8 +214,33 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
                 nonce: nonceAsBigInt.toString(),
                 playerName: playerName || '',
                 metadata,
-                signatureLength: signature.length
+                signatureLength: signature.length,
+                address
             });
+
+            // Additional validation - try to fetch player info to confirm they're registered
+            try {
+                const contractAddress = getContractsConfig().tournamentManager.address;
+                const provider = web3Service.getProvider();
+                if (provider) {
+                    const contract = new ethers.Contract(contractAddress, [
+                        "function playerInfo(uint256,address) view returns (bool entered, uint256 bestScore, bool rewardClaimed)"
+                    ], provider);
+
+                    const playerInfo = await contract.playerInfo(tournamentId, address);
+                    console.log('Player info fetched from contract:', {
+                        entered: playerInfo.entered,
+                        bestScore: playerInfo.bestScore?.toString()
+                    });
+                    if (!playerInfo.entered) {
+                        throw new Error('Player not registered in tournament despite successful entry attempt');
+                    }
+                }
+            } catch (validationErr) {
+                console.warn('Could not validate player registration:', validationErr);
+                // Continue anyway, this is just for debugging
+            }
+
             await submitScoreWithSignature(tournamentId, score, nonceAsBigInt, playerName || '', metadata, signature);
             console.log('Score successfully submitted to blockchain');
             showToast('Score submitted!', 'success');
