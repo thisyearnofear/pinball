@@ -1,8 +1,18 @@
 <template>
-  <section class="celebration" @click="onDismiss">
-    <div class="celebration__wrapper">
-      <h3 class="celebration__title">{{ isPracticeMode ? 'Great Practice Run!' : 'Well played!' }}</h3>
-      <div class="celebration__score">Score: {{ score }}</div>
+   <section class="celebration" @click="onDismiss">
+     <div class="celebration__wrapper">
+       <!-- Loading skeleton -->
+       <div v-if="loading" class="celebration__loading">
+         <div class="skeleton skeleton--title"></div>
+         <div class="skeleton skeleton--score"></div>
+         <div class="skeleton skeleton--text"></div>
+         <div class="skeleton skeleton--text" style="width: 70%;"></div>
+       </div>
+       
+       <!-- Content -->
+       <template v-else>
+         <h3 class="celebration__title">{{ isPracticeMode ? 'Great Practice Run!' : 'Well played!' }}</h3>
+         <div class="celebration__score">Score: {{ score }}</div>
       
       <!-- Practice Mode Information -->
       <div v-if="isPracticeMode" class="celebration__practice-info">
@@ -95,13 +105,14 @@
         >
           🏆 Play Tournament
         </button>
-        <button type="button" class="celebration__btn" @click.stop="onViewLeaderboard">View Full Leaderboard</button>
+        <button v-if="!isPracticeMode" type="button" class="celebration__btn" @click.stop="onViewLeaderboard">View Full Leaderboard</button>
         <button type="button" class="celebration__btn" @click.stop="onShare">Share on Farcaster</button>
       </div>
-    </div>
-    <div class="celebration__confetti"></div>
-  </section>
-</template>
+      </template>
+      </div>
+      <div class="celebration__confetti"></div>
+      </section>
+      </template>
 
 <script lang="ts">
 import { defineAsyncComponent } from 'vue';
@@ -121,6 +132,7 @@ export default {
     totalPotWei: 0n,
     prizeBps: [] as number[],
     timeRemainingSec: 0 as number | null,
+    loading: true,
   }),
   computed: {
     displayPot(): string | '' {
@@ -257,12 +269,28 @@ export default {
       try {
         const mod: any = await import('@farcaster/miniapp-sdk');
         const fc = mod?.default ?? mod;
+        
+        // Try Farcaster compose first (mini-app context)
+        if (typeof fc?.actions?.openCompose === 'function') {
+          try {
+            await fc.actions.openCompose({ text });
+            return;
+          } catch (e) {
+            console.log('Farcaster compose failed, trying alternative method:', e);
+          }
+        }
+        
+        // Fall back to Warpcast URL (web context)
         if (typeof fc?.actions?.openUrl === 'function') {
           const url = `https://warpcast.com/compose?text=${encodeURIComponent(text)}`;
           await fc.actions.openUrl(url);
           return;
         }
-      } catch {}
+      } catch (e) {
+        console.log('Farcaster SDK not available:', e);
+      }
+      
+      // Final fallback: clipboard
       try {
         await navigator.clipboard.writeText(text);
         alert('Copied score to clipboard!');
@@ -296,6 +324,8 @@ export default {
         this.totalPotWei = 0n;
         this.prizeBps = [];
         this.timeRemainingSec = null;
+      } finally {
+        this.loading = false;
       }
     },
     
@@ -336,6 +366,8 @@ export default {
         this.totalPotWei = 0n;
         this.prizeBps = [];
         this.timeRemainingSec = null;
+      } finally {
+        this.loading = false;
       }
     },
   },
@@ -494,6 +526,41 @@ export default {
     font-size: 14px;
     color: $color-anchors;
   }
+
+  &__loading {
+    text-align: center;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0.1) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+  border-radius: 4px;
+  margin-bottom: $spacing-medium;
+
+  &--title {
+    height: 32px;
+    width: 60%;
+    margin: 0 auto $spacing-medium;
+  }
+
+  &--score {
+    height: 24px;
+    width: 40%;
+    margin: 0 auto $spacing-medium;
+  }
+
+  &--text {
+    height: 16px;
+    width: 100%;
+    margin: 0 auto 8px;
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
 @keyframes confetti { 0% { background-position: 0% 0%; } 100% { background-position: 100% 100%; } }

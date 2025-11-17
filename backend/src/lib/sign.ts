@@ -1,4 +1,7 @@
-import { Wallet, keccak256, toUtf8Bytes, getBytes, concat, AbiCoder } from 'ethers';
+import { Wallet, keccak256, toUtf8Bytes, getBytes, concat, solidityPacked } from 'ethers';
+
+// Arbitrum One chain ID (only chain supported)
+const ARBITRUM_ONE_CHAIN_ID = 42161n;
 
 // EIP-191 personal_sign style: keccak256("\x19Ethereum Signed Message:\n32" || innerHash)
 export function buildPersonalDigest(innerHash: string): string {
@@ -7,6 +10,10 @@ export function buildPersonalDigest(innerHash: string): string {
   return keccak256(bytes);
 }
 
+/**
+ * V1 hash (deprecated - kept for reference)
+ * Does not include nonce or chainId - vulnerable to replay attacks
+ */
 export function innerScoreHash(
   tournamentId: bigint,
   player: string,
@@ -14,8 +21,9 @@ export function innerScoreHash(
   nameHash: string,
   metaHash: string
 ): string {
+  // Use solidityPacked (abi.encodePacked) to match the contract's encoding
   const inner = keccak256(
-    new AbiCoder().encode(
+    solidityPacked(
       ['bytes', 'uint256', 'address', 'uint256', 'bytes32', 'bytes32'],
       [toUtf8Bytes('PINBALL_SCORE:'), tournamentId, player, score, nameHash, metaHash]
     )
@@ -23,18 +31,62 @@ export function innerScoreHash(
   return inner;
 }
 
+/**
+ * V2 hash (current) - includes nonce and chainId for replay protection
+ * Prevents:
+ * - Resubmitting the same signature
+ * - Replaying on different chains (though we only support Arbitrum One)
+ */
+export function innerScoreHashV2(
+  tournamentId: bigint,
+  player: string,
+  score: bigint,
+  nonce: bigint,
+  nameHash: string,
+  metaHash: string
+): string {
+  // Include nonce and chainId in the hash for replay protection
+  const inner = keccak256(
+    solidityPacked(
+      ['bytes', 'uint256', 'address', 'uint256', 'uint256', 'uint256', 'bytes32', 'bytes32'],
+      [
+        toUtf8Bytes('PINBALL_SCORE:v2'),
+        tournamentId,
+        player,
+        score,
+        nonce,
+        ARBITRUM_ONE_CHAIN_ID,
+        nameHash,
+        metaHash
+      ]
+    )
+  );
+  return inner;
+}
+
+/**
+ * Sign a score with V2 hash (includes nonce and chainId)
+ */
 export async function signScore(
   pk: string,
   tournamentId: number,
   player: string,
   score: number,
+  nonce: bigint,
   name: string,
   metadata: string
 ): Promise<string> {
   const wallet = new Wallet(pk);
   const nameHash = keccak256(toUtf8Bytes(name || ''));
   const metaHash = keccak256(toUtf8Bytes(metadata || ''));
-  const inner = innerScoreHash(BigInt(tournamentId), player, BigInt(score), nameHash, metaHash);
+  const inner = innerScoreHashV2(
+    BigInt(tournamentId),
+    player,
+    BigInt(score),
+    nonce,
+    nameHash,
+    metaHash
+  );
   const digest = buildPersonalDigest(inner);
   const sig = await wallet.signMessage(getBytes(digest));
   return sig;

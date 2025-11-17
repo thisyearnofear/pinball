@@ -40,6 +40,10 @@ contract TournamentManager {
     mapping(uint256 => Tournament) public tournaments;
     mapping(uint256 => address[]) public participants;
     mapping(uint256 => mapping(address => PlayerInfo)) public playerInfo;
+    
+    // Nonce tracking for replay protection (phase 2)
+    // tournamentId => playerAddress => nextValidNonce
+    mapping(uint256 => mapping(address => uint256)) public playerNonces;
 
     // Winners stored after finalize in descending order of score
     mapping(uint256 => address[]) public winners;
@@ -120,9 +124,62 @@ contract TournamentManager {
         emit Entered(id, msg.sender, msg.value);
     }
 
-    // EIP-191 personal_sign style message: keccak256(abi.encodePacked("PINBALL_SCORE:", id, player, score, nameHash, metaHash))
+    // EIP-191 personal_sign style message (V2): includes nonce and chainId for replay protection
+    // keccak256(abi.encodePacked("PINBALL_SCORE:v2", id, player, score, nonce, chainId, nameHash, metaHash))
     // The backend must sign this digest. The front-end will pass the signature bytes here.
     function submitScoreWithSignature(
+        uint256 id,
+        uint256 score,
+        uint256 nonce,
+        string calldata name,
+        string calldata metadata,
+        bytes calldata signature
+    ) external {
+        Tournament storage t = tournaments[id];
+        require(t.id == id, "NO_TOURNAMENT");
+        require(block.timestamp >= t.startTime && block.timestamp <= t.endTime, "NOT_ACTIVE");
+        require(!t.finalized, "FINALIZED");
+
+        PlayerInfo storage p = playerInfo[id][msg.sender];
+        require(p.entered, "NOT_ENTERED");
+
+        // Verify nonce hasn't been used and is the next expected nonce
+        uint256 expectedNonce = playerNonces[id][msg.sender] + 1;
+        require(nonce == expectedNonce, "INVALID_NONCE");
+
+        bytes32 nameHash = keccak256(bytes(name));
+        bytes32 metaHash = keccak256(bytes(metadata));
+        
+        // V2 digest includes nonce and chainId (42161 for Arbitrum One)
+        bytes32 digest = keccak256(abi.encodePacked(
+            "\x19Ethereum Signed Message:\n32",
+            keccak256(abi.encodePacked(
+                "PINBALL_SCORE:v2",
+                id,
+                msg.sender,
+                score,
+                nonce,
+                uint256(42161), // Arbitrum One chainId
+                nameHash,
+                metaHash
+            ))
+        ));
+        
+        address recovered = _recoverSigner(digest, signature);
+        require(recovered == scoreSigner, "BAD_SIG");
+
+        // Increment nonce after successful verification
+        playerNonces[id][msg.sender] = nonce;
+
+        if (score > p.bestScore) {
+            p.bestScore = score;
+            emit ScoreSubmitted(id, msg.sender, score);
+        }
+    }
+
+    // Keep V1 method for backwards compatibility during migration
+    // Deprecated: use submitScoreWithSignature with nonce instead
+    function submitScoreWithSignatureV1(
         uint256 id,
         uint256 score,
         string calldata name,

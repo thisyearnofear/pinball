@@ -164,9 +164,9 @@ export default {
             return `${address.slice(0, 6)}...${address.slice(-4)}`;
         },
         isTournamentActive(): boolean {
-            return this.tournamentState && 
-                   this.tournamentState.tournamentId.value !== null && 
-                   !this.tournamentState.finalized.value;
+            return !!(this.tournamentState && 
+                   this.tournamentState.tournamentId?.value !== null && 
+                   !this.tournamentState.finalized?.value);
         },
         forceMobileMenu(): boolean {
             return this.isFarcaster;

@@ -321,7 +321,19 @@ export default {
             this.messageTimeout = null;
             this.message = null;
         },
-    },
+        evaluateHints(): void {
+            const enabled = getFromStorage( STORED_QUICK_HINTS ) !== "false";
+            this.showHints = enabled;
+            if ( this.showHints ) {
+                clearTimeout( this.hintsTimeout );
+                this.hintsTimeout = setTimeout( this.dismissHints, 2500 );
+            }
+        },
+        dismissHints(): void {
+            this.showHints = false;
+            setInStorage( STORED_TUT_LAST_SEEN, Math.floor( Date.now() / 1000 ).toString() );
+        },
+        },
     computed: {
         showBumpButton(): boolean {
             return this.isFarcaster || this.touchscreen;
@@ -526,15 +538,3 @@ export default {
     }
 }
 </style>
-        evaluateHints(): void {
-            const enabled = getFromStorage( STORED_QUICK_HINTS ) !== "false";
-            this.showHints = enabled;
-            if ( this.showHints ) {
-                clearTimeout( this.hintsTimeout );
-                this.hintsTimeout = setTimeout( this.dismissHints, 2500 );
-            }
-        },
-        dismissHints(): void {
-            this.showHints = false;
-            setInStorage( STORED_TUT_LAST_SEEN, Math.floor( Date.now() / 1000 ).toString() );
-        },
