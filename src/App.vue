@@ -40,6 +40,13 @@
             :is-farcaster="isFarcaster"
             :touchscreen="hasTouchScreen"
         />
+        <ScoreSubmissionOverlay
+            v-if="showSubmissionOverlay"
+            :score="game.score || 0"
+            :step="submissionStep"
+            :error-message="submissionErrorMessage"
+            @retry="retryScoreSubmission()"
+        />
         <GameCompleteCelebration
             v-if="showCelebration"
             :score="game.score || 0"
@@ -93,7 +100,7 @@ import { START_TABLE_INDEX } from "@/definitions/tables";
 import { STORED_FULLSCREEN, STORED_HAS_VIEWED_TUTORIAL, STORED_DISABLE_VHS_EFFECT } from "@/definitions/settings";
 import { preloadAssets } from "@/services/asset-preloader";
 import { init } from "@/services/audio-service";
-import { isSupported, startGame, stopGame } from "@/services/high-scores-service";
+import { isSupported, startGame, stopGame, setSubmissionStateCallback, type SubmissionStep } from "@/services/high-scores-service";
 import { web3Service } from "@/services/web3-service";
 import { getContractsConfig } from "@/config/contracts";
 import { getFromStorage, setInStorage } from "@/utils/local-storage";
@@ -132,6 +139,9 @@ export default {
         GameCompleteCelebration: defineAsyncComponent(() => {
             return import( "./components/celebration/game-complete-celebration.vue" );
         }),
+        ScoreSubmissionOverlay: defineAsyncComponent(() => {
+            return import( "./components/score-submission/score-submission-overlay.vue" );
+        }),
     },
     data: () => ({
         loading: true,
@@ -141,6 +151,9 @@ export default {
         hasTouchScreen: false,
         showTutorial: false,
         showCelebration: false,
+        showSubmissionOverlay: false,
+        submissionStep: 'validating' as SubmissionStep,
+        submissionErrorMessage: '',
         isFarcaster: false,
         config: {
             useVHS: getFromStorage( STORED_DISABLE_VHS_EFFECT ) !== "true"
@@ -201,15 +214,7 @@ export default {
             if ( !value && prevValue && this.game.score > 0 ) {
                 if ( !this.isPracticeMode && this.canUseHighScores ) {
                     // Tournament mode - submit score and show celebration
-                    stopGame( this.game.id, this.game.score, this.newGameProps.playerName, this.newGameProps.tableName ).then((scores) => {
-                        // Store the updated scores to pass to celebration component
-                        this.lastSubmittedScores = scores;
-                        this.showCelebration = true;
-                    }).catch((error) => {
-                        console.error('Score submission failed:', error);
-                        this.showToast(`Score submission failed: ${error.message || 'Unknown error'}`, 'error');
-                        this.showCelebration = true;
-                    });
+                    this.submitScoreWithFeedback();
                 } else {
                     // Practice mode - just show celebration (no score submission)
                     this.lastSubmittedScores = null; // Ensure no scores are passed to celebration
@@ -226,6 +231,14 @@ export default {
     },
     async mounted(): Promise<void> {
         await preloadAssets();
+        
+        // Register submission state callback
+        setSubmissionStateCallback((step: SubmissionStep, errorMessage?: string) => {
+            this.submissionStep = step;
+            if (errorMessage) {
+                this.submissionErrorMessage = errorMessage;
+            }
+        });
         
         // Initialize Farcaster SDK and attempt auto-connect
         await this.initializeFarcaster();
@@ -453,6 +466,34 @@ export default {
                 });
                 document.dispatchEvent(event);
             });
+        },
+        
+        async submitScoreWithFeedback(): Promise<void> {
+            this.showSubmissionOverlay = true;
+            this.submissionStep = 'validating';
+            this.submissionErrorMessage = '';
+            
+            try {
+                const scores = await stopGame( this.game.id, this.game.score, this.newGameProps.playerName, this.newGameProps.tableName );
+                // Store the updated scores to pass to celebration component
+                this.lastSubmittedScores = scores;
+                // Give user a moment to see the success state before showing celebration
+                await new Promise(resolve => setTimeout(resolve, 500));
+                this.showSubmissionOverlay = false;
+                this.showCelebration = true;
+            } catch (error) {
+                console.error('Score submission failed:', error);
+                const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+                this.submissionErrorMessage = errorMsg;
+                this.submissionStep = 'error';
+                this.showToast(`Score submission failed: ${errorMsg}`, 'error');
+            }
+        },
+        
+        async retryScoreSubmission(): Promise<void> {
+            this.submissionStep = 'validating';
+            this.submissionErrorMessage = '';
+            await this.submitScoreWithFeedback();
         },
     },
 };

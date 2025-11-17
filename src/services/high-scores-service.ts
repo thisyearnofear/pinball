@@ -14,6 +14,22 @@ import { getContractsConfig } from '../config/contracts';
 import { showToast } from '@/services/toast';
 import { getFromStorage, setInStorage } from '@/utils/local-storage';
 
+// Submission state tracking for UI feedback
+export type SubmissionStep = 'validating' | 'signing' | 'ready' | 'error';
+export type SubmissionStateCallback = (step: SubmissionStep, errorMessage?: string) => void;
+
+let submissionStateCallback: SubmissionStateCallback | null = null;
+
+export const setSubmissionStateCallback = (callback: SubmissionStateCallback | null): void => {
+    submissionStateCallback = callback;
+};
+
+const notifySubmissionState = (step: SubmissionStep, errorMessage?: string): void => {
+    if (submissionStateCallback) {
+        submissionStateCallback(step, errorMessage);
+    }
+};
+
 export type HighScoreDef = {
     name: string; // currently we don't store names on-chain; keep field for compatibility
     score: number;
@@ -59,6 +75,8 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
         const tournamentId = Number(gameId);
         if (!web3Service.isConnected()) throw new Error('Wallet not connected');
         
+        notifySubmissionState('validating');
+        
         // Verify we're on the correct chain
         const config = getContractsConfig();
         const currentNetwork = await web3Service.getProvider().getNetwork();
@@ -69,6 +87,7 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
                 await web3Service.switchChain(config.chainId);
             } catch {
                 showToast(`Please switch to ${getChainName(config.chainId)} to submit scores`, 'error');
+                notifySubmissionState('error', `Please switch to ${getChainName(config.chainId)} network`);
                 throw new Error(`Wrong chain: ${currentChainId}`);
             }
         }
@@ -103,13 +122,18 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
                 return [];
             }
         } catch {}
+        
+        notifySubmissionState('signing');
         let signature: string;
         try {
             signature = await requestScoreSignature({ tournamentId, address, score, name: playerName || '', metadata });
         } catch (err) {
             showToast('Score server unavailable — please try again later', 'error');
+            notifySubmissionState('error', 'Backend signature service unavailable');
             throw err;
         }
+        
+        notifySubmissionState('ready');
         try {
             await submitScoreWithSignature(tournamentId, score, playerName || '', metadata, signature);
             showToast('Score submitted!', 'success');
@@ -121,6 +145,7 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
             } catch {}
         } catch (err) {
             showToast('Score submission failed — please retry', 'error');
+            notifySubmissionState('error', 'Failed to submit to blockchain');
             throw err;
         }
         // Return updated leaderboard top slice
