@@ -58,6 +58,29 @@
             </div>
             
             <ul class="menu__items">
+                <!-- Wallet interface in mobile menu for Farcaster -->
+                <li v-if="isWalletConnected && forceMobileMenu" class="menu__wallet-mobile">
+                    <div class="menu__wallet" ref="walletMenuMobile">
+                        <div class="menu__wallet-status" @click="toggleWalletMenu">
+                            <span class="menu__wallet-indicator" :class="{ 'menu__wallet-indicator--tournament': isTournamentActive }"></span>
+                            {{ shortAddress }}
+                            <span v-if="isTournamentActive" class="menu__tournament-badge">T</span>
+                            <span class="menu__wallet-chevron" :class="{ 'menu__wallet-chevron--open': walletMenuOpen }">▼</span>
+                        </div>
+                        <div v-if="walletMenuOpen" class="menu__wallet-dropdown">
+                            <div v-if="isTournamentActive" class="wallet-tournament-info">
+                                <span class="tournament-status">{{ $t('ui.tournamentActive') }}</span>
+                            </div>
+                            <button @click="switchWallet" class="wallet-action">
+                                {{ $t('ui.switchWallet') }}
+                            </button>
+                            <button @click="disconnectWallet" class="wallet-action wallet-action--danger">
+                                {{ $t('ui.disconnectWallet') }}
+                            </button>
+                        </div>
+                    </div>
+                </li>
+                
                 <!-- Return to Menu button when game is active -->
                 <li v-if="showReturnToMenu" class="menu__return-to-menu">
                     <button
@@ -197,7 +220,12 @@ export default {
         },
         handleClickOutside(event: Event): void {
             const walletMenu = this.$refs.walletMenu as HTMLElement;
-            if (walletMenu && !walletMenu.contains(event.target as Node)) {
+            const walletMenuMobile = this.$refs.walletMenuMobile as HTMLElement;
+            
+            const clickedInsideWallet = (walletMenu && walletMenu.contains(event.target as Node)) ||
+                                      (walletMenuMobile && walletMenuMobile.contains(event.target as Node));
+            
+            if (!clickedInsideWallet) {
                 this.walletMenuOpen = false;
             }
         },
@@ -433,6 +461,11 @@ export default {
             display: block;
         }
 
+        // Hide header content initially in Farcaster (only show hamburger menu)
+        .menu__wallet {
+            display: none;
+        }
+
         .menu__items {
             position: fixed;
             overflow: hidden;
@@ -444,22 +477,51 @@ export default {
             overflow-y: auto;
             background-color: #000;
             flex-direction: column;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease-in-out;
+            opacity: 0;
+            pointer-events: none;
 
             li {
                 display: block;
-                font-size: 24px;
-                margin: $spacing-small 0 0;
+                font-size: 18px; // Smaller font size for mobile
+                margin: $spacing-xsmall 0 0;
                 width: 100%;
-                line-height: $spacing-xlarge;
+                line-height: $spacing-large;
                 padding: 0 $spacing-medium;
                 box-sizing: border-box;
+
+                button {
+                    width: 100%;
+                    text-align: left;
+                    padding: $spacing-small;
+                    font-size: 16px !important;
+                }
             }
         }
 
-        .menu__wallet {
-            display: block;
-            margin: $spacing-small $spacing-medium 0 0;
-            margin-right: auto;
+        // Show menu when expanded
+        &.header--expanded {
+            .menu__items {
+                transform: translateX(0);
+                opacity: 1;
+                pointer-events: auto;
+            }
+
+            // Show wallet in the dropdown menu when expanded
+            .menu__wallet {
+                display: block;
+                position: static;
+                margin: $spacing-small $spacing-medium;
+                background: rgba(255, 255, 255, 0.05);
+                border-radius: 4px;
+                padding: $spacing-small;
+
+                .menu__wallet-status {
+                    max-width: none;
+                    justify-content: space-between;
+                }
+            }
         }
     }
 
@@ -533,6 +595,35 @@ export default {
                     width: 100%;
                     padding: 12px;
                     font-size: 14px;
+                }
+            }
+        }
+
+        &.menu__wallet-mobile {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            
+            .menu__wallet {
+                margin: 0;
+                background: rgba(255, 255, 255, 0.05);
+                border-radius: 4px;
+                padding: $spacing-small;
+                display: block;
+
+                .menu__wallet-status {
+                    max-width: none;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+
+                .menu__wallet-dropdown {
+                    position: static;
+                    background: rgba(255, 255, 255, 0.08);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    margin-top: $spacing-small;
+                    box-shadow: none;
                 }
             }
         }

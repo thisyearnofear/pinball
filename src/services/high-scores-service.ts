@@ -12,6 +12,7 @@ import { getActiveTournamentId, fetchLeaderboard, submitScoreWithSignature } fro
 import { requestScoreSignature } from './backend-scores-client';
 import { getContractsConfig } from '../config/contracts';
 import { showToast } from '@/services/toast';
+import { getFromStorage, setInStorage } from '@/utils/local-storage';
 
 export type HighScoreDef = {
     name: string; // currently we don't store names on-chain; keep field for compatibility
@@ -84,6 +85,24 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
         }
         const address = web3Service.getAddress();
         if (!address) throw new Error('No wallet address');
+        // Prevent duplicate or lower-score resubmissions when user already has equal/higher score
+        try {
+            const existing = await fetchLeaderboard(tournamentId, 0, 100);
+            const mine = existing.find(r => r.address.toLowerCase() === address.toLowerCase());
+            if (mine && mine.score >= score) {
+                showToast('You already have an equal or higher score on the leaderboard', 'info');
+                return [];
+            }
+        } catch {}
+        const submissionKey = `${tournamentId}:${address}:${score}`;
+        try {
+            const submittedRaw = getFromStorage('ps_submitted_scores') || '[]';
+            const submitted: string[] = JSON.parse(submittedRaw);
+            if (submitted.includes(submissionKey)) {
+                showToast('This score was already submitted', 'info');
+                return [];
+            }
+        } catch {}
         let signature: string;
         try {
             signature = await requestScoreSignature({ tournamentId, address, score, name: playerName || '', metadata });
@@ -94,6 +113,12 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
         try {
             await submitScoreWithSignature(tournamentId, score, playerName || '', metadata, signature);
             showToast('Score submitted!', 'success');
+            try {
+                const submittedRaw = getFromStorage('ps_submitted_scores') || '[]';
+                const submitted: string[] = JSON.parse(submittedRaw);
+                submitted.push(submissionKey);
+                setInStorage('ps_submitted_scores', JSON.stringify(submitted));
+            } catch {}
         } catch (err) {
             showToast('Score submission failed — please retry', 'error');
             throw err;
