@@ -6,7 +6,7 @@ import { web3Service } from '../web3-service';
 export const TOURNAMENT_MANAGER_ABI = [
   "function entryFeeWei() view returns (uint256)",
   "function scoreSigner() view returns (address)",
-  "function tournaments(uint256) view returns (uint256 id, uint64 startTime, uint64 endTime, uint16 topN, bool finalized, uint16[] prizeBps, uint256 totalPot)",
+  "function tournaments(uint256) view returns (uint256 id, uint64 startTime, uint64 endTime, uint16 topN, bool finalized, uint256 totalPot)",
   "function lastTournamentId() view returns (uint256)",
   "function getPrizeBps(uint256 id) view returns (uint16[])",
   "function enterTournament(uint256 id) payable",

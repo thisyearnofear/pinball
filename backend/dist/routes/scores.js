@@ -4,6 +4,7 @@ import { signScore } from '../lib/sign.js';
 import { validateScoreSubmission } from '../lib/validation.js';
 import { scoreSignatureRateLimiter } from '../lib/rate-limiter.js';
 import { nonceTracker } from '../lib/nonce-tracker.js';
+import { keccak256, toUtf8Bytes } from 'ethers';
 const SignBody = z.object({
     tournamentId: z.number().int().positive(),
     address: z.string().startsWith('0x').length(42),
@@ -68,8 +69,29 @@ export async function scoresRoutes(app) {
         try {
             // Get next nonce for this player
             const nonce = nonceTracker.getNextNonce(tid, addr);
-            const signature = await signScore(env.SCORE_SIGNER_PK, tid, addr, s, nonce, n, JSON.stringify(m) // Convert back to string
+            const signature = await signScore(env.SCORE_SIGNER_PK, tid, addr, s, nonce, n, metadata // Use original metadata string, not JSON.stringify(m)
             );
+            // Log the parameters for debugging
+            app.log.info({
+                event: 'SCORE_SIGNING_DEBUG',
+                tournamentId: tid,
+                address: addr,
+                score: s,
+                nonce: nonce.toString(),
+                name: n,
+                metadata: metadata,
+                signatureLength: signature.length
+            });
+            // Also log the nameHash and metaHash that would be generated
+            const nameHash = keccak256(toUtf8Bytes(n || ''));
+            const metaHash = keccak256(toUtf8Bytes(metadata || ''));
+            app.log.info({
+                event: 'HASH_COMPONENTS_DEBUG',
+                nameHash,
+                metaHash,
+                playerNameBytes: toUtf8Bytes(n || ''),
+                metadataBytes: toUtf8Bytes(metadata || '')
+            });
             app.log.info({
                 event: 'SCORE_SIGNED',
                 address: addr,

@@ -1,6 +1,6 @@
 <template>
    <section class="celebration" @click="onDismiss">
-     <div class="celebration__wrapper">
+     <div class="celebration__wrapper" @click.stop>
        <!-- Loading skeleton -->
        <div v-if="loading" class="celebration__loading">
          <div class="skeleton skeleton--title"></div>
@@ -106,7 +106,7 @@
           🏆 Play Tournament
         </button>
         <button v-if="!isPracticeMode" type="button" class="celebration__btn" @click.stop="onViewLeaderboard">View Full Leaderboard</button>
-        <button type="button" class="celebration__btn" @click.stop="onShare">Share on Farcaster</button>
+        <button type="button" class="celebration__btn" @click="onShare">Share on Farcaster</button>
       </div>
       </template>
       </div>
@@ -252,10 +252,11 @@ export default {
     },
   },
   async mounted(): Promise<void> {
+    // Load data without blocking modal display
     if (this.isPracticeMode) {
-      await this.loadRealTournamentData();
+      this.loadRealTournamentData();
     } else {
-      await this.loadTournamentData();
+      this.loadTournamentData();
     }
   },
   methods: {
@@ -265,36 +266,44 @@ export default {
     onPlayTournament(): void { this.$emit('play-tournament'); },
     short(addr: string): string { return `${addr.slice(0,6)}...${addr.slice(-4)}`; },
     async onShare(): Promise<void> {
-      const text = `I just scored ${this.score} in ArbiPinball!`;
+      const gameUrl = 'https://arbipinball.netlify.app/';
+      const scoreText = this.score.toLocaleString();
+      
+      // Craft an enticing share message
+      const text = `🎮 Just scored ${scoreText} on ArbiPinball!\n\n` +
+        `Think you can beat me? 🏆\n\n` +
+        `Play on @arbitrum - every entry grows the prize pool. Top 3 players split the pot! 💰\n\n` +
+        `${gameUrl}`;
+      
+      // Check if we're actually in Farcaster miniapp (not just web browser with SDK loaded)
+      let inFarcaster = false;
       try {
-        const mod: any = await import('@farcaster/miniapp-sdk');
-        const fc = mod?.default ?? mod;
-        
-        // Try Farcaster compose first (mini-app context)
-        if (typeof fc?.actions?.openCompose === 'function') {
+        const { sdk } = await import('@farcaster/miniapp-sdk');
+        const context = await sdk.context;
+        // If we're truly in Farcaster, context will have user/client data
+        if (context?.user || context?.client) {
+          inFarcaster = true;
           try {
-            await fc.actions.openCompose({ text });
+            await sdk.actions.composeCast({ 
+              text,
+              embeds: [gameUrl]
+            });
             return;
           } catch (e) {
-            console.log('Farcaster compose failed, trying alternative method:', e);
+            console.log('composeCast failed:', e);
           }
         }
-        
-        // Fall back to Warpcast URL (web context)
-        if (typeof fc?.actions?.openUrl === 'function') {
-          const url = `https://warpcast.com/compose?text=${encodeURIComponent(text)}`;
-          await fc.actions.openUrl(url);
-          return;
-        }
       } catch (e) {
-        console.log('Farcaster SDK not available:', e);
+        console.log('Not in Farcaster:', e);
       }
       
-      // Final fallback: clipboard
-      try {
-        await navigator.clipboard.writeText(text);
-        alert('Copied score to clipboard!');
-      } catch {}
+      // Fallback: open Warpcast compose in new tab
+      const fallbackUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(text)}&embeds[]=${encodeURIComponent(gameUrl)}`;
+      const newWindow = window.open(fallbackUrl, '_blank');
+      
+      if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+        alert('Please allow popups to share on Farcaster, or copy this link:\n' + fallbackUrl);
+      }
     },
     
     async loadRealTournamentData(): Promise<void> {

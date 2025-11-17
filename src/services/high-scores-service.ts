@@ -284,7 +284,11 @@ export const getHighScores = async (): Promise<HighScoreDef[]> => {
     try {
         const id = await getActiveTournamentId();
         const rows = await fetchLeaderboard(id, 0, 100);
-        const scores: HighScoreDef[] = rows.map(r => ({ name: '', score: r.score, duration: 0 }));
+        const scores: HighScoreDef[] = rows.map(r => ({ 
+            name: `${r.address.slice(0, 6)}...${r.address.slice(-4)}`, 
+            score: r.score, 
+            duration: 0 
+        }));
         return scores;
     } catch (e) {
         console.error('getHighScores failed:', e);

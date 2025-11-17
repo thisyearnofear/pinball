@@ -154,7 +154,7 @@ contract TournamentManager {
         bytes32 nameHash = keccak256(bytes(name));
         bytes32 metaHash = keccak256(bytes(metadata));
         
-        // V2 digest includes nonce and chainId (42161 for Arbitrum One)
+        // V2 digest includes nonce and chainId
         bytes32 digest = keccak256(abi.encodePacked(
             "\x19Ethereum Signed Message:\n32",
             keccak256(abi.encodePacked(
@@ -163,7 +163,7 @@ contract TournamentManager {
                 msg.sender,
                 score,
                 nonce,
-                uint256(42161), // Arbitrum One chainId
+                block.chainid,
                 nameHash,
                 metaHash
             ))

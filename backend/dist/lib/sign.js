@@ -44,7 +44,25 @@ export async function signScore(pk, tournamentId, player, score, nonce, name, me
     const nameHash = keccak256(toUtf8Bytes(name || ''));
     const metaHash = keccak256(toUtf8Bytes(metadata || ''));
     const inner = innerScoreHashV2(BigInt(tournamentId), player, BigInt(score), nonce, nameHash, metaHash);
-    // wallet.signMessage already adds the EIP-191 prefix, so sign the inner hash directly
-    const sig = await wallet.signMessage(getBytes(inner));
+    // Build the inner hash that should be signed
+    const innerHashToSign = innerScoreHashV2(BigInt(tournamentId), player, BigInt(score), nonce, nameHash, metaHash);
+    // Sign the inner hash directly (the contract will add the EIP-191 prefix during verification)
+    // Use signMessage with raw bytes to avoid double-prefixing
+    const sig = await wallet.signMessage(getBytes(innerHashToSign));
+    // Log detailed information for debugging
+    console.log('SIGNATURE DEBUG INFO:', {
+        tournamentId,
+        player,
+        score,
+        nonce: nonce.toString(),
+        name,
+        metadata,
+        nameHash,
+        metaHash,
+        innerHash: inner,
+        signature: sig,
+        signatureLength: sig.length,
+        chainId: ARBITRUM_ONE_CHAIN_ID.toString()
+    });
     return sig;
 }
