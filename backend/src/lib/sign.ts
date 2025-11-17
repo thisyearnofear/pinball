@@ -87,7 +87,7 @@ export async function signScore(
     nameHash,
     metaHash
   );
-  const digest = buildPersonalDigest(inner);
-  const sig = await wallet.signMessage(getBytes(digest));
+  // wallet.signMessage already adds the EIP-191 prefix, so sign the inner hash directly
+  const sig = await wallet.signMessage(getBytes(inner));
   return sig;
 }

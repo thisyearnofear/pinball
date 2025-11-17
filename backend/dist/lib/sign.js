@@ -44,7 +44,7 @@ export async function signScore(pk, tournamentId, player, score, nonce, name, me
     const nameHash = keccak256(toUtf8Bytes(name || ''));
     const metaHash = keccak256(toUtf8Bytes(metadata || ''));
     const inner = innerScoreHashV2(BigInt(tournamentId), player, BigInt(score), nonce, nameHash, metaHash);
-    const digest = buildPersonalDigest(inner);
-    const sig = await wallet.signMessage(getBytes(digest));
+    // wallet.signMessage already adds the EIP-191 prefix, so sign the inner hash directly
+    const sig = await wallet.signMessage(getBytes(inner));
     return sig;
 }
