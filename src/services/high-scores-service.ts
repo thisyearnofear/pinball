@@ -188,7 +188,13 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
         let signature: string;
         let nonce: string;
         try {
-            console.log('Requesting score signature from backend...');
+            console.log('Requesting score signature from backend with params:', {
+                tournamentId,
+                address,
+                score,
+                name: playerName || '',
+                metadata
+            });
             const response = await requestScoreSignature({ tournamentId, address, score, name: playerName || '', metadata });
             signature = response.signature;
             nonce = response.nonce;
