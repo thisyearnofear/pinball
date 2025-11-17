@@ -8,7 +8,7 @@
 // Keeps the same public API (startGame, stopGame, getHighScores)
 
 import { web3Service } from './web3-service';
-import { getActiveTournamentId, fetchLeaderboard, submitScoreWithSignature, enterTournament, getEntryFeeWei } from './contracts/tournament-client';
+import { getActiveTournamentId, fetchLeaderboard, submitScoreWithSignature, enterTournament, getEntryFeeWei, getTournamentInfo } from './contracts/tournament-client';
 import { requestScoreSignature } from './backend-scores-client';
 import { getContractsConfig } from '../config/contracts';
 import { showToast } from '@/services/toast';
@@ -85,19 +85,26 @@ export const startGame = async (): Promise<string | null> => {
  * Helper function to enter tournament if not already entered
  */
 async function enterTournamentIfNotEntered(tournamentId: number): Promise<void> {
-    // Check if entry fee is required and user hasn't entered yet
+    // Check if entry fee is required
     const fee = await getEntryFeeWei();
-    if (fee > 0n) {
-        // Attempt to enter the tournament (contract handles checking if already entered)
-        try {
-            await enterTournament(tournamentId);
-            console.log(`Entered tournament ${tournamentId}`);
-        } catch (error) {
-            console.error(`Failed to enter tournament ${tournamentId}:`, error);
-            // Re-throw if it's not a "already entered" error
-            if (error instanceof Error && !error.message.includes('already')) {
-                throw error;
-            }
+
+    // Attempt to enter the tournament regardless of fee amount
+    // (some tournaments might be free but still require registration)
+    try {
+        console.log(`Attempting to enter tournament ${tournamentId} with fee: ${fee} wei`);
+        await enterTournament(tournamentId);
+        console.log(`Successfully entered tournament ${tournamentId}`);
+
+        // Wait a moment to ensure the transaction has been processed
+        await new Promise(resolve => setTimeout(resolve, 2000));
+    } catch (error) {
+        console.error(`Failed to enter tournament ${tournamentId}:`, error);
+        // Check if this is just a "already entered" error which is fine
+        if (error instanceof Error && !error.message.includes('already') && !error.message.includes('duplicate')) {
+            // For any other error, throw it to stop the process
+            throw error;
+        } else {
+            console.log(`User may already be entered in tournament ${tournamentId}`);
         }
     }
 }
@@ -191,6 +198,30 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
 
         notifySubmissionState('ready');
         try {
+            // Wait briefly to ensure any pending transactions (like entry) have time to process
+            await new Promise(resolve => setTimeout(resolve, 3000));
+
+            // Verify the tournament is still active before submitting score
+            try {
+                const { startTime, endTime, finalized } = await getTournamentInfo(tournamentId);
+                const now = Math.floor(Date.now() / 1000);
+
+                if (now < startTime) {
+                    throw new Error(`Tournament starts at ${new Date(startTime * 1000).toLocaleString()}`);
+                }
+                if (now > endTime) {
+                    throw new Error(`Tournament ended at ${new Date(endTime * 1000).toLocaleString()}`);
+                }
+                if (finalized) {
+                    throw new Error('Tournament has been finalized');
+                }
+
+                console.log('Tournament validation passed - still active and not finalized');
+            } catch (validationError) {
+                console.error('Tournament validation failed:', validationError);
+                throw validationError;
+            }
+
             // Convert nonce string to number for the blockchain function
             const nonceAsBigInt = BigInt(nonce);
             console.log('Submitting score to blockchain contract...');
@@ -222,11 +253,13 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
                 if (errorStr.includes('tournament') || errorStr.includes('active')) {
                     errorMessage = 'Tournament may not be active or you may need to enter first';
                 } else if (errorStr.includes('require') || errorStr.includes('revert')) {
-                    errorMessage = 'Transaction failed - you may need to enter the tournament first';
+                    errorMessage = 'Transaction failed - you may need to enter the tournament first or tournament conditions not met';
                 } else if (errorStr.includes('gas') || errorStr.includes('estimate')) {
                     errorMessage = 'Transaction failed - check gas settings or balance';
                 } else if (errorStr.includes('user rejected') || errorStr.includes('denied')) {
                     errorMessage = 'Transaction was rejected';
+                } else if (errorStr.includes('not registered') || errorStr.includes('not entered')) {
+                    errorMessage = 'You are not registered in this tournament';
                 }
             }
 
