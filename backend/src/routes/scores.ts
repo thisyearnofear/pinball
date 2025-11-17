@@ -5,6 +5,7 @@ import { signScore } from '../lib/sign.js';
 import { validateScoreSubmission, MAX_SCORE } from '../lib/validation.js';
 import { scoreSignatureRateLimiter } from '../lib/rate-limiter.js';
 import { nonceTracker } from '../lib/nonce-tracker.js';
+import { keccak256, toUtf8Bytes } from 'ethers';
 
 const SignBody = z.object({
   tournamentId: z.number().int().positive(),
@@ -90,6 +91,29 @@ export async function scoresRoutes(app: FastifyInstance) {
         n,
         metadata // Use original metadata string, not JSON.stringify(m)
       );
+      
+      // Log the parameters for debugging
+      app.log.info({
+        event: 'SCORE_SIGNING_DEBUG',
+        tournamentId: tid,
+        address: addr,
+        score: s,
+        nonce: nonce.toString(),
+        name: n,
+        metadata: metadata,
+        signatureLength: signature.length
+      });
+      
+      // Also log the nameHash and metaHash that would be generated
+      const nameHash = keccak256(toUtf8Bytes(n || ''));
+      const metaHash = keccak256(toUtf8Bytes(metadata || ''));
+      app.log.info({
+        event: 'HASH_COMPONENTS_DEBUG',
+        nameHash,
+        metaHash,
+        playerNameBytes: toUtf8Bytes(n || ''),
+        metadataBytes: toUtf8Bytes(metadata || '')
+      });
 
       app.log.info({
         event: 'SCORE_SIGNED',

@@ -87,7 +87,10 @@ export async function submitScoreWithSignature(
   signature: string
 ): Promise<string> {
   const c = getContract();
-  const tx = await c.submitScoreWithSignature(tournamentId, score, nonce, name, metadata, signature);
+  // Use a fixed gas limit to bypass gas estimation issues
+  const tx = await c.submitScoreWithSignature(tournamentId, score, nonce, name, metadata, signature, {
+    gasLimit: 500000n
+  });
   const receipt = await tx.wait();
   return receipt?.hash as string;
 }

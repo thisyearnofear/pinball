@@ -87,7 +87,29 @@ export async function signScore(
     nameHash,
     metaHash
   );
-  // wallet.signMessage already adds the EIP-191 prefix, so sign the inner hash directly
-  const sig = await wallet.signMessage(getBytes(inner));
+  
+  // Build the exact digest that the contract expects
+  const digest = buildPersonalDigest(inner);
+  
+  // Sign the digest (what the contract expects to verify)
+  const sig = await wallet.signMessage(getBytes(digest));
+  
+  // Log detailed information for debugging
+  console.log('SIGNATURE DEBUG INFO:', {
+    tournamentId,
+    player,
+    score,
+    nonce: nonce.toString(),
+    name,
+    metadata,
+    nameHash,
+    metaHash,
+    innerHash: inner,
+    digest,
+    signature: sig,
+    signatureLength: sig.length,
+    chainId: ARBITRUM_ONE_CHAIN_ID.toString()
+  });
+  
   return sig;
 }

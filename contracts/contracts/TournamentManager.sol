@@ -57,6 +57,9 @@ contract TournamentManager {
     event ScoreSubmitted(uint256 indexed id, address indexed player, uint256 score);
     event Finalized(uint256 indexed id, address[] winners);
     event RewardClaimed(uint256 indexed id, address indexed player, uint256 amount);
+    event FundsWithdrawn(address indexed to, uint256 amount);
+    event EmergencyPayout(uint256 indexed id, address indexed player, uint256 amount);
+    event TournamentCancelled(uint256 indexed id, uint256 refundedAmount);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "NOT_OWNER");
@@ -96,15 +99,16 @@ contract TournamentManager {
         require(prizeBps.length == topN, "BPS_LEN_NEQ_TOPN");
 
         uint256 id = ++lastTournamentId;
-        tournaments[id] = Tournament({
-            id: id,
-            startTime: startTime,
-            endTime: endTime,
-            topN: topN,
-            finalized: false,
-            prizeBps: prizeBps,
-            totalPot: 0
-        });
+        Tournament storage t = tournaments[id];
+        t.id = id;
+        t.startTime = startTime;
+        t.endTime = endTime;
+        t.topN = topN;
+        t.finalized = false;
+        t.totalPot = 0;
+        for (uint256 i = 0; i < prizeBps.length; i++) {
+            t.prizeBps.push(prizeBps[i]);
+        }
         emit TournamentCreated(id, startTime, endTime, topN, prizeBps);
         return id;
     }
@@ -280,6 +284,73 @@ contract TournamentManager {
         Tournament storage t = tournaments[id];
         require(t.id == id, "NO_TOURNAMENT");
         return t.prizeBps;
+    }
+
+    function repairPrizeBps(uint256 id, uint16[] calldata newBps) external onlyOwner {
+        Tournament storage t = tournaments[id];
+        require(t.id == id, "NO_TOURNAMENT");
+        require(newBps.length == t.topN, "BPS_LEN_NEQ_TOPN");
+        uint256 sum;
+        for (uint256 i = 0; i < newBps.length; i++) sum += newBps[i];
+        require(sum == 10000, "BPS_NEQ_10000");
+        delete t.prizeBps;
+        for (uint256 i = 0; i < newBps.length; i++) {
+            t.prizeBps.push(newBps[i]);
+        }
+    }
+
+    function withdrawFunds(address payable to, uint256 amount) external onlyOwner {
+        require(to != address(0), "ZERO_ADDRESS");
+        require(amount <= address(this).balance, "INSUFFICIENT_BALANCE");
+        (bool ok, ) = to.call{value: amount}("");
+        require(ok, "TRANSFER_FAILED");
+        emit FundsWithdrawn(to, amount);
+    }
+
+    function emergencyPayout(uint256 id, address[] calldata payoutWinners, uint16[] calldata payoutBps) external onlyOwner {
+        require(payoutWinners.length == payoutBps.length, "LENGTH_MISMATCH");
+        uint256 sum;
+        for (uint256 i = 0; i < payoutBps.length; i++) sum += payoutBps[i];
+        require(sum == 10000, "BPS_NEQ_10000");
+        
+        Tournament storage t = tournaments[id];
+        uint256 pot = t.totalPot;
+        require(pot > 0, "NO_POT");
+
+        for (uint256 i = 0; i < payoutWinners.length; i++) {
+            address winner = payoutWinners[i];
+            PlayerInfo storage p = playerInfo[id][winner];
+            require(!p.rewardClaimed, "ALREADY_CLAIMED");
+            
+            uint256 amount = (pot * payoutBps[i]) / 10000;
+            p.rewardClaimed = true;
+            (bool ok, ) = winner.call{value: amount}("");
+            require(ok, "PAY_FAIL");
+            emit EmergencyPayout(id, winner, amount);
+        }
+    }
+
+    function cancelTournament(uint256 id) external onlyOwner {
+        Tournament storage t = tournaments[id];
+        require(t.id == id, "NO_TOURNAMENT");
+        require(!t.finalized, "ALREADY_FINAL");
+        
+        address[] memory parts = participants[id];
+        uint256 refundAmount = t.totalPot / parts.length;
+        uint256 totalRefunded = 0;
+
+        for (uint256 i = 0; i < parts.length; i++) {
+            PlayerInfo storage p = playerInfo[id][parts[i]];
+            if (p.entered && !p.rewardClaimed) {
+                p.rewardClaimed = true;
+                (bool ok, ) = parts[i].call{value: refundAmount}("");
+                require(ok, "REFUND_FAIL");
+                totalRefunded += refundAmount;
+            }
+        }
+        
+        t.finalized = true;
+        emit TournamentCancelled(id, totalRefunded);
     }
 
     function _rankOf(uint256 id, address player) internal view returns (uint16) {
