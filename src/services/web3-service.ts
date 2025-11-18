@@ -247,23 +247,29 @@ class Web3Service extends EventEmitter {
     }
 
     async switchChain(chainId: number): Promise<void> {
-        if (!this.provider || !window.ethereum) return;
+        if (!this.provider) return;
 
         const chainIdHex = `0x${chainId.toString(16)}`;
 
+        // Get the actual provider (could be Farcaster or window.ethereum)
+        const walletProvider = await this.getWalletProvider();
+        if (!walletProvider) {
+            throw new Error('No wallet provider available');
+        }
+
         try {
             // First, try to switch to the chain
-            await window.ethereum.request({
+            await walletProvider.request({
                 method: 'wallet_switchEthereumChain',
                 params: [{ chainId: chainIdHex }],
             });
         } catch (switchError: any) {
-            // If the chain is not added to MetaMask, add it
+            // If the chain is not added to wallet, add it
             if (switchError.code === 4902 || switchError.code === -32603) {
                 try {
-                    await this.addChainToWallet(chainId);
+                    await this.addChainToWallet(chainId, walletProvider);
                     // After adding, try switching again
-                    await window.ethereum.request({
+                    await walletProvider.request({
                         method: 'wallet_switchEthereumChain',
                         params: [{ chainId: chainIdHex }],
                     });
@@ -278,14 +284,36 @@ class Web3Service extends EventEmitter {
         }
     }
 
-    private async addChainToWallet(chainId: number): Promise<void> {
-        if (!window.ethereum) throw new Error('No wallet provider available');
+    private async getWalletProvider(): Promise<any> {
+        // Try to get Farcaster provider first
+        try {
+            const { sdk } = await import("@farcaster/miniapp-sdk");
+            if (typeof sdk?.wallet?.getEthereumProvider === "function") {
+                const provider = await sdk.wallet.getEthereumProvider();
+                if (provider && typeof provider.request === "function") {
+                    return provider;
+                }
+            }
+        } catch (error) {
+            // Farcaster not available, fall through
+        }
+
+        // Fall back to window.ethereum
+        if (window.ethereum && typeof window.ethereum.request === "function") {
+            return window.ethereum;
+        }
+
+        return null;
+    }
+
+    private async addChainToWallet(chainId: number, provider: any): Promise<void> {
+        if (!provider) throw new Error('No wallet provider available');
 
         const chainIdHex = `0x${chainId.toString(16)}`;
 
         // Arbitrum One network configuration
         if (chainId === 42161) {
-            await window.ethereum.request({
+            await provider.request({
                 method: 'wallet_addEthereumChain',
                 params: [{
                     chainId: chainIdHex,
