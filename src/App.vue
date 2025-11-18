@@ -426,6 +426,17 @@ export default {
                                     this.newGameProps.playerName = address;
                                     web3Service.setProvider(ethersProvider, signer, address);
                                     console.log('Farcaster wallet auto-connected:', address);
+                                    this.$emit('wallet-connected');
+                                    return;
+                                }
+                            } else {
+                                // No accounts available, try auto-connect through web3Service
+                                console.log('No accounts found, trying web3Service auto-connect...');
+                                const result = await web3Service.autoConnect();
+                                if (result) {
+                                    this.newGameProps.playerName = result.address;
+                                    this.$emit('wallet-connected');
+                                    console.log('Farcaster wallet auto-connected via web3Service:', result.address);
                                     return;
                                 }
                             }
@@ -455,6 +466,7 @@ export default {
                             const result = await web3Service.autoConnect();
                             if (result) {
                                 this.newGameProps.playerName = result.address;
+                                this.$emit('wallet-connected');
                                 console.log('Fallback wallet auto-connected:', result.address);
                             }
                         }
@@ -488,12 +500,29 @@ export default {
         },
         async connectWallet(): Promise<void> {
             try {
+                // First try to auto-connect (which will use Farcaster wallet if available)
                 const result = await web3Service.autoConnect();
                 if (result) {
                     this.newGameProps.playerName = result.address;
+                    this.$emit('wallet-connected');
+                } else {
+                    // If auto-connect fails, try explicit connection
+                    const farcasterResult = await web3Service.connect('farcaster');
+                    if (farcasterResult) {
+                        this.newGameProps.playerName = farcasterResult.address;
+                        this.$emit('wallet-connected');
+                    } else {
+                        // Fallback to MetaMask
+                        const metamaskResult = await web3Service.connect('metamask');
+                        if (metamaskResult) {
+                            this.newGameProps.playerName = metamaskResult.address;
+                            this.$emit('wallet-connected');
+                        }
+                    }
                 }
             } catch (error) {
                 console.error('Wallet connection failed:', error);
+                this.showToast('Wallet connection failed. Please try again.', 'error');
             }
         },
         returnToMenu(): void {

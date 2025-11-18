@@ -51,6 +51,35 @@ class Web3Service extends EventEmitter {
         // Fallback to traditional wallet options
         const available = this.getAvailableWallets();
         
+        // First check if any wallet is already connected without requesting permission
+        if (window.ethereum) {
+            try {
+                const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+                if (accounts && accounts.length > 0) {
+                    // Wallet is already connected, use it
+                    this.provider = new ethers.BrowserProvider(window.ethereum);
+                    this.signer = await this.provider.getSigner();
+                    this.address = await this.signer.getAddress();
+                    
+                    const network = await this.provider.getNetwork();
+                    const chainId = Number(network.chainId);
+                    
+                    console.log('Existing wallet connection found:', this.address, 'Chain ID:', chainId);
+                    
+                    // Emit connection event
+                    this.emit('connected', { address: this.address, chainId });
+                    
+                    return {
+                        address: this.address,
+                        chainId,
+                    };
+                }
+            } catch (error) {
+                console.log('Error checking existing wallet connection:', error);
+            }
+        }
+        
+        // Try to connect with available wallet providers
         for (const walletType of available) {
             try {
                 const result = await this.connect(walletType);
@@ -285,11 +314,22 @@ class Web3Service extends EventEmitter {
             }
 
             // Check if already connected
-            let accounts = await provider.request({ method: 'eth_accounts' });
+            let accounts;
+            try {
+                accounts = await provider.request({ method: 'eth_accounts' });
+            } catch (error) {
+                console.log('Error checking Farcaster wallet accounts:', error);
+            }
             
-            // If not connected, request connection
+            // If not connected or no accounts, request connection
             if (!accounts || accounts.length === 0) {
-                accounts = await provider.request({ method: 'eth_requestAccounts' });
+                try {
+                    accounts = await provider.request({ method: 'eth_requestAccounts' });
+                } catch (error) {
+                    // User rejected the connection request
+                    console.log('User rejected Farcaster wallet connection');
+                    return null;
+                }
             }
             
             if (!accounts || accounts.length === 0) {
