@@ -34,9 +34,21 @@ class Web3Service extends EventEmitter {
 
     /**
      * Auto-connect to the best available wallet
+     * Prioritizes Farcaster wallet in Farcaster environment
      * Returns null if no wallets available, or connection fails
      */
     async autoConnect(): Promise<{ address: string; chainId: number } | null> {
+        // First, try Farcaster wallet if available
+        try {
+            const farcasterResult = await this.connectFarcasterWallet();
+            if (farcasterResult) {
+                return farcasterResult;
+            }
+        } catch (error) {
+            console.log('Farcaster wallet not available, trying other options...');
+        }
+        
+        // Fallback to traditional wallet options
         const available = this.getAvailableWallets();
         
         for (const walletType of available) {
@@ -53,9 +65,13 @@ class Web3Service extends EventEmitter {
         return null;
     }
 
-    async connect(walletType: 'metamask' = 'metamask'): Promise<{ address: string; chainId: number } | null> {
+    async connect(walletType: 'metamask' | 'farcaster' = 'metamask'): Promise<{ address: string; chainId: number } | null> {
         try {
-            return await this.connectMetaMask();
+            if (walletType === 'farcaster') {
+                return await this.connectFarcasterWallet();
+            } else {
+                return await this.connectMetaMask();
+            }
         } catch (error) {
             console.error(`Failed to connect with ${walletType}:`, error);
             return null;
@@ -250,6 +266,55 @@ class Web3Service extends EventEmitter {
             });
         } else {
             throw new Error(`Unsupported chain ID: ${chainId}`);
+        }
+    }
+
+    private async connectFarcasterWallet(): Promise<{ address: string; chainId: number } | null> {
+        try {
+            // Try to load Farcaster SDK and get wallet provider
+            const { sdk } = await import("@farcaster/miniapp-sdk");
+            
+            if (typeof sdk?.wallet?.getEthereumProvider !== "function") {
+                throw new Error('Farcaster wallet not available');
+            }
+
+            const provider = sdk.wallet.getEthereumProvider();
+            
+            if (!provider || typeof provider.request !== "function") {
+                throw new Error('Invalid Farcaster wallet provider');
+            }
+
+            // Check if already connected
+            let accounts = await provider.request({ method: 'eth_accounts' });
+            
+            // If not connected, request connection
+            if (!accounts || accounts.length === 0) {
+                accounts = await provider.request({ method: 'eth_requestAccounts' });
+            }
+            
+            if (!accounts || accounts.length === 0) {
+                throw new Error('No accounts returned from Farcaster wallet');
+            }
+
+            this.provider = new ethers.BrowserProvider(provider);
+            this.signer = await this.provider.getSigner();
+            this.address = await this.signer.getAddress();
+
+            const network = await this.provider.getNetwork();
+            const chainId = Number(network.chainId);
+
+            console.log('Farcaster wallet connected:', this.address, 'Chain ID:', chainId);
+            
+            // Emit connection event
+            this.emit('connected', { address: this.address, chainId });
+
+            return {
+                address: this.address,
+                chainId,
+            };
+        } catch (error) {
+            console.error('Farcaster wallet connection failed:', error);
+            return null;
         }
     }
 }

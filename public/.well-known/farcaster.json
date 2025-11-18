@@ -13,5 +13,17 @@
     "buttonTitle": "Play Pinball!",
     "splashImageUrl": "https://arbipinball.netlify.app/assets/sprites/logo.png",
     "splashBackgroundColor": "#1b1922"
+  },
+  "miniApp": {
+    "addToFavorites": {
+      "enabled": true,
+      "title": "Add ArbiPinball to Favorites",
+      "description": "Get notified about new tournaments and updates!",
+      "icon": "https://arbipinball.netlify.app/assets/sprites/logo.png"
+    },
+    "notifications": {
+      "enabled": true,
+      "types": ["tournament_start", "tournament_end", "high_score", "updates"]
+    }
   }
 }
