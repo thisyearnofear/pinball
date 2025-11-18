@@ -78,7 +78,7 @@ export async function enterTournament(tournamentId: number): Promise<string> {
   // Use explicit gas limit to avoid estimation issues in Farcaster wallet
   const tx = await c.enterTournament(tournamentId, {
     value: fee,
-    gasLimit: 200000n // Sufficient for entry transaction
+    gasLimit: 300000n // Sufficient for entry transaction
   });
 
   const receipt = await tx.wait();

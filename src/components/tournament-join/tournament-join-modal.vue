@@ -7,7 +7,7 @@
         <!-- Wrong Network Banner -->
         <div v-if="wrongChain" class="network-banner">
             <div class="banner-content">
-                <span>You're on the wrong network. Please switch to Arbitrum One.</span>
+                <span>You're on the wrong network. Please switch to {{ targetNetworkName }}.</span>
                 <button class="banner-button" @click="handleSwitchChain">Switch Network</button>
             </div>
         </div>
@@ -172,6 +172,9 @@ export default {
             const config = getContractsConfig();
             return this.providerChainId !== null && this.providerChainId !== config.chainId;
         },
+        targetNetworkName(): string {
+            return 'Arbitrum One';
+        },
     },
     async mounted(): Promise<void> {
         // Check current network
@@ -211,7 +214,7 @@ export default {
                 
                 // Show loading state during switch
                 this.isLoading = true;
-                showToast('Switching to Arbitrum One...', 'info');
+                showToast(`Switching to ${this.targetNetworkName}...`, 'info');
                 
                 await web3Service.switchChain(config.chainId);
                 
@@ -224,7 +227,7 @@ export default {
                     await this.checkNetwork();
                     
                     if (!this.wrongChain) {
-                        showToast('Successfully switched to Arbitrum One!', 'success');
+                        showToast(`Successfully switched to ${this.targetNetworkName}!`, 'success');
                         // Reload tournament details now that we're on the correct network
                         await this.loadTournamentDetails();
                         break;
@@ -245,7 +248,7 @@ export default {
                 if (error.code === 4001) {
                     errorMessage += 'You rejected the network switch request.';
                 } else if (error.code === 4902) {
-                    errorMessage += 'Arbitrum One needs to be added to your wallet first.';
+                    errorMessage += `${this.targetNetworkName} needs to be added to your wallet first.`;
                 } else if (error.message?.includes('User rejected')) {
                     errorMessage += 'You rejected the network switch request.';
                 } else {

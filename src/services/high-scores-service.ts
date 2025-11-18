@@ -11,8 +11,8 @@ import { web3Service } from './web3-service';
 import { getActiveTournamentId, fetchLeaderboard, submitScoreWithSignature, enterTournament, getEntryFeeWei, getTournamentInfo } from './contracts/tournament-client';
 import { requestScoreSignature } from './backend-scores-client';
 import { getContractsConfig } from '../config/contracts';
-import { showToast } from '@/services/toast';
-import { getFromStorage, setInStorage } from '@/utils/local-storage';
+import { showToast } from './toast';
+import { getFromStorage, setInStorage } from '../utils/local-storage';
 
 // Import ethers for direct contract access if needed
 import { ethers } from 'ethers';
@@ -45,7 +45,7 @@ export const isSupported = (): boolean => {
         if (!web3Service.isConnected()) {
             return false;
         }
-        
+
         // Additional check: verify configuration is available
         try {
             getContractsConfig();
@@ -76,7 +76,7 @@ export const startGame = async (): Promise<string | null> => {
 
 // NOTE: To submit a score we require a server signature proving validity.
 // The caller must obtain `signature` out-of-band (server API) and pass via metaData (or adapt as needed).
-export const stopGame = async ( gameId: string, score: number, playerName?: string, metaData?: string ): Promise<HighScoreDef[]> => {
+export const stopGame = async (gameId: string, score: number, playerName?: string, metaData?: string): Promise<HighScoreDef[]> => {
     try {
         const tournamentId = Number(gameId);
         if (!web3Service.isConnected()) throw new Error('Wallet not connected');
@@ -85,7 +85,9 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
 
         // Verify we're on the correct chain
         const config = getContractsConfig();
-        const currentNetwork = await web3Service.getProvider().getNetwork();
+        const provider = web3Service.getProvider();
+        if (!provider) throw new Error('No provider available');
+        const currentNetwork = await provider.getNetwork();
         const currentChainId = Number(currentNetwork.chainId);
 
         if (currentChainId !== config.chainId) {
@@ -209,7 +211,7 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
                 // Continue anyway, this is just for debugging
             }
 
-            await submitScoreWithSignature(tournamentId, score, nonceAsBigInt, playerName || '', metadata, signature);
+            await submitScoreWithSignature(tournamentId, score, Number(nonceAsBigInt), playerName || '', metadata, signature);
             console.log('Score successfully submitted to blockchain');
             showToast('Score submitted!', 'success');
             try {
@@ -217,7 +219,7 @@ export const stopGame = async ( gameId: string, score: number, playerName?: stri
                 const submitted: string[] = JSON.parse(submittedRaw);
                 submitted.push(submissionKey);
                 setInStorage('ps_submitted_scores', JSON.stringify(submitted));
-            } catch {}
+            } catch { }
         } catch (err) {
             // More detailed error logging
             console.error('Score submission to blockchain failed:', {
@@ -284,10 +286,10 @@ export const getHighScores = async (): Promise<HighScoreDef[]> => {
     try {
         const id = await getActiveTournamentId();
         const rows = await fetchLeaderboard(id, 0, 100);
-        const scores: HighScoreDef[] = rows.map(r => ({ 
-            name: `${r.address.slice(0, 6)}...${r.address.slice(-4)}`, 
-            score: r.score, 
-            duration: 0 
+        const scores: HighScoreDef[] = rows.map(r => ({
+            name: `${r.address.slice(0, 6)}...${r.address.slice(-4)}`,
+            score: r.score,
+            duration: 0
         }));
         return scores;
     } catch (e) {
