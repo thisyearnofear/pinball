@@ -337,7 +337,15 @@ export default {
                 
                 // Check if we're actually in Farcaster environment
                 const context = sdk?.context;
-                const isInFarcaster = context && (context.client || context.user);
+                console.log('Farcaster SDK context:', context);
+                // More robust detection of Farcaster environment
+                const isInFarcaster = context && (
+                    (context.client && context.client.platformType) || 
+                    (context.user && context.user.fid) ||
+                    context.client ||
+                    context.user
+                );
+                console.log('Is in Farcaster environment:', isInFarcaster);
                 
                 if (isInFarcaster) {
                     console.log('Running in Farcaster environment');
@@ -403,10 +411,12 @@ export default {
         },
 
         async attemptFarcasterWalletConnect(sdk: any): Promise<void> {
+            console.log('Attempting Farcaster wallet connection...');
             try {
                 // First, try to get the Ethereum provider from Farcaster SDK
                 if (typeof sdk?.wallet?.getEthereumProvider === "function") {
                     const provider = sdk.wallet.getEthereumProvider();
+                    console.log('Farcaster provider:', provider);
                     
                     // Validate that provider has the necessary methods (EIP-1193)
                     if (provider && typeof provider.request === "function") {
@@ -415,6 +425,7 @@ export default {
                         // Try to get accounts without requesting (check if already connected)
                         try {
                             const accounts = await provider.request({ method: 'eth_accounts' });
+                            console.log('Farcaster accounts:', accounts);
                             
                             if (accounts && accounts.length > 0) {
                                 // Wallet is already connected
@@ -441,7 +452,7 @@ export default {
                                 }
                             }
                         } catch (error) {
-                            console.log('Farcaster wallet not yet connected, will require user interaction');
+                            console.log('Farcaster wallet not yet connected, will require user interaction', error);
                         }
                         
                         // If not already connected, we'll let the user manually connect via the UI
@@ -461,6 +472,7 @@ export default {
                     
                     try {
                         const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+                        console.log('Fallback accounts:', accounts);
                         if (accounts && accounts.length > 0) {
                             // Auto-connect to already connected wallet
                             const result = await web3Service.autoConnect();

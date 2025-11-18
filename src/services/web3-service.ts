@@ -38,23 +38,27 @@ class Web3Service extends EventEmitter {
      * Returns null if no wallets available, or connection fails
      */
     async autoConnect(): Promise<{ address: string; chainId: number } | null> {
+        console.log('Attempting auto-connect...');
         // First, try Farcaster wallet if available
         try {
             const farcasterResult = await this.connectFarcasterWallet();
             if (farcasterResult) {
+                console.log('Farcaster wallet auto-connected:', farcasterResult);
                 return farcasterResult;
             }
         } catch (error) {
-            console.log('Farcaster wallet not available, trying other options...');
+            console.log('Farcaster wallet not available, trying other options...', error);
         }
         
         // Fallback to traditional wallet options
         const available = this.getAvailableWallets();
+        console.log('Available wallets:', available);
         
         // First check if any wallet is already connected without requesting permission
         if (window.ethereum) {
             try {
                 const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+                console.log('Window ethereum accounts:', accounts);
                 if (accounts && accounts.length > 0) {
                     // Wallet is already connected, use it
                     this.provider = new ethers.BrowserProvider(window.ethereum);
@@ -84,13 +88,15 @@ class Web3Service extends EventEmitter {
             try {
                 const result = await this.connect(walletType);
                 if (result) {
+                    console.log('Wallet connected:', result);
                     return result;
                 }
             } catch (error) {
-                console.log(`Failed to auto-connect with ${walletType}, trying next...`);
+                console.log(`Failed to auto-connect with ${walletType}, trying next...`, error);
             }
         }
         
+        console.log('No wallet auto-connected');
         return null;
     }
 
@@ -299,17 +305,21 @@ class Web3Service extends EventEmitter {
     }
 
     private async connectFarcasterWallet(): Promise<{ address: string; chainId: number } | null> {
+        console.log('Attempting to connect Farcaster wallet...');
         try {
             // Try to load Farcaster SDK and get wallet provider
             const { sdk } = await import("@farcaster/miniapp-sdk");
             
             if (typeof sdk?.wallet?.getEthereumProvider !== "function") {
+                console.log('Farcaster wallet not available: getEthereumProvider is not a function');
                 throw new Error('Farcaster wallet not available');
             }
 
             const provider = sdk.wallet.getEthereumProvider();
+            console.log('Farcaster provider obtained:', provider);
             
             if (!provider || typeof provider.request !== "function") {
+                console.log('Invalid Farcaster wallet provider');
                 throw new Error('Invalid Farcaster wallet provider');
             }
 
@@ -317,6 +327,7 @@ class Web3Service extends EventEmitter {
             let accounts;
             try {
                 accounts = await provider.request({ method: 'eth_accounts' });
+                console.log('Farcaster accounts from eth_accounts:', accounts);
             } catch (error) {
                 console.log('Error checking Farcaster wallet accounts:', error);
             }
@@ -324,15 +335,18 @@ class Web3Service extends EventEmitter {
             // If not connected or no accounts, request connection
             if (!accounts || accounts.length === 0) {
                 try {
+                    console.log('Requesting Farcaster wallet connection...');
                     accounts = await provider.request({ method: 'eth_requestAccounts' });
+                    console.log('Farcaster accounts from eth_requestAccounts:', accounts);
                 } catch (error) {
                     // User rejected the connection request
-                    console.log('User rejected Farcaster wallet connection');
+                    console.log('User rejected Farcaster wallet connection', error);
                     return null;
                 }
             }
             
             if (!accounts || accounts.length === 0) {
+                console.log('No accounts returned from Farcaster wallet');
                 throw new Error('No accounts returned from Farcaster wallet');
             }
 
