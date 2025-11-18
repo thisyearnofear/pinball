@@ -41,7 +41,7 @@ function getPublicContract(): ethers.Contract {
   } else {
     throw new Error(`Unsupported chain ID: ${chainId}`);
   }
-  
+
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   return new ethers.Contract(tournamentManager.address, TOURNAMENT_MANAGER_ABI, provider);
 }
@@ -74,7 +74,13 @@ async function _getActiveTournamentId(contract: ethers.Contract): Promise<number
 export async function enterTournament(tournamentId: number): Promise<string> {
   const c = getContract();
   const fee: bigint = await c.entryFeeWei();
-  const tx = await c.enterTournament(tournamentId, { value: fee });
+
+  // Use explicit gas limit to avoid estimation issues in Farcaster wallet
+  const tx = await c.enterTournament(tournamentId, {
+    value: fee,
+    gasLimit: 200000n // Sufficient for entry transaction
+  });
+
   const receipt = await tx.wait();
   return receipt?.hash as string;
 }
@@ -122,7 +128,7 @@ export async function fetchLeaderboardWithRetry(
   delayMs = 2000
 ): Promise<{ address: string; score: number }[]> {
   let lastError;
-  
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const result = await fetchLeaderboard(tournamentId, offset, limit);
@@ -131,17 +137,17 @@ export async function fetchLeaderboardWithRetry(
     } catch (error) {
       lastError = error;
       console.log(`Leaderboard fetch attempt ${attempt + 1} failed:`, error);
-      
+
       // If this was the last attempt, throw the error
       if (attempt === maxRetries) {
         break;
       }
-      
+
       // Wait before retrying (exponential backoff could be implemented here)
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
-  
+
   // If all retries failed, throw the last error
   throw lastError;
 }
@@ -172,7 +178,7 @@ export async function getEntryFeeWei(): Promise<bigint> {
   }
 }
 
-export async function getTournamentInfo(tournamentId: number, retries = 3): Promise<{ startTime: number; endTime: number; topN: number; finalized: boolean; totalPot: bigint; }>{
+export async function getTournamentInfo(tournamentId: number, retries = 3): Promise<{ startTime: number; endTime: number; topN: number; finalized: boolean; totalPot: bigint; }> {
   try {
     const c = getContract();
     return await _getTournamentInfo(c, tournamentId, retries);
@@ -185,14 +191,14 @@ export async function getTournamentInfo(tournamentId: number, retries = 3): Prom
   }
 }
 
-async function _getTournamentInfo(contract: ethers.Contract, tournamentId: number, retries = 3): Promise<{ startTime: number; endTime: number; topN: number; finalized: boolean; totalPot: bigint; }>{
+async function _getTournamentInfo(contract: ethers.Contract, tournamentId: number, retries = 3): Promise<{ startTime: number; endTime: number; topN: number; finalized: boolean; totalPot: bigint; }> {
   let lastError: any;
-  
+
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       // Result is now: [id, startTime, endTime, topN, finalized, prizeBps, totalPot]
       const t = await contract.tournaments(tournamentId);
-      
+
       return {
         startTime: Number(t.startTime),
         endTime: Number(t.endTime),
@@ -202,17 +208,17 @@ async function _getTournamentInfo(contract: ethers.Contract, tournamentId: numbe
       };
     } catch (error: any) {
       lastError = error;
-      
+
       // Only retry on BAD_DATA errors (decoding issues), not other errors
       if (error.code !== 'BAD_DATA' || attempt === retries - 1) {
         throw error;
       }
-      
+
       // Wait before retrying (exponential backoff: 200ms, 400ms, etc.)
       await new Promise(resolve => setTimeout(resolve, 200 * (attempt + 1)));
     }
   }
-  
+
   throw lastError;
 }
 

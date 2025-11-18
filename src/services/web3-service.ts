@@ -263,6 +263,9 @@ class Web3Service extends EventEmitter {
                 method: 'wallet_switchEthereumChain',
                 params: [{ chainId: chainIdHex }],
             });
+
+            // After successful switch, refresh the provider and signer
+            await this.refreshProvider(walletProvider);
         } catch (switchError: any) {
             // If the chain is not added to wallet, add it
             if (switchError.code === 4902 || switchError.code === -32603) {
@@ -273,6 +276,9 @@ class Web3Service extends EventEmitter {
                         method: 'wallet_switchEthereumChain',
                         params: [{ chainId: chainIdHex }],
                     });
+
+                    // Refresh provider after successful switch
+                    await this.refreshProvider(walletProvider);
                 } catch (addError) {
                     console.error('Failed to add and switch chain:', addError);
                     throw addError;
@@ -281,6 +287,26 @@ class Web3Service extends EventEmitter {
                 console.error('Failed to switch chain:', switchError);
                 throw switchError;
             }
+        }
+    }
+
+    private async refreshProvider(walletProvider: any): Promise<void> {
+        try {
+            // Recreate the ethers provider and signer with the new network
+            this.provider = new ethers.BrowserProvider(walletProvider);
+            this.signer = await this.provider.getSigner();
+            this.address = await this.signer.getAddress();
+
+            const network = await this.provider.getNetwork();
+            const chainId = Number(network.chainId);
+
+            console.log('Provider refreshed after network switch:', this.address, 'Chain ID:', chainId);
+
+            // Emit event to notify listeners
+            this.emit('chainChanged', { chainId });
+        } catch (error) {
+            console.error('Failed to refresh provider after network switch:', error);
+            throw error;
         }
     }
 
