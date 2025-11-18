@@ -338,14 +338,23 @@ export default {
                 // Check if we're actually in Farcaster environment
                 const context = sdk?.context;
                 console.log('Farcaster SDK context:', context);
+                
                 // More robust detection of Farcaster environment
+                // Check for specific properties that indicate we're in Farcaster
                 const isInFarcaster = context && (
                     (context.client && context.client.platformType) || 
                     (context.user && context.user.fid) ||
                     context.client ||
-                    context.user
+                    context.user ||
+                    // Additional checks for Farcaster environment
+                    (typeof window !== 'undefined' && window.fcSDK) // Some implementations expose this
                 );
                 console.log('Is in Farcaster environment:', isInFarcaster);
+                
+                // For debugging purposes, always attempt wallet connection
+                // even when not in Farcaster environment
+                console.log('Attempting wallet connection regardless of environment');
+                await this.attemptFarcasterWalletConnect(sdk);
                 
                 if (isInFarcaster) {
                     console.log('Running in Farcaster environment');
@@ -355,7 +364,7 @@ export default {
                     this.promptAddToFavorites(sdk);
                     
                     // Attempt Farcaster native wallet auto-connect first
-                    await this.attemptFarcasterWalletConnect(sdk);
+                    // await this.attemptFarcasterWalletConnect(sdk); // Moved above for debugging
                 } else {
                     console.log('Not in Farcaster environment, using fallback');
                     this.isFarcaster = false;
