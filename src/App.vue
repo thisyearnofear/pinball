@@ -341,34 +341,27 @@ export default {
                 
                 // More robust detection of Farcaster environment
                 // Check for specific properties that indicate we're in Farcaster
-                const isInFarcaster = context && (
-                    (context.client && context.client.platformType) || 
-                    (context.user && context.user.fid) ||
-                    context.client ||
-                    context.user ||
-                    // Additional checks for Farcaster environment
-                    (typeof window !== 'undefined' && window.fcSDK) // Some implementations expose this
-                );
-                console.log('Is in Farcaster environment:', isInFarcaster);
-                
-                // For debugging purposes, always attempt wallet connection
-                // even when not in Farcaster environment
-                console.log('Attempting wallet connection regardless of environment');
-                await this.attemptFarcasterWalletConnect(sdk);
-                
-                if (isInFarcaster) {
-                    console.log('Running in Farcaster environment');
-                    this.isFarcaster = true;
-                    
-                    // Prompt user to add the mini app for notifications (modern pattern)
-                    this.promptAddToFavorites(sdk);
-                    
-                    // Attempt Farcaster native wallet auto-connect first
-                    // await this.attemptFarcasterWalletConnect(sdk); // Moved above for debugging
-                } else {
-                    console.log('Not in Farcaster environment, using fallback');
-                    this.isFarcaster = false;
+                let isInFarcaster = false;
+                if (context) {
+                    // Try to access the properties directly
+                    try {
+                        const client = context.client;
+                        const user = context.user;
+                        console.log('Context client:', client, 'Context user:', user);
+                        
+                        isInFarcaster = (
+                            (client && client.platformType) || 
+                            (user && user.fid) ||
+                            client ||
+                            user ||
+                            // Additional checks for Farcaster environment
+                            (typeof window !== 'undefined' && window.fcSDK) // Some implementations expose this
+                        );
+                    } catch (e) {
+                        console.log('Error accessing context properties:', e);
+                    }
                 }
+                console.log('Is in Farcaster environment:', isInFarcaster);
                 
                 // Always call ready() to hide splash screen
                 if (typeof sdk?.actions?.ready === "function") {
@@ -424,7 +417,8 @@ export default {
             try {
                 // First, try to get the Ethereum provider from Farcaster SDK
                 if (typeof sdk?.wallet?.getEthereumProvider === "function") {
-                    const provider = sdk.wallet.getEthereumProvider();
+                    // IMPORTANT: Await the provider since it might be a Promise
+                    const provider = await sdk.wallet.getEthereumProvider();
                     console.log('Farcaster provider:', provider);
                     
                     // Validate that provider has the necessary methods (EIP-1193)

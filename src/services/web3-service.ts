@@ -315,7 +315,8 @@ class Web3Service extends EventEmitter {
                 throw new Error('Farcaster wallet not available');
             }
 
-            const provider = sdk.wallet.getEthereumProvider();
+            // IMPORTANT: Await the provider since it might be a Promise
+            const provider = await sdk.wallet.getEthereumProvider();
             console.log('Farcaster provider obtained:', provider);
             
             if (!provider || typeof provider.request !== "function") {
