@@ -23,12 +23,12 @@ class Web3Service extends EventEmitter {
         // WalletConnect v1 has too many compatibility issues with Vite/browser
         // Users should install a wallet extension
         const available: Array<'metamask'> = [];
-        
+
         // Check if MetaMask or compatible extension is available
         if (window.ethereum && typeof window.ethereum.request === 'function') {
             available.push('metamask');
         }
-        
+
         return available;
     }
 
@@ -49,11 +49,11 @@ class Web3Service extends EventEmitter {
         } catch (error) {
             console.log('Farcaster wallet not available, trying other options...', error);
         }
-        
+
         // Fallback to traditional wallet options
         const available = this.getAvailableWallets();
         console.log('Available wallets:', available);
-        
+
         // First check if any wallet is already connected without requesting permission
         if (window.ethereum) {
             try {
@@ -64,15 +64,15 @@ class Web3Service extends EventEmitter {
                     this.provider = new ethers.BrowserProvider(window.ethereum);
                     this.signer = await this.provider.getSigner();
                     this.address = await this.signer.getAddress();
-                    
+
                     const network = await this.provider.getNetwork();
                     const chainId = Number(network.chainId);
-                    
+
                     console.log('Existing wallet connection found:', this.address, 'Chain ID:', chainId);
-                    
+
                     // Emit connection event
                     this.emit('connected', { address: this.address, chainId });
-                    
+
                     return {
                         address: this.address,
                         chainId,
@@ -82,7 +82,7 @@ class Web3Service extends EventEmitter {
                 console.log('Error checking existing wallet connection:', error);
             }
         }
-        
+
         // Try to connect with available wallet providers
         for (const walletType of available) {
             try {
@@ -95,7 +95,7 @@ class Web3Service extends EventEmitter {
                 console.log(`Failed to auto-connect with ${walletType}, trying next...`, error);
             }
         }
-        
+
         console.log('No wallet auto-connected');
         return null;
     }
@@ -128,7 +128,7 @@ class Web3Service extends EventEmitter {
         try {
             // Request account access
             const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-            
+
             if (!accounts || accounts.length === 0) {
                 throw new Error('No accounts returned from wallet');
             }
@@ -141,7 +141,7 @@ class Web3Service extends EventEmitter {
             const chainId = Number(network.chainId);
 
             console.log('MetaMask connected:', this.address, 'Chain ID:', chainId);
-            
+
             // Emit connection event
             this.emit('connected', { address: this.address, chainId });
 
@@ -160,7 +160,7 @@ class Web3Service extends EventEmitter {
             // Try to use web3modal or WalletConnect if available
             // Otherwise fall back to browser defaults
             console.log('Attempting WalletConnect connection...');
-            
+
             // For now, WalletConnect v1 has compatibility issues with Vite/browser
             // Try to use any available provider extension
             if (window.ethereum) {
@@ -197,19 +197,19 @@ class Web3Service extends EventEmitter {
             if (this.walletConnectProvider) {
                 await this.walletConnectProvider.disconnect();
             }
-            
+
             // For MetaMask and other browser wallets, we can't programmatically disconnect
             // but we can clear our local state and let the user know they need to disconnect manually
             // from their wallet if they want to completely disconnect
-            
+
             // Clear all local state
             this.provider = null;
             this.signer = null;
             this.address = null;
             this.walletConnectProvider = null;
-            
+
             console.log('Wallet disconnected from application');
-            
+
         } catch (error) {
             console.warn('Error during wallet disconnect:', error);
             // Still clear local state even if disconnect fails
@@ -250,7 +250,7 @@ class Web3Service extends EventEmitter {
         if (!this.provider || !window.ethereum) return;
 
         const chainIdHex = `0x${chainId.toString(16)}`;
-        
+
         try {
             // First, try to switch to the chain
             await window.ethereum.request({
@@ -282,7 +282,7 @@ class Web3Service extends EventEmitter {
         if (!window.ethereum) throw new Error('No wallet provider available');
 
         const chainIdHex = `0x${chainId.toString(16)}`;
-        
+
         // Arbitrum One network configuration
         if (chainId === 42161) {
             await window.ethereum.request({
@@ -305,49 +305,25 @@ class Web3Service extends EventEmitter {
     }
 
     private async connectFarcasterWallet(): Promise<{ address: string; chainId: number } | null> {
-        console.log('Attempting to connect Farcaster wallet...');
+        console.log('Connecting Farcaster wallet...');
+
         try {
-            // Try to load Farcaster SDK and get wallet provider
             const { sdk } = await import("@farcaster/miniapp-sdk");
-            
+
             if (typeof sdk?.wallet?.getEthereumProvider !== "function") {
-                console.log('Farcaster wallet not available: getEthereumProvider is not a function');
                 throw new Error('Farcaster wallet not available');
             }
 
-            // IMPORTANT: Await the provider since it might be a Promise
             const provider = await sdk.wallet.getEthereumProvider();
-            console.log('Farcaster provider obtained:', provider);
-            
+
             if (!provider || typeof provider.request !== "function") {
-                console.log('Invalid Farcaster wallet provider');
                 throw new Error('Invalid Farcaster wallet provider');
             }
 
-            // Check if already connected
-            let accounts;
-            try {
-                accounts = await provider.request({ method: 'eth_accounts' });
-                console.log('Farcaster accounts from eth_accounts:', accounts);
-            } catch (error) {
-                console.log('Error checking Farcaster wallet accounts:', error);
-            }
-            
-            // If not connected or no accounts, request connection
+            // Request account access (this will prompt user if not already connected)
+            const accounts = await provider.request({ method: 'eth_requestAccounts' });
+
             if (!accounts || accounts.length === 0) {
-                try {
-                    console.log('Requesting Farcaster wallet connection...');
-                    accounts = await provider.request({ method: 'eth_requestAccounts' });
-                    console.log('Farcaster accounts from eth_requestAccounts:', accounts);
-                } catch (error) {
-                    // User rejected the connection request
-                    console.log('User rejected Farcaster wallet connection', error);
-                    return null;
-                }
-            }
-            
-            if (!accounts || accounts.length === 0) {
-                console.log('No accounts returned from Farcaster wallet');
                 throw new Error('No accounts returned from Farcaster wallet');
             }
 
@@ -359,8 +335,7 @@ class Web3Service extends EventEmitter {
             const chainId = Number(network.chainId);
 
             console.log('Farcaster wallet connected:', this.address, 'Chain ID:', chainId);
-            
-            // Emit connection event
+
             this.emit('connected', { address: this.address, chainId });
 
             return {

@@ -326,7 +326,6 @@ export default {
             setInStorage( STORED_HAS_VIEWED_TUTORIAL, "true" );
         },
         async initializeFarcaster(): Promise<void> {
-            // Always attempt to initialize Farcaster SDK
             try {
                 const { sdk } = await import("@farcaster/miniapp-sdk");
                 
@@ -335,163 +334,64 @@ export default {
                     await sdk.init();
                 }
                 
-                // Check if we're actually in Farcaster environment
+                // Check if we're in Farcaster environment
                 const context = sdk?.context;
-                console.log('Farcaster SDK context:', context);
+                const isInFarcaster = !!(context?.client || context?.user);
+                this.isFarcaster = isInFarcaster;
                 
-                // More robust detection of Farcaster environment
-                // Check for specific properties that indicate we're in Farcaster
-                let isInFarcaster = false;
-                if (context) {
-                    // Try to access the properties directly
-                    try {
-                        const client = context.client;
-                        const user = context.user;
-                        console.log('Context client:', client, 'Context user:', user);
-                        
-                        isInFarcaster = (
-                            (client && client.platformType) || 
-                            (user && user.fid) ||
-                            client ||
-                            user ||
-                            // Additional checks for Farcaster environment
-                            (typeof window !== 'undefined' && window.fcSDK) // Some implementations expose this
-                        );
-                    } catch (e) {
-                        console.log('Error accessing context properties:', e);
-                    }
-                }
-                console.log('Is in Farcaster environment:', isInFarcaster);
+                console.log('Farcaster environment detected:', isInFarcaster);
                 
-                // Always call ready() to hide splash screen
+                // Call ready() to hide splash screen
                 if (typeof sdk?.actions?.ready === "function") {
                     await sdk.actions.ready();
-                    console.log('Farcaster SDK ready() called successfully');
+                }
+                
+                // If in Farcaster, attempt wallet autoconnect
+                if (isInFarcaster) {
+                    await this.attemptFarcasterWalletAutoConnect(sdk);
                 }
                 
             } catch (error) {
-                console.log('Farcaster SDK not available:', error);
+                console.log('Farcaster SDK initialization failed:', error);
                 this.isFarcaster = false;
+            }
+        },
+
+        async attemptFarcasterWalletAutoConnect(sdk: any): Promise<void> {
+            console.log('Attempting Farcaster wallet auto-connect...');
+            
+            try {
+                // Get the Ethereum provider from Farcaster SDK
+                if (typeof sdk?.wallet?.getEthereumProvider !== "function") {
+                    console.log('Farcaster wallet provider not available');
+                    return;
+                }
                 
-                // Fallback: try to call ready() to hide splash screen
-                try {
-                    const { sdk } = await import("@farcaster/miniapp-sdk");
-                    if (typeof sdk?.actions?.ready === "function") {
-                        await sdk.actions.ready();
-                        console.log('Farcaster SDK ready() called in fallback');
-                    }
-                } catch (e) {
-                    console.log('Could not load Farcaster SDK for ready() call:', e);
+                const provider = await sdk.wallet.getEthereumProvider();
+                
+                if (!provider || typeof provider.request !== "function") {
+                    console.log('Invalid Farcaster provider');
+                    return;
                 }
-            }
-        },
-
-        async promptAddToFavorites(sdk: any): Promise<void> {
-            // Prompt user to add mini app to favorites for notifications
-            try {
-                if (typeof sdk?.actions?.addToFavorites === "function") {
-                    // Check if already added (if SDK provides this info)
-                    const shouldPrompt = !localStorage.getItem('farcaster_favorites_prompted');
+                
+                // Check if wallet is already connected (without prompting user)
+                const accounts = await provider.request({ method: 'eth_accounts' });
+                
+                if (accounts && accounts.length > 0) {
+                    // Wallet is connected, set it up
+                    const ethersProvider = new ethers.BrowserProvider(provider);
+                    const signer = await ethersProvider.getSigner();
+                    const address = await signer.getAddress();
                     
-                    if (shouldPrompt) {
-                        // Show a subtle prompt after a short delay
-                        setTimeout(async () => {
-                            try {
-                                await sdk.actions.addToFavorites();
-                                localStorage.setItem('farcaster_favorites_prompted', 'true');
-                                console.log('Mini app added to favorites for notifications');
-                            } catch (error) {
-                                console.log('User declined to add to favorites or already added:', error);
-                                localStorage.setItem('farcaster_favorites_prompted', 'true');
-                            }
-                        }, 2000); // Wait 2 seconds after app loads
-                    }
-                }
-            } catch (error) {
-                console.log('Add to favorites not available:', error);
-            }
-        },
-
-        async attemptFarcasterWalletConnect(sdk: any): Promise<void> {
-            console.log('Attempting Farcaster wallet connection...');
-            try {
-                // First, try to get the Ethereum provider from Farcaster SDK
-                if (typeof sdk?.wallet?.getEthereumProvider === "function") {
-                    // IMPORTANT: Await the provider since it might be a Promise
-                    const provider = await sdk.wallet.getEthereumProvider();
-                    console.log('Farcaster provider:', provider);
-                    
-                    // Validate that provider has the necessary methods (EIP-1193)
-                    if (provider && typeof provider.request === "function") {
-                        console.log('Found Farcaster wallet provider, attempting auto-connect...');
-                        
-                        // Try to get accounts without requesting (check if already connected)
-                        try {
-                            const accounts = await provider.request({ method: 'eth_accounts' });
-                            console.log('Farcaster accounts:', accounts);
-                            
-                            if (accounts && accounts.length > 0) {
-                                // Wallet is already connected
-                                const ethersProvider = new ethers.BrowserProvider(provider);
-                                const signer = await ethersProvider.getSigner();
-                                const address = await signer.getAddress();
-                                
-                                if (address) {
-                                    this.newGameProps.playerName = address;
-                                    web3Service.setProvider(ethersProvider, signer, address);
-                                    console.log('Farcaster wallet auto-connected:', address);
-                                    this.$emit('wallet-connected');
-                                    return;
-                                }
-                            } else {
-                                // No accounts available, try auto-connect through web3Service
-                                console.log('No accounts found, trying web3Service auto-connect...');
-                                const result = await web3Service.autoConnect();
-                                if (result) {
-                                    this.newGameProps.playerName = result.address;
-                                    this.$emit('wallet-connected');
-                                    console.log('Farcaster wallet auto-connected via web3Service:', result.address);
-                                    return;
-                                }
-                            }
-                        } catch (error) {
-                            console.log('Farcaster wallet not yet connected, will require user interaction', error);
-                        }
-                        
-                        // If not already connected, we'll let the user manually connect via the UI
-                        // Don't auto-request connection as it requires user interaction
-                        console.log('Farcaster wallet available but requires user interaction to connect');
-                        
-                    } else {
-                        console.log('Farcaster provider not available or invalid');
-                    }
+                    this.newGameProps.playerName = address;
+                    web3Service.setProvider(ethersProvider, signer, address);
+                    console.log('Farcaster wallet auto-connected:', address);
                 } else {
-                    console.log('Farcaster wallet provider method not available');
-                }
-                
-                // Fallback: check for other wallet providers only if Farcaster wallet failed
-                if (!web3Service.isConnected() && window.ethereum && typeof window.ethereum.request === 'function') {
-                    console.log('Farcaster wallet not available, checking for other providers...');
-                    
-                    try {
-                        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-                        console.log('Fallback accounts:', accounts);
-                        if (accounts && accounts.length > 0) {
-                            // Auto-connect to already connected wallet
-                            const result = await web3Service.autoConnect();
-                            if (result) {
-                                this.newGameProps.playerName = result.address;
-                                this.$emit('wallet-connected');
-                                console.log('Fallback wallet auto-connected:', result.address);
-                            }
-                        }
-                    } catch (error) {
-                        console.log('Fallback wallet auto-connect failed:', error);
-                    }
+                    console.log('Farcaster wallet not connected yet, user will need to connect manually');
                 }
                 
             } catch (error) {
-                console.log('Farcaster wallet connection attempt failed:', error);
+                console.log('Farcaster wallet auto-connect failed:', error);
             }
         },
         onWalletConnected(): void {
@@ -515,25 +415,21 @@ export default {
         },
         async connectWallet(): Promise<void> {
             try {
-                // First try to auto-connect (which will use Farcaster wallet if available)
+                // In Farcaster context, prioritize Farcaster wallet
+                if (this.isFarcaster) {
+                    const result = await web3Service.connect('farcaster');
+                    if (result) {
+                        this.newGameProps.playerName = result.address;
+                        return;
+                    }
+                }
+                
+                // Otherwise use autoConnect which will try available wallets
                 const result = await web3Service.autoConnect();
                 if (result) {
                     this.newGameProps.playerName = result.address;
-                    this.$emit('wallet-connected');
                 } else {
-                    // If auto-connect fails, try explicit connection
-                    const farcasterResult = await web3Service.connect('farcaster');
-                    if (farcasterResult) {
-                        this.newGameProps.playerName = farcasterResult.address;
-                        this.$emit('wallet-connected');
-                    } else {
-                        // Fallback to MetaMask
-                        const metamaskResult = await web3Service.connect('metamask');
-                        if (metamaskResult) {
-                            this.newGameProps.playerName = metamaskResult.address;
-                            this.$emit('wallet-connected');
-                        }
-                    }
+                    this.showToast('No wallet available. Please install a wallet extension.', 'error');
                 }
             } catch (error) {
                 console.error('Wallet connection failed:', error);
