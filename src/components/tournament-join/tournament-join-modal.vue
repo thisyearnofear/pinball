@@ -53,6 +53,13 @@
                 >
                     {{ $t('ui.playAnonymous') }}
                 </button>
+                <button
+                    type="button"
+                    class="modal-button modal-button--tertiary"
+                    @click="handleCancel"
+                >
+                    {{ $t('ui.cancel') }}
+                </button>
             </div>
         </div>
 

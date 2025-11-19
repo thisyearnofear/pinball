@@ -30,14 +30,24 @@ function getContract(): ethers.Contract {
 }
 
 // Public read-only contract that doesn't require wallet connection
+// In Farcaster, we should prefer using the connected wallet's provider
 function getPublicContract(): ethers.Contract {
   const { chainId, tournamentManager } = getContractsConfig();
 
-  // Use public RPC provider for read-only operations
+  // CRITICAL FOR FARCASTER: Try to use the connected wallet's provider first
+  // This avoids rate limiting and ensures we're reading from the same network
+  const connectedProvider = web3Service.getProvider();
+  if (connectedProvider) {
+    console.log('Using connected wallet provider for contract reads (Farcaster-compatible)');
+    return new ethers.Contract(tournamentManager.address, TOURNAMENT_MANAGER_ABI, connectedProvider);
+  }
+
+  // Fallback to public RPC only if no wallet is connected
   if (chainId !== 42161) {
     throw new Error(`Unsupported chain ID: ${chainId}. Only Arbitrum One (42161) is supported.`);
   }
 
+  console.log('Using public RPC for contract reads (no wallet connected)');
   const provider = new ethers.JsonRpcProvider('https://arb1.arbitrum.io/rpc');
   return new ethers.Contract(tournamentManager.address, TOURNAMENT_MANAGER_ABI, provider);
 }
@@ -128,6 +138,38 @@ export async function enterTournament(tournamentId: number): Promise<string> {
     const fee: bigint = await c.entryFeeWei();
     console.log('Entry fee:', ethers.formatEther(fee), 'ETH');
 
+    // Validate tournament is active before attempting transaction
+    console.log('Validating tournament status...');
+    try {
+      const tournamentInfo = await getTournamentInfo(tournamentId);
+      const nowSec = Math.floor(Date.now() / 1000);
+
+      console.log('Tournament validation:', {
+        tournamentId,
+        startTime: tournamentInfo.startTime,
+        endTime: tournamentInfo.endTime,
+        currentTime: nowSec,
+        finalized: tournamentInfo.finalized,
+        isActive: nowSec >= tournamentInfo.startTime && nowSec <= tournamentInfo.endTime && !tournamentInfo.finalized,
+        totalPot: ethers.formatEther(tournamentInfo.totalPot) + ' ETH'
+      });
+
+      if (nowSec < tournamentInfo.startTime) {
+        throw new Error('Tournament has not started yet');
+      }
+      if (nowSec > tournamentInfo.endTime) {
+        throw new Error('Tournament has ended');
+      }
+      if (tournamentInfo.finalized) {
+        throw new Error('Tournament is already finalized');
+      }
+
+      console.log('✓ Tournament is active and accepting entries');
+    } catch (validationError: any) {
+      console.error('❌ Tournament validation failed:', validationError);
+      throw validationError;
+    }
+
     // Check balance
     const balance = await signer.provider.getBalance(address);
     console.log('Wallet balance:', ethers.formatEther(balance), 'ETH');
@@ -146,16 +188,38 @@ export async function enterTournament(tournamentId: number): Promise<string> {
 
     // Attempt transaction with explicit gas limit
     console.log('Submitting enterTournament transaction...');
+    console.log('Transaction parameters:', {
+      tournamentId,
+      value: fee.toString(),
+      valueInEth: ethers.formatEther(fee),
+      gasLimit: '300000'
+    });
 
     // Try to get gas estimate for comparison
     try {
       const estimatedGas = await c.enterTournament.estimateGas(tournamentId, { value: fee });
-      console.log('Estimated gas:', estimatedGas.toString());
+      console.log('✓ Gas estimation successful:', estimatedGas.toString());
     } catch (estimateError: any) {
-      console.warn('Gas estimation failed:', estimateError.message);
-      // This is expected in some cases, we'll use our fixed limit
+      console.error('❌ Gas estimation failed:', {
+        code: estimateError.code,
+        message: estimateError.message,
+        reason: estimateError.reason,
+        data: estimateError.data
+      });
+
+      // If gas estimation fails, the transaction will likely fail
+      // This often means the contract call would revert
+      if (estimateError.reason) {
+        throw new Error(`Transaction would fail: ${estimateError.reason}`);
+      }
+      if (estimateError.message?.includes('execution reverted')) {
+        throw new Error('Transaction would be reverted by the contract. Please check tournament status and your balance.');
+      }
+      // Continue anyway with fixed gas limit
+      console.warn('Continuing with fixed gas limit despite estimation failure...');
     }
 
+    console.log('Calling enterTournament on contract...');
     const tx = await c.enterTournament(tournamentId, {
       value: fee,
       gasLimit: 300000n
