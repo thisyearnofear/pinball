@@ -108,7 +108,7 @@ export async function enterTournament(tournamentId: number): Promise<string> {
       console.log('Underlying provider:', underlyingProvider);
     }
 
-    // Check if already entered
+    // Check player's current status (for logging only - pay-per-play model allows multiple entries)
     try {
       const { tournamentManager } = getContractsConfig();
       const checkContract = new ethers.Contract(tournamentManager.address, [
@@ -118,15 +118,11 @@ export async function enterTournament(tournamentId: number): Promise<string> {
       const playerInfo = await checkContract.playerInfo(tournamentId, address);
       console.log('Player info:', {
         entered: playerInfo.entered,
-        bestScore: playerInfo.bestScore.toString()
+        bestScore: playerInfo.bestScore.toString(),
+        playCount: 'Pay-per-play model - each entry adds to pot'
       });
-
-      if (playerInfo.entered) {
-        console.log('✓ Player already entered tournament');
-        return '0x0000000000000000000000000000000000000000000000000000000000000000';
-      }
     } catch (checkError) {
-      console.warn('Could not check if already entered:', checkError);
+      console.warn('Could not check player info:', checkError);
     }
 
     const fee: bigint = await c.entryFeeWei();

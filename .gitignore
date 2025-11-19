@@ -28,6 +28,7 @@ pnpm-debug.log*
 
 .trae
 .qoder
+.gemini
 
 # Local Netlify folder
 .netlify

@@ -22,8 +22,8 @@
         <!-- Success State -->
         <div v-else-if="state === 'success'" class="modal-content modal-content--success">
             <div class="success-icon">✓</div>
-            <h3 v-t="'ui.tournamentJoined'"></h3>
-            <p>{{ $t('ui.readyToCompete') }}</p>
+            <h3>Payment Confirmed!</h3>
+            <p>Your {{ displayEntryFee }} has been added to the pot. {{ $t('ui.readyToCompete') }}</p>
             <button
                 type="button"
                 class="modal-button modal-button--primary"
@@ -86,6 +86,9 @@
                 </div>
             </div>
 
+            <p class="disclaimer pay-per-play-notice">
+                <strong>Pay-Per-Play:</strong> Each game requires a {{ displayEntryFee }} entry fee that contributes to the tournament pot.
+            </p>
             <p v-t="'ui.tournamentDisclaimer'" class="disclaimer"></p>
 
             <div class="confirm-actions">
@@ -95,7 +98,7 @@
                     @click="handleJoin"
                     :disabled="isLoading || wrongChain"
                 >
-                    <span v-if="!isLoading">{{ $t('ui.confirmEntry') }}</span>
+                    <span v-if="!isLoading">Pay {{ displayEntryFee }} & Play</span>
                     <span v-else>{{ $t('ui.processing') }}</span>
                 </button>
                 <button
@@ -297,16 +300,9 @@ export default {
 
                 const txHash = await joinTournament(this.tournamentId);
                 
-                // Check if this is the "already entered" dummy hash
-                if (txHash === '0x0000000000000000000000000000000000000000000000000000000000000000') {
-                    console.log('Player was already entered');
-                    this.state = 'success';
-                    showToast('You are already entered in this tournament', 'success');
-                } else {
-                    console.log('Tournament entry successful:', txHash);
-                    this.state = 'success';
-                    showToast(this.$t('ui.tournamentJoined') as string, 'success');
-                }
+                console.log('Tournament entry successful:', txHash);
+                this.state = 'success';
+                showToast(this.$t('ui.tournamentJoined') as string, 'success');
             } catch (error: any) {
                 console.error('Tournament join error:', error);
                 
@@ -320,17 +316,10 @@ export default {
                     return; // Don't show error state
                 }
                 
-                // Check if this is an "already entered" error
-                if (error.message?.toLowerCase().includes('already entered') || 
-                    error.message?.toLowerCase().includes('duplicate entry')) {
-                    this.state = 'success';
-                    showToast('You are already entered in this tournament', 'success');
-                } else {
-                    // Actual error
-                    this.state = 'error';
-                    this.errorMessage = this.formatErrorMessage(error);
-                    showToast(this.errorMessage, 'error');
-                }
+                // Actual error
+                this.state = 'error';
+                this.errorMessage = this.formatErrorMessage(error);
+                showToast(this.errorMessage, 'error');
             } finally {
                 this.isLoading = false;
             }
@@ -493,6 +482,20 @@ export default {
         color: #ccc;
         margin: $spacing-large 0;
         line-height: 1.5;
+    }
+
+    .pay-per-play-notice {
+        background: rgba(255, 152, 0, 0.1);
+        border: 1px solid rgba(255, 152, 0, 0.3);
+        border-radius: 6px;
+        padding: $spacing-medium;
+        margin: $spacing-medium 0;
+        color: #ffb84d;
+        font-size: 12px;
+
+        strong {
+            color: #ff9500;
+        }
     }
 }
 
