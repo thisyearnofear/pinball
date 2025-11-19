@@ -93,6 +93,12 @@ export async function enterTournament(tournamentId: number): Promise<string> {
       name: network.name
     });
 
+    // CRITICAL: Verify we're on the correct network before attempting transaction
+    const { chainId: expectedChainId } = getContractsConfig();
+    if (Number(network.chainId) !== expectedChainId) {
+      throw new Error(`Wrong network. Please switch to chain ID ${expectedChainId} (Arbitrum One) before entering the tournament. Currently on chain ID ${Number(network.chainId)}.`);
+    }
+
     // Check provider type (Farcaster vs MetaMask)
     const provider = web3Service.getProvider();
     if (provider) {

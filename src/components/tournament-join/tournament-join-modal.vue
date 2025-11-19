@@ -284,6 +284,17 @@ export default {
             this.state = 'loading';
 
             try {
+                // CRITICAL: Verify we're on the correct network before attempting entry
+                await this.checkNetwork();
+                
+                if (this.wrongChain) {
+                    this.isLoading = false;
+                    this.state = 'confirm';
+                    showToast(`Please switch to ${this.targetNetworkName} before entering the tournament`, 'error');
+                    this.errorMessage = `You must be on ${this.targetNetworkName} to enter the tournament`;
+                    return;
+                }
+
                 const txHash = await joinTournament(this.tournamentId);
                 
                 // Check if this is the "already entered" dummy hash
@@ -348,6 +359,9 @@ export default {
                 }
                 if (msg.includes('already entered')) {
                     return this.$t('ui.alreadyEntered');
+                }
+                if (msg.includes('Wrong network') || msg.includes('switch to chain')) {
+                    return msg; // Return the detailed network error message
                 }
                 if ((error.code && error.code === 'BAD_DATA') || msg.includes('could not decode result data')) {
                     return 'Unable to load tournament details. Please refresh and try again.';
