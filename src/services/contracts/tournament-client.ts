@@ -31,15 +31,61 @@ function getContract(): ethers.Contract {
 
 // Public read-only contract that doesn't require wallet connection
 // In Farcaster, we should prefer using the connected wallet's provider
-function getPublicContract(): ethers.Contract {
+async function getPublicContractAsync(): Promise<ethers.Contract> {
   const { chainId, tournamentManager } = getContractsConfig();
 
   // CRITICAL FOR FARCASTER: Try to use the connected wallet's provider first
   // This avoids rate limiting and ensures we're reading from the same network
   const connectedProvider = web3Service.getProvider();
   if (connectedProvider) {
-    console.log('Using connected wallet provider for contract reads (Farcaster-compatible)');
-    return new ethers.Contract(tournamentManager.address, TOURNAMENT_MANAGER_ABI, connectedProvider);
+    try {
+      const network = await connectedProvider.getNetwork();
+      const providerChainId = Number(network.chainId);
+
+      console.log('Connected provider network:', {
+        chainId: providerChainId,
+        expected: chainId,
+        match: providerChainId === chainId
+      });
+
+      if (providerChainId === chainId) {
+        console.log('✓ Using connected wallet provider for contract reads (Farcaster-compatible)');
+        return new ethers.Contract(tournamentManager.address, TOURNAMENT_MANAGER_ABI, connectedProvider);
+      } else {
+        // AUTO-SWITCH: Wallet is on wrong network, try to switch automatically
+        console.warn(`⚠️ Connected wallet is on wrong network (${providerChainId}), attempting auto-switch to ${chainId}`);
+
+        try {
+          // Attempt to switch network
+          await web3Service.switchChain(chainId);
+
+          // After switch, get the updated provider
+          const updatedProvider = web3Service.getProvider();
+          if (updatedProvider) {
+            // Verify the switch worked
+            const newNetwork = await updatedProvider.getNetwork();
+            const newChainId = Number(newNetwork.chainId);
+
+            if (newChainId === chainId) {
+              console.log('✓ Successfully switched to correct network:', chainId);
+              return new ethers.Contract(tournamentManager.address, TOURNAMENT_MANAGER_ABI, updatedProvider);
+            }
+          }
+
+          throw new Error(`Auto-switch failed. Please manually switch to Arbitrum One (chain ID ${chainId})`);
+        } catch (switchError: any) {
+          console.error('Network auto-switch failed:', switchError);
+          // If user rejected the switch, throw a clear error
+          if (switchError.code === 4001 || switchError.message?.includes('User rejected')) {
+            throw new Error('Network switch was rejected. Please switch to Arbitrum One to continue.');
+          }
+          throw new Error(`Wallet is on wrong network. Please switch to Arbitrum One (chain ID ${chainId})`);
+        }
+      }
+    } catch (error) {
+      console.error('Error with connected provider:', error);
+      throw error;
+    }
   }
 
   // Fallback to public RPC only if no wallet is connected
@@ -52,19 +98,33 @@ function getPublicContract(): ethers.Contract {
   return new ethers.Contract(tournamentManager.address, TOURNAMENT_MANAGER_ABI, provider);
 }
 
+// Synchronous version for backwards compatibility - uses public RPC
+function getPublicContract(): ethers.Contract {
+  const { chainId, tournamentManager } = getContractsConfig();
+
+  // For sync calls, use public RPC
+  // Callers should migrate to async version for Farcaster compatibility
+  if (chainId !== 42161) {
+    throw new Error(`Unsupported chain ID: ${chainId}. Only Arbitrum One (42161) is supported.`);
+  }
+
+  const provider = new ethers.JsonRpcProvider('https://arb1.arbitrum.io/rpc');
+  return new ethers.Contract(tournamentManager.address, TOURNAMENT_MANAGER_ABI, provider);
+}
+
 export async function getActiveTournamentId(): Promise<number> {
-  // Prefer public contract for read-only operations to avoid wallet state issues
+  // Use async version to support Farcaster wallet provider
   try {
-    const c = getPublicContract();
+    const c = await getPublicContractAsync();
     return await _getActiveTournamentId(c);
   } catch (error: any) {
-    // Fallback to wallet provider if public RPC fails
-    console.warn('Public RPC failed, trying wallet provider:', error);
+    // Fallback to public RPC if wallet provider fails
+    console.warn('Async provider failed, trying public RPC:', error);
     try {
-      const c = getContract();
+      const c = getPublicContract();
       return await _getActiveTournamentId(c);
     } catch (walletError) {
-      console.error('Both public and wallet providers failed:', walletError);
+      console.error('Both async and public providers failed:', walletError);
       throw error; // Throw original error
     }
   }
@@ -398,22 +458,22 @@ async function _fetchLeaderboard(
 
 export async function getEntryFeeWei(): Promise<bigint> {
   try {
-    const c = getPublicContract();
+    const c = await getPublicContractAsync();
     return await c.entryFeeWei();
   } catch (error: any) {
-    console.warn('Public RPC failed for getEntryFeeWei, trying wallet provider:', error);
-    const c = getContract();
+    console.warn('Async provider failed for getEntryFeeWei, trying public RPC:', error);
+    const c = getPublicContract();
     return await c.entryFeeWei();
   }
 }
 
 export async function getTournamentInfo(tournamentId: number, retries = 3): Promise<{ startTime: number; endTime: number; topN: number; finalized: boolean; totalPot: bigint; }> {
   try {
-    const c = getPublicContract();
+    const c = await getPublicContractAsync();
     return await _getTournamentInfo(c, tournamentId, retries);
   } catch (error: any) {
-    console.warn('Public RPC failed for getTournamentInfo, trying wallet provider:', error);
-    const c = getContract();
+    console.warn('Async provider failed for getTournamentInfo, trying public RPC:', error);
+    const c = getPublicContract();
     return await _getTournamentInfo(c, tournamentId, retries);
   }
 }

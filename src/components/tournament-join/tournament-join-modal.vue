@@ -275,15 +275,30 @@ export default {
                 return;
             }
             try {
+                console.log('Loading tournament details for ID:', this.tournamentId);
+                
                 const fee = await getEntryFeeWei();
+                console.log('Entry fee loaded:', ethers.formatEther(fee), 'ETH');
                 this.entryFeeWei = fee;
+                
                 const info = await getTournamentInfo(this.tournamentId);
+                console.log('Tournament info loaded:', info);
                 this.endTime = info.endTime;
+                
+                // Validate we got real data
+                if (fee === 0n) {
+                    throw new Error('Failed to load entry fee - got 0 ETH');
+                }
+                if (info.endTime === 0) {
+                    throw new Error('Failed to load tournament end time');
+                }
+                
                 this.state = 'confirm';
             } catch (error) {
                 console.error('Failed to load tournament details:', error);
                 this.state = 'error';
-                this.errorMessage = this.formatErrorMessage(error);
+                this.errorMessage = 'Failed to load tournament details. ' + this.formatErrorMessage(error);
+                showToast('Failed to load tournament details', 'error');
             }
         },
         async handleJoin(): Promise<void> {
