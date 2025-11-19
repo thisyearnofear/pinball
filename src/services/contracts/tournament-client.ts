@@ -243,7 +243,7 @@ export async function enterTournament(tournamentId: number): Promise<string> {
         console.warn('Could not fetch tournament info:', infoError);
       }
 
-      throw new Error('Transaction failed - tournament may not be active or you may have already entered');
+      throw new Error('Transaction failed - tournament may not be active');
     }
 
     if (error.code === 'ACTION_REJECTED' || error.code === 4001) {

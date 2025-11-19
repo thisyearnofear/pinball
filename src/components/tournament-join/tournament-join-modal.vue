@@ -86,9 +86,6 @@
                 </div>
             </div>
 
-            <p class="disclaimer pay-per-play-notice">
-                <strong>Pay-Per-Play:</strong> Each game requires a {{ displayEntryFee }} entry fee that contributes to the tournament pot.
-            </p>
             <p v-t="'ui.tournamentDisclaimer'" class="disclaimer"></p>
 
             <div class="confirm-actions">
@@ -346,9 +343,6 @@ export default {
                 if (msg.includes('insufficient funds')) {
                     return this.$t('ui.insufficientFunds');
                 }
-                if (msg.includes('already entered')) {
-                    return this.$t('ui.alreadyEntered');
-                }
                 if (msg.includes('Wrong network') || msg.includes('switch to chain')) {
                     return msg; // Return the detailed network error message
                 }
@@ -482,20 +476,6 @@ export default {
         color: #ccc;
         margin: $spacing-large 0;
         line-height: 1.5;
-    }
-
-    .pay-per-play-notice {
-        background: rgba(255, 152, 0, 0.1);
-        border: 1px solid rgba(255, 152, 0, 0.3);
-        border-radius: 6px;
-        padding: $spacing-medium;
-        margin: $spacing-medium 0;
-        color: #ffb84d;
-        font-size: 12px;
-
-        strong {
-            color: #ff9500;
-        }
     }
 }
 
