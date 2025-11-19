@@ -42,11 +42,7 @@ async function getPublicContractAsync(): Promise<ethers.Contract> {
       const network = await connectedProvider.getNetwork();
       const providerChainId = Number(network.chainId);
 
-      console.log('Connected provider network:', {
-        chainId: providerChainId,
-        expected: chainId,
-        match: providerChainId === chainId
-      });
+      console.log(`🔍 Network Check: Wallet is on chain ${providerChainId}, expected ${chainId}, match: ${providerChainId === chainId}`);
 
       if (providerChainId === chainId) {
         console.log('✓ Using connected wallet provider for contract reads (Farcaster-compatible)');
