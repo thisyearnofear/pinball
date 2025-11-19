@@ -284,17 +284,36 @@ export default {
             this.state = 'loading';
 
             try {
-                await joinTournament(this.tournamentId);
-                this.state = 'success';
-                showToast(this.$t('ui.tournamentJoined') as string, 'success');
-            } catch (error) {
+                const txHash = await joinTournament(this.tournamentId);
+                
+                // Check if this is the "already entered" dummy hash
+                if (txHash === '0x0000000000000000000000000000000000000000000000000000000000000000') {
+                    console.log('Player was already entered');
+                    this.state = 'success';
+                    showToast('You are already entered in this tournament', 'success');
+                } else {
+                    console.log('Tournament entry successful:', txHash);
+                    this.state = 'success';
+                    showToast(this.$t('ui.tournamentJoined') as string, 'success');
+                }
+            } catch (error: any) {
                 console.error('Tournament join error:', error);
                 
-                // Check if this is an "already entered" error which is fine
-                if (error instanceof Error && (error.message.includes('already') || error.message.includes('duplicate') || error.message.includes('NOT_ENTERED'))) {
-                    // User is already entered, treat as success
+                // Check for user rejection first
+                if (error.code === 'ACTION_REJECTED' || error.code === 4001 || 
+                    error.message?.toLowerCase().includes('user rejected') ||
+                    error.message?.toLowerCase().includes('user denied')) {
+                    console.log('User cancelled tournament entry');
+                    this.state = 'confirm'; // Return to confirmation state
+                    showToast('Tournament entry cancelled', 'info');
+                    return; // Don't show error state
+                }
+                
+                // Check if this is an "already entered" error
+                if (error.message?.toLowerCase().includes('already entered') || 
+                    error.message?.toLowerCase().includes('duplicate entry')) {
                     this.state = 'success';
-                    showToast(this.$t('ui.alreadyEntered') as string, 'success');
+                    showToast('You are already entered in this tournament', 'success');
                 } else {
                     // Actual error
                     this.state = 'error';

@@ -220,7 +220,17 @@ export const stopGame = async (gameId: string, score: number, playerName?: strin
                 submitted.push(submissionKey);
                 setInStorage('ps_submitted_scores', JSON.stringify(submitted));
             } catch { }
-        } catch (err) {
+        } catch (err: any) {
+            // Check for user rejection first (most common user action)
+            if (err.code === 'ACTION_REJECTED' || err.code === 4001 ||
+                err.message?.toLowerCase().includes('user rejected') ||
+                err.message?.toLowerCase().includes('user denied')) {
+                console.log('User cancelled score submission');
+                showToast('Score submission cancelled', 'info');
+                notifySubmissionState('error', 'You cancelled the transaction');
+                throw new Error('Score submission cancelled by user');
+            }
+
             // More detailed error logging
             console.error('Score submission to blockchain failed:', {
                 error: err,
@@ -236,22 +246,21 @@ export const stopGame = async (gameId: string, score: number, playerName?: strin
             let errorMessage = 'Failed to submit to blockchain';
             if (err instanceof Error) {
                 const errorStr = err.message.toLowerCase();
-                if (errorStr.includes('tournament') || errorStr.includes('active')) {
+                if (errorStr.includes('not_entered')) {
+                    errorMessage = 'You must enter the tournament before submitting scores. Please join the tournament first.';
+                    showToast('Please enter the tournament first', 'error');
+                } else if (errorStr.includes('tournament') || errorStr.includes('active')) {
                     errorMessage = 'Tournament may not be active';
                 } else if (errorStr.includes('not_active')) {
                     errorMessage = 'Tournament is not active for score submission';
-                } else if (errorStr.includes('not_entered')) {
-                    errorMessage = 'You have not entered this tournament';
                 } else if (errorStr.includes('invalid_nonce')) {
                     errorMessage = 'Invalid nonce - score submission rejected';
-                } else if (errorStr.includes('bad_sig') || errorStr.includes('bad_sig')) {
+                } else if (errorStr.includes('bad_sig')) {
                     errorMessage = 'Invalid signature - score verification failed';
                 } else if (errorStr.includes('require') || errorStr.includes('revert')) {
                     errorMessage = 'Transaction failed - common causes: not entered, tournament inactive, or invalid signature';
                 } else if (errorStr.includes('gas') || errorStr.includes('estimate')) {
                     errorMessage = 'Transaction failed - check gas settings or balance';
-                } else if (errorStr.includes('user rejected') || errorStr.includes('denied')) {
-                    errorMessage = 'Transaction was rejected';
                 }
             }
 

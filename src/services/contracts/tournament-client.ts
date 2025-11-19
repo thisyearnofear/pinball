@@ -168,6 +168,35 @@ export async function enterTournament(tournamentId: number): Promise<string> {
       status: receipt?.status,
       gasUsed: receipt?.gasUsed?.toString()
     });
+
+    // CRITICAL: Verify the player is actually entered after transaction
+    console.log('Verifying tournament entry...');
+    try {
+      const { tournamentManager } = getContractsConfig();
+      const checkContract = new ethers.Contract(tournamentManager.address, [
+        "function playerInfo(uint256,address) view returns (bool entered, uint256 bestScore, bool rewardClaimed)"
+      ], signer.provider);
+
+      // Wait a bit for state to update
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const playerInfo = await checkContract.playerInfo(tournamentId, address);
+      console.log('Post-entry player info:', {
+        entered: playerInfo.entered,
+        bestScore: playerInfo.bestScore.toString()
+      });
+
+      if (!playerInfo.entered) {
+        console.error('❌ Transaction succeeded but player is NOT entered!');
+        throw new Error('Entry transaction succeeded but player was not registered. Please try again.');
+      }
+
+      console.log('✓ Entry verified successfully');
+    } catch (verifyError) {
+      console.error('Entry verification failed:', verifyError);
+      throw verifyError;
+    }
+
     console.log('=== END DEBUG ===');
 
     return receipt?.hash as string;
