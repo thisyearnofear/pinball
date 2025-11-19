@@ -57,7 +57,8 @@
             "fetchingDetails": "Fetching tournament details...",
             "entryFee": "Entry Fee",
             "returnToMenu": "Return to Menu",
-            "practiceMode": "Practice Mode"
+            "practiceMode": "Practice Mode",
+            "mainMenu": "Main Menu"
         },
         "messages": {
             "gotLucky": "Got lucky",

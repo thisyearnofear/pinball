@@ -80,6 +80,29 @@
         <p class="submission-subtitle">{{ errorMessage }}</p>
         <button class="submission-btn retry" @click="$emit('retry')">Try Again</button>
       </div>
+      
+      <!-- Step: Skipped (Score Not Improved) -->
+      <div v-else-if="step === 'skipped'" class="submission-step">
+        <div class="submission-icon info">
+          <div class="icon-info">★</div>
+        </div>
+        <h2 class="submission-title">Personal Best Maintained</h2>
+        <p class="submission-subtitle">Your previous high score is higher!</p>
+        <div class="submission-progress">
+          <div class="progress-step active">
+            <div class="step-dot"></div>
+            <div class="step-label">Validating</div>
+          </div>
+          <div class="progress-step active">
+            <div class="step-dot"></div>
+            <div class="step-label">Skipped</div>
+          </div>
+          <div class="progress-step active">
+            <div class="step-dot"></div>
+            <div class="step-label">Done</div>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 </template>
@@ -91,7 +114,7 @@ export default {
     step: { 
       type: String, 
       default: 'validating',
-      validator: (v: string) => ['validating', 'signing', 'ready', 'error'].includes(v)
+      validator: (v: string) => ['validating', 'signing', 'ready', 'error', 'skipped'].includes(v)
     },
     errorMessage: { type: String, default: 'An error occurred. Please try again.' },
   },
@@ -170,6 +193,11 @@ export default {
     background: rgba(255, 100, 100, 0.15);
     border-color: rgba(255, 100, 100, 0.4);
   }
+  
+  &.info {
+    background: rgba(255, 215, 0, 0.15);
+    border-color: rgba(255, 215, 0, 0.4);
+  }
 }
 
 .icon-check, .icon-error {
@@ -181,6 +209,13 @@ export default {
   &.error {
     color: #ff6464;
   }
+}
+
+.icon-info {
+  font-size: 40px;
+  font-weight: bold;
+  color: #FFD700;
+  animation: scaleIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 @keyframes scaleIn {

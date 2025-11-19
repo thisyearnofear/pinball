@@ -85,10 +85,10 @@
                 <li v-if="showReturnToMenu" class="menu__return-to-menu">
                     <button
                         type="button"
-                        :title="$t('ui.returnToMenu')"
+                        :title="gameActive ? $t('ui.returnToMenu') : $t('ui.mainMenu')"
                         @click="returnToMenu"
                     >
-                        {{ $t('ui.returnToMenu') }}
+                        {{ gameActive ? $t('ui.returnToMenu') : $t('ui.mainMenu') }}
                     </button>
                 </li>
                 
@@ -141,6 +141,10 @@ export default {
         gameActive: {
             type: Boolean,
             default: false
+        },
+        showMainMenu: {
+            type: Boolean,
+            default: false
         }
     },
     data() {
@@ -172,7 +176,7 @@ export default {
             return this.isFarcaster;
         },
         showReturnToMenu(): boolean {
-            return this.gameActive && this.isWalletConnected;
+            return this.showMainMenu;
         },
     },
     methods: {

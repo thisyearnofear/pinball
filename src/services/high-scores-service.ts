@@ -127,10 +127,12 @@ export const stopGame = async (gameId: string, score: number, playerName?: strin
             const existing = await fetchLeaderboard(tournamentId, 0, 100);
             const mine = existing.find(r => r.address.toLowerCase() === address.toLowerCase());
             if (mine && mine.score >= score) {
-                showToast('You already have an equal or higher score on the leaderboard', 'info');
-                return [];
+                throw new Error('SCORE_NOT_IMPROVED');
             }
-        } catch (leaderboardError) {
+        } catch (leaderboardError: any) {
+            if (leaderboardError.message === 'SCORE_NOT_IMPROVED') {
+                throw leaderboardError;
+            }
             console.warn('Could not fetch leaderboard for duplicate check:', leaderboardError);
             // Continue anyway - just couldn't check for duplicates
         }

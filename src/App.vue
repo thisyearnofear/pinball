@@ -28,6 +28,7 @@
             :show-connect-button="game.active"
             :game-active="game.active"
             :is-farcaster="isFarcaster"
+            :show-main-menu="showMainMenuInHeader"
             @open="activeScreen = $event"
             @wallet-connected="onWalletConnected"
             @wallet-disconnected="onWalletDisconnected"
@@ -202,7 +203,9 @@ export default {
             // Practice mode unless user explicitly chooses tournament mode
             return !this.isTournamentMode;
         },
-    },
+        showMainMenuInHeader(): boolean {
+            return this.game.active || !!this.activeScreen || this.showCelebration;
+        },
     watch: {
         "game.active"( value: boolean, prevValue: boolean ): void {
             if ( value ) {
@@ -516,6 +519,16 @@ export default {
             } catch (error) {
                 console.error('Score submission failed:', error);
                 const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+                
+                if (errorMsg === 'SCORE_NOT_IMPROVED') {
+                     this.submissionStep = 'skipped';
+                     // Wait then show celebration
+                     await new Promise(resolve => setTimeout(resolve, 2500));
+                     this.showSubmissionOverlay = false;
+                     this.showCelebration = true;
+                     return;
+                }
+
                 this.submissionErrorMessage = errorMsg;
                 this.submissionStep = 'error';
                 this.showToast(`Score submission failed: ${errorMsg}`, 'error');
