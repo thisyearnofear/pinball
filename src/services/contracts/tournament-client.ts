@@ -190,9 +190,20 @@ export async function enterTournament(tournamentId: number): Promise<string> {
     });
 
     console.log('Transaction submitted:', tx.hash);
-    console.log('Waiting for confirmation...');
+    console.log('Waiting for confirmation via Public RPC...');
 
-    const receipt = await tx.wait();
+    // Use Public RPC to wait for confirmation since Farcaster provider doesn't support eth_getTransactionReceipt
+    const publicProvider = publicContract.runner?.provider;
+    let receipt;
+
+    if (publicProvider) {
+      // @ts-ignore - waitForTransaction exists on Provider in v6
+      receipt = await publicProvider.waitForTransaction(tx.hash);
+    } else {
+      console.warn('Public provider not available for waiting, trying default...');
+      receipt = await tx.wait();
+    }
+
     console.log('Transaction confirmed:', {
       hash: receipt?.hash,
       status: receipt?.status,
@@ -312,8 +323,17 @@ export async function submitScoreWithSignature(
   const tx = await c.submitScoreWithSignature(tournamentId, score, nonce, name, metadata, signature, {
     gasLimit: gasLimit
   });
-  const receipt = await tx.wait();
-  return receipt?.hash as string;
+
+  // Use Public RPC to wait for confirmation since Farcaster provider doesn't support eth_getTransactionReceipt
+  const publicProvider = publicContract.runner?.provider;
+  if (publicProvider) {
+    // @ts-ignore - waitForTransaction exists on Provider in v6
+    await publicProvider.waitForTransaction(tx.hash);
+  } else {
+    await tx.wait();
+  }
+
+  return tx.hash;
 }
 
 export async function fetchLeaderboard(
