@@ -24,6 +24,7 @@ export async function requestScoreSignature(params: {
   });
   return {
     signature: data.signature as string,
-    nonce: data.nonce as number,
+    nonce: String(data.nonce),
   };
 }
+

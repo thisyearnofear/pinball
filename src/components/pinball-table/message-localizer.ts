@@ -24,11 +24,11 @@ import type { GameDef } from "@/definitions/game";
 import { GameMessages } from "@/definitions/game";
 import { i18n } from "../../i18n";
 
-export const i18nForMessage = ( message: GameMessages, game: GameDef ): string => {
+export const i18nForMessage = (message: GameMessages, game: GameDef): string => {
     let key: string = "";
     let optData: any;
 
-    switch ( message ) {
+    switch (message) {
         default:
             break
         case GameMessages.GOT_LUCKY:
@@ -65,6 +65,6 @@ export const i18nForMessage = ( message: GameMessages, game: GameDef ): string =
             optData = { count: game.multiplier };
             break;
     }
-    // @ts-expect-error Type instantiation is excessively deep and possibly infinite.
-    return i18n.t( `messages.${key}`, optData );
+
+    return i18n.t(`messages.${key}`, optData);
 };

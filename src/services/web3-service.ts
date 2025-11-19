@@ -375,7 +375,7 @@ class Web3Service extends EventEmitter {
             }
 
             // Request account access (this will prompt user if not already connected)
-            const accounts = await provider.request({ method: 'eth_requestAccounts' });
+            const accounts = await provider.request({ method: 'eth_requestAccounts' }) as string[];
 
             if (!accounts || accounts.length === 0) {
                 throw new Error('No accounts returned from Farcaster wallet');

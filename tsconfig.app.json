@@ -1,9 +1,14 @@
 {
-    "include": [ "env.d.ts", "src/**/*", "src/**/*.vue" ],
-    "exclude": [],
+    "include": [
+        "env.d.ts",
+        "src/**/*",
+        "src/**/*.vue"
+    ],
     "compilerOptions": {
-        "target": "es6",
-        "module": "commonjs",
+        "target": "es2020",
+        "module": "es2020",
+        "moduleResolution": "node",
+        "noEmit": true,
         "composite": true,
         "baseUrl": ".",
         "esModuleInterop": true,
@@ -13,7 +18,10 @@
         "noImplicitAny": true,
         "removeComments": true,
         "paths": {
-            "@/*": [ "./src/*", "./tests/*" ]
+            "@/*": [
+                "./src/*",
+                "./tests/*"
+            ]
         }
     },
     "exclude": [
