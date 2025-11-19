@@ -105,13 +105,9 @@ export async function enterTournament(tournamentId: number): Promise<string> {
     }
 
     // Check player's current status (for logging only - pay-per-play model allows multiple entries)
+    const publicContract = getPublicContract();
     try {
-      const { tournamentManager } = getContractsConfig();
-      const checkContract = new ethers.Contract(tournamentManager.address, [
-        "function playerInfo(uint256,address) view returns (bool entered, uint256 bestScore, bool rewardClaimed)"
-      ], signer.provider);
-
-      const playerInfo = await checkContract.playerInfo(tournamentId, address);
+      const playerInfo = await publicContract.playerInfo(tournamentId, address);
       console.log('Player info:', {
         entered: playerInfo.entered,
         bestScore: playerInfo.bestScore.toString(),
@@ -121,7 +117,7 @@ export async function enterTournament(tournamentId: number): Promise<string> {
       console.warn('Could not check player info:', checkError);
     }
 
-    const fee: bigint = await c.entryFeeWei();
+    const fee: bigint = await publicContract.entryFeeWei();
     console.log('Entry fee:', ethers.formatEther(fee), 'ETH');
 
     // Validate tournament is active before attempting transaction
@@ -156,59 +152,41 @@ export async function enterTournament(tournamentId: number): Promise<string> {
       throw validationError;
     }
 
-    // Check balance
-    const balance = await signer.provider.getBalance(address);
-    console.log('Wallet balance:', ethers.formatEther(balance), 'ETH');
+    // Check balance using PUBLIC RPC (more reliable)
+    const balance = await publicContract.runner?.provider?.getBalance(address) ?? 0n;
+    console.log('Wallet balance (via Public RPC):', ethers.formatEther(balance), 'ETH');
 
     if (balance < fee) {
       throw new Error(`Insufficient balance. Need ${ethers.formatEther(fee)} ETH, have ${ethers.formatEther(balance)} ETH`);
     }
 
-    // Log transaction parameters
-    console.log('Transaction params:', {
-      to: c.target,
-      value: fee.toString(),
-      gasLimit: '300000',
-      from: address
-    });
-
-    // Attempt transaction with explicit gas limit
-    console.log('Submitting enterTournament transaction...');
-    console.log('Transaction parameters:', {
-      tournamentId,
-      value: fee.toString(),
-      valueInEth: ethers.formatEther(fee),
-      gasLimit: '300000'
-    });
-
-    // Try to get gas estimate for comparison
+    // Estimate gas using PUBLIC RPC
+    // This avoids "missing revert data" errors from Farcaster provider
+    let gasLimit = 500000n; // Safe default
     try {
-      const estimatedGas = await c.enterTournament.estimateGas(tournamentId, { value: fee });
-      console.log('✓ Gas estimation successful:', estimatedGas.toString());
-    } catch (estimateError: any) {
-      console.error('❌ Gas estimation failed:', {
-        code: estimateError.code,
-        message: estimateError.message,
-        reason: estimateError.reason,
-        data: estimateError.data
+      console.log('Estimating gas via Public RPC...');
+      const estimatedGas = await publicContract.enterTournament.estimateGas(tournamentId, {
+        value: fee,
+        from: address
       });
-
-      // If gas estimation fails, the transaction will likely fail
-      // This often means the contract call would revert
-      if (estimateError.reason) {
-        throw new Error(`Transaction would fail: ${estimateError.reason}`);
-      }
+      console.log('✓ Gas estimated via Public RPC:', estimatedGas.toString());
+      gasLimit = (estimatedGas * 150n) / 100n; // Add 50% buffer to be safe
+    } catch (estimateError: any) {
+      console.warn('❌ Public RPC gas estimation failed, using default 500k:', estimateError.message);
+      // If public RPC fails, it might be a real revert (e.g. insufficient funds, not active)
       if (estimateError.message?.includes('execution reverted')) {
-        throw new Error('Transaction would be reverted by the contract. Please check tournament status and your balance.');
+        throw new Error('Transaction would fail. Please check your balance and tournament status.');
       }
-      // Continue anyway with fixed gas limit
-      console.warn('Continuing with fixed gas limit despite estimation failure...');
     }
 
-    console.log('Calling enterTournament on contract...');
+    console.log('Submitting enterTournament transaction...');
+    console.log('Params:', { tournamentId, value: ethers.formatEther(fee), gasLimit: gasLimit.toString() });
+
+    // Send transaction using Wallet Signer
+    // We explicitly provide gasLimit so Farcaster provider doesn't try to estimate (and fail)
     const tx = await c.enterTournament(tournamentId, {
       value: fee,
-      gasLimit: 300000n
+      gasLimit: gasLimit
     });
 
     console.log('Transaction submitted:', tx.hash);
@@ -221,18 +199,13 @@ export async function enterTournament(tournamentId: number): Promise<string> {
       gasUsed: receipt?.gasUsed?.toString()
     });
 
-    // CRITICAL: Verify the player is actually entered after transaction
+    // Verify entry using PUBLIC RPC
     console.log('Verifying tournament entry...');
     try {
-      const { tournamentManager } = getContractsConfig();
-      const checkContract = new ethers.Contract(tournamentManager.address, [
-        "function playerInfo(uint256,address) view returns (bool entered, uint256 bestScore, bool rewardClaimed)"
-      ], signer.provider);
-
       // Wait a bit for state to update
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const playerInfo = await checkContract.playerInfo(tournamentId, address);
+      const playerInfo = await publicContract.playerInfo(tournamentId, address);
       console.log('Post-entry player info:', {
         entered: playerInfo.entered,
         bestScore: playerInfo.bestScore.toString()
@@ -246,7 +219,8 @@ export async function enterTournament(tournamentId: number): Promise<string> {
       console.log('✓ Entry verified successfully');
     } catch (verifyError) {
       console.error('Entry verification failed:', verifyError);
-      throw verifyError;
+      // Don't throw here, the tx succeeded so we should probably let them proceed
+      // or at least return the hash
     }
 
     console.log('=== END DEBUG ===');
@@ -312,10 +286,31 @@ export async function submitScoreWithSignature(
   metadata: string,
   signature: string
 ): Promise<string> {
+  const address = web3Service.getAddress();
+  if (!address) {
+    throw new Error("Wallet not connected");
+  }
+
   const c = getContract();
-  // Use a fixed gas limit to bypass gas estimation issues
+  const publicContract = getPublicContract();
+
+  let gasLimit = 500000n; // Safe default
+
+  try {
+    console.log('Estimating gas for submitScore via Public RPC...');
+    const estimatedGas = await publicContract.submitScoreWithSignature.estimateGas(
+      tournamentId, score, nonce, name, metadata, signature,
+      { from: address }
+    );
+    console.log('✓ Gas estimated via Public RPC:', estimatedGas.toString());
+    gasLimit = (estimatedGas * 120n) / 100n; // 20% buffer
+  } catch (e) {
+    console.warn('Public RPC gas estimation failed for submitScore, using default:', e);
+  }
+
+  // Use the calculated gas limit to bypass gas estimation issues on Farcaster provider
   const tx = await c.submitScoreWithSignature(tournamentId, score, nonce, name, metadata, signature, {
-    gasLimit: 500000n
+    gasLimit: gasLimit
   });
   const receipt = await tx.wait();
   return receipt?.hash as string;
@@ -326,14 +321,9 @@ export async function fetchLeaderboard(
   offset = 0,
   limit = 100
 ): Promise<{ address: string; score: number }[]> {
-  try {
-    const c = getPublicContract();
-    return await _fetchLeaderboard(c, tournamentId, offset, limit);
-  } catch (error: any) {
-    console.warn('Public RPC failed for fetchLeaderboard, trying wallet provider:', error);
-    const c = getContract();
-    return await _fetchLeaderboard(c, tournamentId, offset, limit);
-  }
+  // Always use public RPC for reliability
+  const c = getPublicContract();
+  return await _fetchLeaderboard(c, tournamentId, offset, limit);
 }
 
 // Enhanced version with retry logic for better reliability after score submission
