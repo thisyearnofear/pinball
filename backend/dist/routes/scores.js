@@ -11,6 +11,7 @@ const SignBody = z.object({
     score: z.number().int().nonnegative(),
     name: z.string().default(''), // Wallet-derived, no length limit
     metadata: z.string().default(''),
+    nonce: z.string().optional(),
 });
 export async function scoresRoutes(app) {
     app.post('/api/scores/sign', async (req, reply) => {
@@ -66,9 +67,11 @@ export async function scoresRoutes(app) {
             return reply.code(400).send({ error: 'VALIDATION_FAILED' });
         }
         const { sanitized: { tournamentId: tid, address: addr, score: s, name: n, metadata: m } } = validationResult;
+        // Get nonce from request or tracker
+        const nonceStr = parsed.data.nonce;
         try {
             // Get next nonce for this player
-            const nonce = nonceTracker.getNextNonce(tid, addr);
+            const nonce = nonceStr ? BigInt(nonceStr) : nonceTracker.getNextNonce(tid, addr);
             const signature = await signScore(env.SCORE_SIGNER_PK, tid, addr, s, nonce, n, metadata // Use original metadata string, not JSON.stringify(m)
             );
             // Log the parameters for debugging

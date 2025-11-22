@@ -17,6 +17,7 @@ export async function requestScoreSignature(params: {
   score: number;
   name?: string;
   metadata?: string;
+  nonce?: string;
 }): Promise<ScoreSignatureResponse> {
   if (!API_BASE) throw new Error('Backend URL not configured');
   const { data } = await axios.post(`${API_BASE}/api/scores/sign`, params, {

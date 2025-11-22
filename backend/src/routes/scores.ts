@@ -13,6 +13,7 @@ const SignBody = z.object({
   score: z.number().int().nonnegative(),
   name: z.string().default(''),  // Wallet-derived, no length limit
   metadata: z.string().default(''),
+  nonce: z.string().optional(),
 });
 
 export async function scoresRoutes(app: FastifyInstance) {
@@ -78,9 +79,12 @@ export async function scoresRoutes(app: FastifyInstance) {
       sanitized: { tournamentId: tid, address: addr, score: s, name: n, metadata: m }
     } = validationResult;
 
+    // Get nonce from request or tracker
+    const nonceStr = parsed.data.nonce;
+
     try {
       // Get next nonce for this player
-      const nonce = nonceTracker.getNextNonce(tid, addr);
+      const nonce = nonceStr ? BigInt(nonceStr) : nonceTracker.getNextNonce(tid, addr);
 
       const signature = await signScore(
         env.SCORE_SIGNER_PK,
@@ -91,7 +95,7 @@ export async function scoresRoutes(app: FastifyInstance) {
         n,
         metadata // Use original metadata string, not JSON.stringify(m)
       );
-      
+
       // Log the parameters for debugging
       app.log.info({
         event: 'SCORE_SIGNING_DEBUG',
@@ -103,7 +107,7 @@ export async function scoresRoutes(app: FastifyInstance) {
         metadata: metadata,
         signatureLength: signature.length
       });
-      
+
       // Also log the nameHash and metaHash that would be generated
       const nameHash = keccak256(toUtf8Bytes(n || ''));
       const metaHash = keccak256(toUtf8Bytes(metadata || ''));

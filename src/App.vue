@@ -206,6 +206,7 @@ export default {
         showMainMenuInHeader(): boolean {
             return this.game.active || !!this.activeScreen || this.showCelebration;
         },
+    },
     watch: {
         "game.active"( value: boolean, prevValue: boolean ): void {
             if ( value ) {
@@ -561,4 +562,3 @@ body {
     background-color: $color-bg;
 }
 </style>
-import GameCompleteCelebration from "@/components/celebration/game-complete-celebration.vue";

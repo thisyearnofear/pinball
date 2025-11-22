@@ -153,15 +153,41 @@ export const stopGame = async (gameId: string, score: number, playerName?: strin
         notifySubmissionState('signing');
         let signature: string;
         let nonce: string;
+
+        // Fetch current nonce from contract to ensure synchronization
+        let nextNonce: string | undefined;
+        try {
+            const contractAddress = getContractsConfig().tournamentManager.address;
+            const provider = web3Service.getProvider();
+            if (provider) {
+                const contract = new ethers.Contract(contractAddress, [
+                    "function playerNonces(uint256,address) view returns (uint256)"
+                ], provider);
+                const lastNonce = await contract.playerNonces(tournamentId, address);
+                nextNonce = (BigInt(lastNonce) + 1n).toString();
+                console.log('Fetched next nonce from contract:', nextNonce);
+            }
+        } catch (nonceErr) {
+            console.warn('Could not fetch nonce from contract, relying on backend:', nonceErr);
+        }
+
         try {
             console.log('Requesting score signature from backend with params:', {
                 tournamentId,
                 address,
                 score,
                 name: playerName || '',
-                metadata
+                metadata,
+                nonce: nextNonce
             });
-            const response = await requestScoreSignature({ tournamentId, address, score, name: playerName || '', metadata });
+            const response = await requestScoreSignature({
+                tournamentId,
+                address,
+                score,
+                name: playerName || '',
+                metadata,
+                nonce: nextNonce
+            });
             signature = response.signature;
             nonce = response.nonce;
             console.log('Received signature and nonce from backend:', { nonce });
