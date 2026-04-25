@@ -176,7 +176,7 @@ import { PropType } from "vue";
 import Tables from "@/definitions/tables";
 import { web3Service } from "@/services/web3-service";
 import TournamentJoinModal from "@/components/tournament-join/tournament-join-modal.vue";
-import { getEntryFeeWei, getTournamentInfo, getActiveTournamentId, getPrizeBps } from "@/services/contracts/tournament-client";
+import { getEntryFee, getTournamentInfo, getActiveTournamentId, getPrizeBps } from "@/services/contracts/tournament-client";
 import { ethers } from "ethers";
 import { estimatedPrizeBps } from "@/services/prize";
 
@@ -248,16 +248,16 @@ export default {
     },
     displayEntryFee(): string {
         try {
-            const eth = ethers.formatEther(this.entryFeeWei);
-            return `${eth} ETH`;
+            const v = ethers.formatUnits(this.entryFeeWei, 18);
+            return `${v} MUSD`;
         } catch {
             return '';
         }
     },
     displayPot(): string {
         try {
-            const eth = ethers.formatEther(this.totalPotWei);
-            return `${eth} ETH`;
+            const v = ethers.formatUnits(this.totalPotWei, 18);
+            return `${v} MUSD`;
         } catch {
             return '';
         }
@@ -266,9 +266,9 @@ export default {
         if (!this.prizeBps || !this.prizeBps.length || !this.totalPotWei) return '';
         const parts = this.prizeBps.map((bps, idx) => {
             const wei = (this.totalPotWei * BigInt(bps)) / 10000n;
-            const eth = Number(ethers.formatEther(wei)).toFixed(3);
+            const musd = Number(ethers.formatUnits(wei, 18)).toFixed(3);
             const rank = `${idx + 1}${idx === 0 ? 'st' : idx === 1 ? 'nd' : idx === 2 ? 'rd' : 'th'}`;
-            return `${rank}: ${eth} ETH`;
+            return `${rank}: ${musd} MUSD`;
         });
         return parts.join(' • ');
     },
@@ -357,7 +357,7 @@ export default {
                 const id = await getActiveTournamentId().catch(() => null);
                 this.activeTournamentId = id;
                 if (id != null) {
-                  this.entryFeeWei = await getEntryFeeWei();
+                  this.entryFeeWei = await getEntryFee();
                   const info = await getTournamentInfo(id);
                   this.endTime = info.endTime;
                   this.totalPotWei = info.totalPot;

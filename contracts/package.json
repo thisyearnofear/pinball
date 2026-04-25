@@ -6,7 +6,8 @@
   "scripts": {
     "build": "hardhat compile",
     "test": "hardhat test",
-    "deploy:sepolia": "hardhat run scripts/deploy.ts --network arbitrumSepolia"
+    "deploy:mezotestnet": "hardhat run scripts/deploy.ts --network mezotestnet",
+    "deploy:mezomainnet": "hardhat run scripts/deploy.ts --network mezomainnet"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",

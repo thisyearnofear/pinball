@@ -1,17 +1,18 @@
 import { ethers } from 'ethers';
 import { getContractsConfig } from '../../config/contracts';
 import { web3Service } from '../web3-service';
+import { approveMUSD, getMUSDAllowance, getMUSDBalance } from './musd-client';
 
 // Minimal ABI for the functions we use; replace with full ABI from deployed contract
 export const TOURNAMENT_MANAGER_ABI = [
-  "function entryFeeWei() view returns (uint256)",
+  "function entryFee() view returns (uint256)",
+  "function musd() view returns (address)",
   "function scoreSigner() view returns (address)",
   "function tournaments(uint256) view returns (uint256 id, uint64 startTime, uint64 endTime, uint16 topN, bool finalized, uint256 totalPot)",
   "function lastTournamentId() view returns (uint256)",
   "function getPrizeBps(uint256 id) view returns (uint16[])",
-  "function enterTournament(uint256 id) payable",
+  "function enterTournament(uint256 id)",
   "function submitScoreWithSignature(uint256 id, uint256 score, uint256 nonce, string name, string metadata, bytes signature)",
-  "function submitScoreWithSignatureV1(uint256 id, uint256 score, string name, string metadata, bytes signature)",
   "function viewLeaderboard(uint256 id, uint256 offset, uint256 limit) view returns (address[] addrs, uint256[] scores)",
   "function finalize(uint256 id)",
   "function getWinners(uint256 id) view returns (address[])",
@@ -32,16 +33,11 @@ function getContract(): ethers.Contract {
 // Public read-only contract that doesn't require wallet connection
 // Always use public RPC for reads - Farcaster's provider RPC has connectivity issues
 function getPublicContract(): ethers.Contract {
-  const { chainId, tournamentManager } = getContractsConfig();
+  const { rpcUrlPublic, tournamentManager } = getContractsConfig();
 
-  // Always use public RPC for read operations
-  // Farcaster's Privy provider uses its own RPC which may have connectivity/sync issues
-  if (chainId !== 42161) {
-    throw new Error(`Unsupported chain ID: ${chainId}. Only Arbitrum One (42161) is supported.`);
-  }
-
-  console.log('📖 Using public RPC for contract reads (reliable for all environments)');
-  const provider = new ethers.JsonRpcProvider('https://arb1.arbitrum.io/rpc');
+  // Always use a configured public RPC for read operations.
+  // This avoids wallet-provider-specific RPC quirks (incl. Farcaster/embedded providers).
+  const provider = new ethers.JsonRpcProvider(rpcUrlPublic);
   return new ethers.Contract(tournamentManager.address, TOURNAMENT_MANAGER_ABI, provider);
 }
 
@@ -92,7 +88,7 @@ export async function enterTournament(tournamentId: number): Promise<string> {
     // CRITICAL: Verify we're on the correct network before attempting transaction
     const { chainId: expectedChainId } = getContractsConfig();
     if (Number(network.chainId) !== expectedChainId) {
-      throw new Error(`Wrong network. Please switch to chain ID ${expectedChainId} (Arbitrum One) before entering the tournament. Currently on chain ID ${Number(network.chainId)}.`);
+      throw new Error(`Wrong network. Please switch to chain ID ${expectedChainId} before entering the tournament. Currently on chain ID ${Number(network.chainId)}.`);
     }
 
     // Check provider type (Farcaster vs MetaMask)
@@ -117,8 +113,8 @@ export async function enterTournament(tournamentId: number): Promise<string> {
       console.warn('Could not check player info:', checkError);
     }
 
-    const fee: bigint = await publicContract.entryFeeWei();
-    console.log('Entry fee:', ethers.formatEther(fee), 'ETH');
+    const fee: bigint = await publicContract.entryFee();
+    console.log('Entry fee:', ethers.formatUnits(fee, 18), 'MUSD');
 
     // Validate tournament is active before attempting transaction
     console.log('Validating tournament status...');
@@ -133,7 +129,7 @@ export async function enterTournament(tournamentId: number): Promise<string> {
         currentTime: nowSec,
         finalized: tournamentInfo.finalized,
         isActive: nowSec >= tournamentInfo.startTime && nowSec <= tournamentInfo.endTime && !tournamentInfo.finalized,
-        totalPot: ethers.formatEther(tournamentInfo.totalPot) + ' ETH'
+        totalPot: ethers.formatUnits(tournamentInfo.totalPot, 18) + ' MUSD'
       });
 
       if (nowSec < tournamentInfo.startTime) {
@@ -152,12 +148,17 @@ export async function enterTournament(tournamentId: number): Promise<string> {
       throw validationError;
     }
 
-    // Check balance using PUBLIC RPC (more reliable)
-    const balance = await publicContract.runner?.provider?.getBalance(address) ?? 0n;
-    console.log('Wallet balance (via Public RPC):', ethers.formatEther(balance), 'ETH');
-
+    // Ensure player has enough MUSD and allowance for transferFrom (DRY: do it once here).
+    const balance = await getMUSDBalance(address);
     if (balance < fee) {
-      throw new Error(`Insufficient balance. Need ${ethers.formatEther(fee)} ETH, have ${ethers.formatEther(balance)} ETH`);
+      throw new Error(`Insufficient MUSD balance. Need ${ethers.formatUnits(fee, 18)} MUSD`);
+    }
+
+    const { tournamentManager } = getContractsConfig();
+    const allowance = await getMUSDAllowance(address, tournamentManager.address);
+    if (allowance < fee) {
+      console.log('Approving MUSD for tournament entry...');
+      await approveMUSD(tournamentManager.address, ethers.MaxUint256);
     }
 
     // Estimate gas using PUBLIC RPC
@@ -165,10 +166,7 @@ export async function enterTournament(tournamentId: number): Promise<string> {
     let gasLimit = 500000n; // Safe default
     try {
       console.log('Estimating gas via Public RPC...');
-      const estimatedGas = await publicContract.enterTournament.estimateGas(tournamentId, {
-        value: fee,
-        from: address
-      });
+      const estimatedGas = await publicContract.enterTournament.estimateGas(tournamentId, { from: address });
       console.log('✓ Gas estimated via Public RPC:', estimatedGas.toString());
       gasLimit = (estimatedGas * 150n) / 100n; // Add 50% buffer to be safe
     } catch (estimateError: any) {
@@ -180,14 +178,11 @@ export async function enterTournament(tournamentId: number): Promise<string> {
     }
 
     console.log('Submitting enterTournament transaction...');
-    console.log('Params:', { tournamentId, value: ethers.formatEther(fee), gasLimit: gasLimit.toString() });
+    console.log('Params:', { tournamentId, gasLimit: gasLimit.toString() });
 
     // Send transaction using Wallet Signer
     // We explicitly provide gasLimit so Farcaster provider doesn't try to estimate (and fail)
-    const tx = await c.enterTournament(tournamentId, {
-      value: fee,
-      gasLimit: gasLimit
-    });
+    const tx = await c.enterTournament(tournamentId, { gasLimit });
 
     console.log('Transaction submitted:', tx.hash);
     console.log('Waiting for confirmation via Public RPC...');
@@ -392,9 +387,9 @@ async function _fetchLeaderboard(
   return rows;
 }
 
-export async function getEntryFeeWei(): Promise<bigint> {
+export async function getEntryFee(): Promise<bigint> {
   const c = getPublicContract();
-  return await c.entryFeeWei();
+  return await c.entryFee();
 }
 
 export async function getTournamentInfo(tournamentId: number, retries = 3): Promise<{ startTime: number; endTime: number; topN: number; finalized: boolean; totalPot: bigint; }> {

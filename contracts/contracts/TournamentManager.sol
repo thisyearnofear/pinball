@@ -1,28 +1,33 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.28;
 
 /**
- * TournamentManager
- * - Weekly (or scheduled) tournaments with entry fees in native ETH
- * - Best-score-per-player counting
- * - Server-signed score submission (EIP-191 personal_sign compatible)
- * - Configurable prize split for top N winners (default top 3: 50/30/20)
- * - Simple leaderboard retrieval (not fully sorted on-chain; front-end can sort)
+ * TournamentManager (MUSD)
  *
- * Notes:
- * - For MVP we accept server-signed scores from a trusted authority whose address is set by owner
- * - Commit-reveal hooks can be added later without breaking storage layout by reserving slots
+ * Core principles:
+ * - CONSOLIDATION: Mezo hackathon version uses MUSD (ERC20), not native ETH
+ * - CLEAN: contract only handles tournament rules + payouts; no offchain logic
+ * - MODULAR: score verification is via a single trusted signer (backend attestor)
+ *
+ * Entry fees and payouts are denominated in MUSD.
  */
-
 contract TournamentManager {
+    // Minimal ERC20 surface (avoid external deps for hackathon simplicity)
+    interface IERC20 {
+        function transfer(address to, uint256 amount) external returns (bool);
+        function transferFrom(address from, address to, uint256 amount) external returns (bool);
+    }
+
+    string internal constant SCORE_PREFIX_V2 = "PINBALL_SCORE:v2";
+
     struct Tournament {
         uint256 id;
         uint64 startTime;
         uint64 endTime;
-        uint16 topN; // number of winners eligible for rewards
+        uint16 topN;
         bool finalized;
-        uint16[] prizeBps; // sum must be 10000 (100%)
-        uint256 totalPot;
+        uint16[] prizeBps; // sum == 10000
+        uint256 totalPot;  // in MUSD base units
     }
 
     struct PlayerInfo {
@@ -32,71 +37,74 @@ contract TournamentManager {
     }
 
     address public owner;
-    address public scoreSigner; // trusted server signer
-    uint256 public entryFeeWei; // in wei
+    address public scoreSigner;
+    IERC20 public immutable musd;
+    uint256 public entryFee; // in MUSD base units
 
     uint256 public lastTournamentId;
 
     mapping(uint256 => Tournament) public tournaments;
     mapping(uint256 => address[]) public participants;
     mapping(uint256 => mapping(address => PlayerInfo)) public playerInfo;
-    
-    // Nonce tracking for replay protection (phase 2)
-    // tournamentId => playerAddress => nextValidNonce
     mapping(uint256 => mapping(address => uint256)) public playerNonces;
-
-    // Winners stored after finalize in descending order of score
     mapping(uint256 => address[]) public winners;
 
-    // events
     event OwnerUpdated(address indexed newOwner);
     event ScoreSignerUpdated(address indexed signer);
-    event EntryFeeUpdated(uint256 feeWei);
+    event EntryFeeUpdated(uint256 fee);
     event TournamentCreated(uint256 indexed id, uint64 startTime, uint64 endTime, uint16 topN, uint16[] prizeBps);
-    event Entered(uint256 indexed id, address indexed player, uint256 value);
+    event Entered(uint256 indexed id, address indexed player, uint256 feePaid);
     event ScoreSubmitted(uint256 indexed id, address indexed player, uint256 score);
     event Finalized(uint256 indexed id, address[] winners);
     event RewardClaimed(uint256 indexed id, address indexed player, uint256 amount);
-    event FundsWithdrawn(address indexed to, uint256 amount);
-    event EmergencyPayout(uint256 indexed id, address indexed player, uint256 amount);
-    event TournamentCancelled(uint256 indexed id, uint256 refundedAmount);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "NOT_OWNER");
         _;
     }
 
-    constructor(address _scoreSigner, uint256 _entryFeeWei) {
+    constructor(address _scoreSigner, address _musd, uint256 _entryFee) {
+        require(_scoreSigner != address(0), "ZERO_SIGNER");
+        require(_musd != address(0), "ZERO_MUSD");
         owner = msg.sender;
         scoreSigner = _scoreSigner;
-        entryFeeWei = _entryFeeWei;
+        musd = IERC20(_musd);
+        entryFee = _entryFee;
         emit OwnerUpdated(owner);
         emit ScoreSignerUpdated(_scoreSigner);
-        emit EntryFeeUpdated(_entryFeeWei);
+        emit EntryFeeUpdated(_entryFee);
     }
 
     function setOwner(address _new) external onlyOwner {
+        require(_new != address(0), "ZERO_OWNER");
         owner = _new;
         emit OwnerUpdated(_new);
     }
 
     function setScoreSigner(address _signer) external onlyOwner {
+        require(_signer != address(0), "ZERO_SIGNER");
         scoreSigner = _signer;
         emit ScoreSignerUpdated(_signer);
     }
 
-    function setEntryFee(uint256 _feeWei) external onlyOwner {
-        entryFeeWei = _feeWei;
-        emit EntryFeeUpdated(_feeWei);
+    function setEntryFee(uint256 _fee) external onlyOwner {
+        entryFee = _fee;
+        emit EntryFeeUpdated(_fee);
     }
 
-    function createTournament(uint64 startTime, uint64 endTime, uint16 topN, uint16[] calldata prizeBps) external onlyOwner returns (uint256) {
+    function createTournament(
+        uint64 startTime,
+        uint64 endTime,
+        uint16 topN,
+        uint16[] calldata prizeBps
+    ) external onlyOwner returns (uint256) {
         require(startTime < endTime, "BAD_TIME");
         require(topN > 0, "BAD_TOPN");
+        require(prizeBps.length == topN, "BPS_LEN_NEQ_TOPN");
+
         uint256 sum;
         for (uint256 i = 0; i < prizeBps.length; i++) sum += prizeBps[i];
         require(sum == 10000, "BPS_NEQ_10000");
-        require(prizeBps.length == topN, "BPS_LEN_NEQ_TOPN");
 
         uint256 id = ++lastTournamentId;
         Tournament storage t = tournaments[id];
@@ -109,28 +117,33 @@ contract TournamentManager {
         for (uint256 i = 0; i < prizeBps.length; i++) {
             t.prizeBps.push(prizeBps[i]);
         }
+
         emit TournamentCreated(id, startTime, endTime, topN, prizeBps);
         return id;
     }
 
-    function enterTournament(uint256 id) external payable {
+    function enterTournament(uint256 id) external {
         Tournament storage t = tournaments[id];
         require(t.id == id, "NO_TOURNAMENT");
         require(block.timestamp >= t.startTime && block.timestamp <= t.endTime, "NOT_ACTIVE");
-        require(msg.value == entryFeeWei, "BAD_FEE");
+
+        // Collect entry fee in MUSD
+        require(musd.transferFrom(msg.sender, address(this), entryFee), "MUSD_TRANSFER_FROM_FAIL");
 
         PlayerInfo storage p = playerInfo[id][msg.sender];
         if (!p.entered) {
             p.entered = true;
             participants[id].push(msg.sender);
         }
-        t.totalPot += msg.value;
-        emit Entered(id, msg.sender, msg.value);
+
+        t.totalPot += entryFee;
+        emit Entered(id, msg.sender, entryFee);
     }
 
-    // EIP-191 personal_sign style message (V2): includes nonce and chainId for replay protection
-    // keccak256(abi.encodePacked("PINBALL_SCORE:v2", id, player, score, nonce, chainId, nameHash, metaHash))
-    // The backend must sign this digest. The front-end will pass the signature bytes here.
+    /**
+     * EIP-191 personal_sign style message (V2):
+     * keccak256(abi.encodePacked("PINBALL_SCORE:v2", id, player, score, nonce, chainId, nameHash, metaHash))
+     */
     function submitScoreWithSignature(
         uint256 id,
         uint256 score,
@@ -147,62 +160,34 @@ contract TournamentManager {
         PlayerInfo storage p = playerInfo[id][msg.sender];
         require(p.entered, "NOT_ENTERED");
 
-        // Verify nonce hasn't been used and is the next expected nonce
         uint256 expectedNonce = playerNonces[id][msg.sender] + 1;
         require(nonce == expectedNonce, "INVALID_NONCE");
 
         bytes32 nameHash = keccak256(bytes(name));
         bytes32 metaHash = keccak256(bytes(metadata));
-        
-        // V2 digest includes nonce and chainId
-        bytes32 digest = keccak256(abi.encodePacked(
-            "\x19Ethereum Signed Message:\n32",
-            keccak256(abi.encodePacked(
-                "PINBALL_SCORE:v2",
-                id,
-                msg.sender,
-                score,
-                nonce,
-                block.chainid,
-                nameHash,
-                metaHash
-            ))
-        ));
-        
+
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19Ethereum Signed Message:\n32",
+                keccak256(
+                    abi.encodePacked(
+                        SCORE_PREFIX_V2,
+                        id,
+                        msg.sender,
+                        score,
+                        nonce,
+                        block.chainid,
+                        nameHash,
+                        metaHash
+                    )
+                )
+            )
+        );
+
         address recovered = _recoverSigner(digest, signature);
         require(recovered == scoreSigner, "BAD_SIG");
 
-        // Increment nonce after successful verification
         playerNonces[id][msg.sender] = nonce;
-
-        if (score > p.bestScore) {
-            p.bestScore = score;
-            emit ScoreSubmitted(id, msg.sender, score);
-        }
-    }
-
-    // Keep V1 method for backwards compatibility during migration
-    // Deprecated: use submitScoreWithSignature with nonce instead
-    function submitScoreWithSignatureV1(
-        uint256 id,
-        uint256 score,
-        string calldata name,
-        string calldata metadata,
-        bytes calldata signature
-    ) external {
-        Tournament storage t = tournaments[id];
-        require(t.id == id, "NO_TOURNAMENT");
-        require(block.timestamp >= t.startTime && block.timestamp <= t.endTime, "NOT_ACTIVE");
-        require(!t.finalized, "FINALIZED");
-
-        PlayerInfo storage p = playerInfo[id][msg.sender];
-        require(p.entered, "NOT_ENTERED");
-
-        bytes32 nameHash = keccak256(bytes(name));
-        bytes32 metaHash = keccak256(bytes(metadata));
-        bytes32 digest = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", keccak256(abi.encodePacked("PINBALL_SCORE:", id, msg.sender, score, nameHash, metaHash))));
-        address recovered = _recoverSigner(digest, signature);
-        require(recovered == scoreSigner, "BAD_SIG");
 
         if (score > p.bestScore) {
             p.bestScore = score;
@@ -216,12 +201,11 @@ contract TournamentManager {
         require(block.timestamp > t.endTime, "NOT_ENDED");
         require(!t.finalized, "ALREADY_FINAL");
 
-        // Determine winners: simple selection of topN by bestScore
         uint256 n = participants[id].length;
         uint16 topN = t.topN;
         address[] memory arr = participants[id];
 
-        // selection sort for topN (gas OK for small N; for large sets consider off-chain snapshot + merkle)
+        // selection sort for topN (OK for hackathon-scale tournaments)
         for (uint16 i = 0; i < topN && i < n; i++) {
             uint256 maxIdx = i;
             for (uint256 j = i + 1; j < n; j++) {
@@ -235,10 +219,12 @@ contract TournamentManager {
                 arr[maxIdx] = tmp;
             }
         }
+
         address[] storage w = winners[id];
         for (uint16 k = 0; k < topN && k < n; k++) {
             w.push(arr[k]);
         }
+
         t.finalized = true;
         emit Finalized(id, winners[id]);
     }
@@ -246,21 +232,25 @@ contract TournamentManager {
     function claimReward(uint256 id) external {
         Tournament storage t = tournaments[id];
         require(t.finalized, "NOT_FINAL");
+
         PlayerInfo storage p = playerInfo[id][msg.sender];
         require(!p.rewardClaimed, "CLAIMED");
 
-        // find rank
         uint16 rank = _rankOf(id, msg.sender);
         require(rank > 0 && rank <= t.topN, "NOT_WINNER");
 
         uint256 amount = (t.totalPot * t.prizeBps[rank - 1]) / 10000;
         p.rewardClaimed = true;
-        (bool ok, ) = msg.sender.call{value: amount}("");
-        require(ok, "PAY_FAIL");
+
+        require(musd.transfer(msg.sender, amount), "MUSD_TRANSFER_FAIL");
         emit RewardClaimed(id, msg.sender, amount);
     }
 
-    function viewLeaderboard(uint256 id, uint256 offset, uint256 limit) external view returns (address[] memory addrs, uint256[] memory scores) {
+    function viewLeaderboard(
+        uint256 id,
+        uint256 offset,
+        uint256 limit
+    ) external view returns (address[] memory addrs, uint256[] memory scores) {
         address[] memory arr = participants[id];
         uint256 n = arr.length;
         if (offset >= n) return (new address[](0), new uint256[](0));
@@ -286,73 +276,6 @@ contract TournamentManager {
         return t.prizeBps;
     }
 
-    function repairPrizeBps(uint256 id, uint16[] calldata newBps) external onlyOwner {
-        Tournament storage t = tournaments[id];
-        require(t.id == id, "NO_TOURNAMENT");
-        require(newBps.length == t.topN, "BPS_LEN_NEQ_TOPN");
-        uint256 sum;
-        for (uint256 i = 0; i < newBps.length; i++) sum += newBps[i];
-        require(sum == 10000, "BPS_NEQ_10000");
-        delete t.prizeBps;
-        for (uint256 i = 0; i < newBps.length; i++) {
-            t.prizeBps.push(newBps[i]);
-        }
-    }
-
-    function withdrawFunds(address payable to, uint256 amount) external onlyOwner {
-        require(to != address(0), "ZERO_ADDRESS");
-        require(amount <= address(this).balance, "INSUFFICIENT_BALANCE");
-        (bool ok, ) = to.call{value: amount}("");
-        require(ok, "TRANSFER_FAILED");
-        emit FundsWithdrawn(to, amount);
-    }
-
-    function emergencyPayout(uint256 id, address[] calldata payoutWinners, uint16[] calldata payoutBps) external onlyOwner {
-        require(payoutWinners.length == payoutBps.length, "LENGTH_MISMATCH");
-        uint256 sum;
-        for (uint256 i = 0; i < payoutBps.length; i++) sum += payoutBps[i];
-        require(sum == 10000, "BPS_NEQ_10000");
-        
-        Tournament storage t = tournaments[id];
-        uint256 pot = t.totalPot;
-        require(pot > 0, "NO_POT");
-
-        for (uint256 i = 0; i < payoutWinners.length; i++) {
-            address winner = payoutWinners[i];
-            PlayerInfo storage p = playerInfo[id][winner];
-            require(!p.rewardClaimed, "ALREADY_CLAIMED");
-            
-            uint256 amount = (pot * payoutBps[i]) / 10000;
-            p.rewardClaimed = true;
-            (bool ok, ) = winner.call{value: amount}("");
-            require(ok, "PAY_FAIL");
-            emit EmergencyPayout(id, winner, amount);
-        }
-    }
-
-    function cancelTournament(uint256 id) external onlyOwner {
-        Tournament storage t = tournaments[id];
-        require(t.id == id, "NO_TOURNAMENT");
-        require(!t.finalized, "ALREADY_FINAL");
-        
-        address[] memory parts = participants[id];
-        uint256 refundAmount = t.totalPot / parts.length;
-        uint256 totalRefunded = 0;
-
-        for (uint256 i = 0; i < parts.length; i++) {
-            PlayerInfo storage p = playerInfo[id][parts[i]];
-            if (p.entered && !p.rewardClaimed) {
-                p.rewardClaimed = true;
-                (bool ok, ) = parts[i].call{value: refundAmount}("");
-                require(ok, "REFUND_FAIL");
-                totalRefunded += refundAmount;
-            }
-        }
-        
-        t.finalized = true;
-        emit TournamentCancelled(id, totalRefunded);
-    }
-
     function _rankOf(uint256 id, address player) internal view returns (uint16) {
         address[] storage w = winners[id];
         for (uint16 i = 0; i < w.length; i++) {
@@ -375,7 +298,4 @@ contract TournamentManager {
         require(v == 27 || v == 28, "BAD_V");
         return ecrecover(digest, v, r, s);
     }
-
-    // receive pot funding if needed in future or refunds
-    receive() external payable {}
 }

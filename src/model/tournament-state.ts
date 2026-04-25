@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue';
 import { web3Service } from '@/services/web3-service';
-import { getActiveTournamentId, getEntryFeeWei, getTournamentInfo, getWinners, getPrizeBps, enterTournament, claimReward, fetchLeaderboard } from '@/services/contracts/tournament-client';
+import { getActiveTournamentId, getEntryFee, getTournamentInfo, getWinners, getPrizeBps, enterTournament, claimReward, fetchLeaderboard } from '@/services/contracts/tournament-client';
 import { estimatedPrizeBps } from '@/services/prize';
 
 const tournamentId = ref<number | null>(null);
@@ -22,7 +22,7 @@ export function useTournamentState() {
       address.value = web3Service.getAddress();
       const id = await getActiveTournamentId();
       tournamentId.value = id;
-      entryFeeWei.value = await getEntryFeeWei();
+      entryFeeWei.value = await getEntryFee();
       const info = await getTournamentInfo(id);
       finalized.value = info.finalized;
       totalPotWei.value = info.totalPot;

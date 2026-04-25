@@ -137,7 +137,7 @@ export default {
   computed: {
     displayPot(): string | '' {
       try { 
-        const v = Number(ethers.formatEther(this.totalPotWei));
+        const v = Number(ethers.formatUnits(this.totalPotWei, 18));
         // Show more decimals for small amounts
         let eth;
         if (v < 0.01) {
@@ -147,7 +147,7 @@ export default {
         } else {
           eth = v.toFixed(3);
         }
-        return `${eth} ETH`;
+        return `${eth} MUSD`;
       } catch { return ''; }
     },
     timeLabel(): string {
@@ -166,7 +166,7 @@ export default {
       if (!this.prizeBps || !this.prizeBps.length || !this.totalPotWei) return '';
       const parts = this.prizeBps.map((bps, idx) => {
         const wei = (this.totalPotWei * BigInt(bps)) / 10000n;
-        const v = Number(ethers.formatEther(wei));
+        const v = Number(ethers.formatUnits(wei, 18));
         const percentage = (bps / 100).toFixed(1);
         
         // Show more decimals for small amounts
@@ -180,7 +180,7 @@ export default {
         }
         
         const rank = `${idx + 1}${idx === 0 ? 'st' : idx === 1 ? 'nd' : idx === 2 ? 'rd' : 'th'}`;
-        return `${rank}: ${eth} ETH (${percentage}%)`;
+        return `${rank}: ${eth} MUSD (${percentage}%)`;
       });
       return parts.join(' • ');
     },
@@ -217,8 +217,8 @@ export default {
       if (rank <= this.prizeBps.length && rank > 0) {
         const bps = this.prizeBps[rank - 1];
         const wei = (this.totalPotWei * BigInt(bps)) / 10000n;
-        const eth = Number(ethers.formatEther(wei)).toFixed(4);
-        return `${eth} ETH`;
+        const musd = Number(ethers.formatUnits(wei, 18)).toFixed(4);
+        return `${musd} MUSD`;
       }
       
       return '';
@@ -229,7 +229,7 @@ export default {
       return this.prizeBps.map((bps, index) => {
         const percentage = (bps / 100).toFixed(1);
         const wei = (this.totalPotWei * BigInt(bps)) / 10000n;
-        const v = Number(ethers.formatEther(wei));
+        const v = Number(ethers.formatUnits(wei, 18));
         
         // Show more decimals for small amounts
         let eth;
@@ -245,7 +245,7 @@ export default {
         
         return {
           rank,
-          amount: `${eth} ETH`,
+          amount: `${eth} MUSD`,
           percentage
         };
       });
@@ -266,13 +266,13 @@ export default {
     onPlayTournament(): void { this.$emit('play-tournament'); },
     short(addr: string): string { return `${addr.slice(0,6)}...${addr.slice(-4)}`; },
     async onShare(): Promise<void> {
-      const gameUrl = 'https://arbipinball.netlify.app/';
+      const gameUrl = window.location.origin;
       const scoreText = this.score.toLocaleString();
       
       // Craft an enticing share message
-      const text = `🎮 Just scored ${scoreText} on ArbiPinball!\n\n` +
+      const text = `🎮 Just scored ${scoreText} on Mezo Pinball Arcade!\n\n` +
         `Think you can beat me? 🏆\n\n` +
-        `Play on @arbitrum - every entry grows the prize pool. Top 3 players split the pot! 💰\n\n` +
+        `Play on Mezo - entries grow the MUSD prize pool. Top players split the pot! 💰\n\n` +
         `${gameUrl}`;
       
       // Check if we're actually in Farcaster miniapp (not just web browser with SDK loaded)

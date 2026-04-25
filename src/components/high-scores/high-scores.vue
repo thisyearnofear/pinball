@@ -89,7 +89,7 @@ import type { HighScoreDef } from "@/services/high-scores-service";
 import { getHighScores } from "@/services/high-scores-service";
 import { web3Service } from "@/services/web3-service";
 import { useTournamentState } from "@/model/tournament-state";
-import { getActiveTournamentId, fetchLeaderboard, getTournamentInfo, getEntryFeeWei, getPrizeBps } from "@/services/contracts/tournament-client";
+import { getActiveTournamentId, fetchLeaderboard, getTournamentInfo, getEntryFee, getPrizeBps } from "@/services/contracts/tournament-client";
 import { ethers } from "ethers";
 
 // our fancy font has some challenges for our presentation purposes
@@ -135,10 +135,10 @@ export default {
             return filteredScores.map( replaceDiacritics );
         },
         displayPot(): string {
-            return this.tournamentInfo ? this.formatEth(this.tournamentInfo.totalPot) : '';
+            return this.tournamentInfo ? this.formatMusd(this.tournamentInfo.totalPot) : '';
         },
         displayEntryFee(): string {
-            return this.tournamentInfo ? this.formatEth(this.tournamentInfo.entryFee) : '';
+            return this.tournamentInfo ? this.formatMusd(this.tournamentInfo.entryFee) : '';
         },
         timeLabel(): string {
             if (!this.tournamentInfo?.timeRemaining) return '';
@@ -157,17 +157,17 @@ export default {
                 
                 return {
                     rank,
-                    amount: this.formatEth(wei),
+                    amount: this.formatMusd(wei),
                     percentage
                 };
             });
         },
     },
     methods: {
-        formatEth(wei: bigint): string {
-            const v = Number(ethers.formatEther(wei));
+        formatMusd(wei: bigint): string {
+            const v = Number(ethers.formatUnits(wei, 18));
             const decimals = v < 0.01 ? 6 : v < 1 ? 4 : 3;
-            return `${v.toFixed(decimals)} ETH`;
+            return `${v.toFixed(decimals)} MUSD`;
         },
         async onRefresh() {
             try {
@@ -214,7 +214,7 @@ export default {
             const tournamentId = await getActiveTournamentId();
             const [info, entryFee, leaderboard, prizeBps] = await Promise.all([
                 getTournamentInfo(tournamentId),
-                getEntryFeeWei(),
+                getEntryFee(),
                 fetchLeaderboard(tournamentId, 0, 100),
                 getPrizeBps(tournamentId).catch(() => []) // Fallback to empty array if fails
             ]);

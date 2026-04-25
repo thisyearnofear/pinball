@@ -1,6 +1,6 @@
-# ArbiPinball
+# Mezo Pinball Arcade
 
-ArbiPinball is a Web3 pinball game built as a Farcaster miniapp, featuring on-chain tournaments on Arbitrum where players compete for ETH prizes. It combines retro pinball gameplay with blockchain technology, allowing users to connect their wallet, enter tournaments, and win crypto rewards based on their scores.
+Mezo Pinball Arcade is a Web3 pinball game built for the Mezo ecosystem, featuring on-chain tournaments where players compete for **MUSD** prizes. It combines retro pinball gameplay with blockchain tournament rails, allowing users to connect a wallet (Mezo Passport) and win Bitcoin-backed stablecoin rewards based on their scores.
 
 The game is built with Vue 3, uses Matter.js for physics simulation, and leverages Web3 technologies for tournament management. It currently runs as a Farcaster Frame and supports various EIP-1193 compatible wallets.
 
@@ -8,16 +8,16 @@ The game is built with Vue 3, uses Matter.js for physics simulation, and leverag
 
 This is a monorepo containing three main components:
 
-- **Frontend**: Vue 3 application that runs in the browser/Farcaster miniapp
+- **Frontend**: Vue 3 application (legacy shell) + React shell (Mezo Passport migration in progress)
 - **Backend**: Node.js server that handles score signing for tournament submissions
-- **Contracts**: Solidity smart contracts for tournament management on Arbitrum
+- **Contracts**: Solidity smart contracts for tournament management on Mezo (MUSD-based)
 
 ## Features
 
 - **Pinball Gameplay**: Retro-style vertically scrolling pinball with physics-driven gameplay
-- **On-Chain Tournaments**: Enter tournaments by paying ETH, compete for prizes distributed to top players
+- **On-Chain Tournaments**: Enter tournaments by paying MUSD, compete for prizes distributed to top players
 - **Wallet Integration**: Connect MetaMask, Coinbase Wallet, or other Web3 wallets
-- **Farcaster Integration**: Native support for Farcaster miniapps and frames
+- **Farcaster Integration**: Optional (legacy); primary target is Mezo hackathon requirements
 - **Leaderboard**: View tournament rankings and scores
 - **Cross-Platform**: Play on desktop or mobile devices
 
@@ -153,11 +153,11 @@ Deploy to a VPS or serverless platform. See `backend/README.md` for systemd serv
 
 ### Contracts
 
-Deploy contracts to Arbitrum mainnet:
+Deploy contracts to Mezo testnet/mainnet:
 
 ```bash
 cd contracts
-npm run deploy:mainnet
+npm run deploy:mezotestnet
 ```
 
 ## Gameplay

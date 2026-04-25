@@ -65,10 +65,10 @@ Our pinball tournament system was vulnerable to several attack vectors:
 
 ### Implementation Scope
 - **Nonce Tracker**: Sequential per-player, per-tournament nonce generation
-- **Signature V2**: Digest includes nonce, chainId (42161), and all parameters
+- **Signature V2**: Digest includes nonce, **chainId (env-driven)**, and all parameters
 - **Contract Updates**: Server-side nonce verification prevents replay
 - **Admin Management**: Commands to reset nonces and check state
-- **Migration Support**: Backward compatibility with existing V1 signatures
+- **Consolidation**: Removed V1 signing path to reduce attack surface and bloat
 
 ### How Nonce Protection Works
 1. Each player gets unique sequential nonce (1, 2, 3...)
@@ -81,14 +81,14 @@ Our pinball tournament system was vulnerable to several attack vectors:
 
 ### Security Improvements
 - **100% Replay Attack Protection**: Same signature cannot be submitted twice
-- **Cross-Chain Isolation**: Signatures tied to Arbitrum One (chainId 42161)
+- **Cross-Chain Isolation**: Signatures tied to the deployed chain (via `block.chainid`)
 - **Parameter Binding**: Nonce prevents score modification with old signatures
 - **Sequence Enforcement**: Prevents nonce skipping attacks
 
 ### Files Modified
 - `backend/src/lib/nonce-tracker.ts` (nonce generation/verification)
 - `backend/src/lib/sign.ts` (V2 signature hash)
-- `contracts/TournamentManager.sol` (contract nonce logic)
+- `contracts/contracts/TournamentManager.sol` (contract nonce logic)
 - `backend/src/routes/scores.ts` (nonce integration)
 
 ---
@@ -106,6 +106,7 @@ Our pinball tournament system was vulnerable to several attack vectors:
 | Anti-Cheat Validation | ❌ None | ⏳ Planned | **PENDING** |
 | Audit Trail | ❌ None | ⏳ Planned | **PENDING** |
 | Metadata Injection | ⚠️ Some checks | ✅ Full validation | **FIXED** |
+| Mission Award Abuse | ❌ N/A | ✅ Env-gated + attestor-controlled | **PARTIAL** |
 
 ### Performance Impact
 - **Memory Usage**: ~200 bytes per active player (nonce tracker)
@@ -124,11 +125,8 @@ Our pinball tournament system was vulnerable to several attack vectors:
 ## Breaking Changes & Migration
 
 ### Contract Method Signature
-**Phase 2 Breaking Change:**
-```
-BEFORE: submitScoreWithSignature(id, score, name, metadata, sig) /* V1 */
-AFTER:  submitScoreWithSignature(id, score, nonce, name, metadata, sig) /* V2 */
-```
+**Current (V2):**
+`submitScoreWithSignature(id, score, nonce, name, metadata, sig)`
 
 ### API Response Updates
 **Backend now returns:**
@@ -137,15 +135,16 @@ AFTER:  submitScoreWithSignature(id, score, nonce, name, metadata, sig) /* V2 */
   "signature": "0x...",
   "nonce": "5",
   "rateLimitRemaining": 2,
-  "rateLimitResetAt": 1700000000
+  "rateLimitResetAt": 1700000000,
+  "missionAwarded": true,
+  "missionTxHash": "0x..."
 }
 ```
 
-### Migration Strategy
-1. **Week 1**: Deploy contract with both V1 + V2 methods (backward compatible)
-2. **Week 2**: Backend returns nonce in all API responses
-3. **Week 3**: Frontend updates to include nonce parameter in contract calls
-4. **Week 4**: V1 deprecated after monitoring shows full adoption
+### Notes
+- The backend chainId used in signatures is configured via `CHAIN_ID` env var.
+- Optional “Sponsored Missions / Jackpot Multiball” awards are gated by env flags:
+  - `MISSION_POOL_ADDRESS`, `MISSION_SCORE_THRESHOLD`, `MISSION_REQUIRE_MULTIBALL`
 
 ---
 
@@ -281,11 +280,10 @@ AFTER:  submitScoreWithSignature(id, score, nonce, name, metadata, sig) /* V2 */
 
 ### Phase 2 Technical Implementation
 - **Nonce Tracker**: Singleton class with tournament-scoped, player-isolated state
-- **Signature V2**: Cryptographic keccak256 hashing with nonce and chainId parameters
+- **Signature V2**: keccak256 hashing with nonce + `block.chainid` binding
 - **Contract Integration**: Solidity mapping (uint256[address] => uint256) for nonce tracking
-- **Migration Layer**: Seamless V1/V2 coexistence with feature flags
-- **Admin Commands**: CLI and REST interfaces for nonce state management
-- **Performance Characteristics**: O(1) lookups with <1ms response time penalty
+- **Consolidation**: V1 path removed; single signing format reduces complexity
+- **Performance Characteristics**: O(1) lookups with minimal overhead (in-memory)
 
 ### Performance Benchmarks
 - **Baseline**: <50ms average response time
@@ -299,7 +297,7 @@ AFTER:  submitScoreWithSignature(id, score, nonce, name, metadata, sig) /* V2 */
 - **Cryptographic Strength**: Uses industry-standard keccak256 for hashing
 - **Entropy Sources**: Nonces provide 256-bit uniqueness per submission
 - **Replay Prevention**: Mathematical guarantee against signature reuse
-- **Chain Isolation**: Hardcoded chainId (42161) prevents cross-network exploits
+- **Chain Isolation**: `block.chainid` binding prevents cross-network replay
 - **Key Security**: Private key rotation procedures documented
 
 ### Testing Strategy

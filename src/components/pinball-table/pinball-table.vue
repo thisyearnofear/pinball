@@ -149,6 +149,9 @@ export default {
             default: false,
         },
     },
+    emits: [
+        "game-event",
+    ],
     data: (): ComponentData => ({
         message: "",
         inited: false,
@@ -310,6 +313,9 @@ export default {
             this.clearMessage();
 
             if ( message !== null ) {
+                // Surface high-signal events to the app shell (for differentiators / UX hooks).
+                // Example: Jackpot Multiball / Sponsored Missions.
+                this.$emit("game-event", { type: "message", message });
                 this.message = i18nForMessage( message, this.modelValue );
                 this.messageTimeout = window.setTimeout(() => {
                     this.clearMessage();

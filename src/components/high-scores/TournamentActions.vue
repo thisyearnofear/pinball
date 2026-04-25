@@ -30,8 +30,8 @@ const rankLabel = computed(() => {
   const bps = prizeBps.value?.length ? prizeBps.value : estimatedPrizeBps(winners.value.length);
   const wei = totalPotWei.value ?? 0n;
   const prizeWei = bps[rank - 1] ? (wei * BigInt(bps[rank - 1])) / 10000n : 0n;
-  const prizeEth = Number(ethers.formatEther(prizeWei)).toFixed(4);
-  return `Finalized • You placed #${rank} • Estimated prize ${prizeEth} ETH`;
+  const prize = Number(ethers.formatUnits(prizeWei, 18)).toFixed(4);
+  return `Finalized • You placed #${rank} • Estimated prize ${prize} MUSD`;
 });
 
 async function onEnter(){

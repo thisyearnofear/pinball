@@ -8,9 +8,10 @@
 // Keeps the same public API (startGame, stopGame, getHighScores)
 
 import { web3Service } from './web3-service';
-import { getActiveTournamentId, fetchLeaderboard, submitScoreWithSignature, enterTournament, getEntryFeeWei, getTournamentInfo } from './contracts/tournament-client';
+import { getActiveTournamentId, fetchLeaderboard, submitScoreWithSignature, enterTournament, getEntryFee, getTournamentInfo } from './contracts/tournament-client';
 import { requestScoreSignature } from './backend-scores-client';
 import { getContractsConfig } from '../config/contracts';
+import { getAppConfig } from '../config/app-config';
 import { showToast } from './toast';
 import { getFromStorage, setInStorage } from '../utils/local-storage';
 
@@ -186,11 +187,28 @@ export const stopGame = async (gameId: string, score: number, playerName?: strin
                 score,
                 name: playerName || '',
                 metadata,
-                nonce: nextNonce
+                nonce: nextNonce,
+                missionId: (() => {
+                    try {
+                        const cfg = getAppConfig();
+                        // Only request mission awards if MissionPool is configured and we have an active mission id.
+                        if (!getContractsConfig().missionPool.address) return undefined;
+                        return cfg.missions.activeMissionId;
+                    } catch {
+                        return undefined;
+                    }
+                })()
             });
             signature = response.signature;
             nonce = response.nonce;
             console.log('Received signature and nonce from backend:', { nonce });
+
+            // Optional: show mission reward feedback (backend broadcasts tx)
+            if (response.missionAwarded && response.missionTxHash) {
+                showToast('Mission reward sent!', 'success');
+            } else if (response.missionAwarded === false && response.missionError) {
+                console.log('Mission not awarded:', response.missionError);
+            }
         } catch (err) {
             showToast('Score server unavailable — please try again later', 'error');
             notifySubmissionState('error', 'Backend signature service unavailable');
@@ -309,7 +327,19 @@ export const stopGame = async (gameId: string, score: number, playerName?: strin
 
 // Helper function to get chain name for error messages
 function getChainName(chainId: number): string {
+    try {
+        const cfg = getAppConfig();
+        if (cfg.chain.chainId === chainId && cfg.chain.chainName) {
+            return cfg.chain.chainName;
+        }
+    } catch {
+        // ignore, fall back to static mapping
+    }
     switch (chainId) {
+        case 31611:
+            return 'Mezo Testnet';
+        case 31612:
+            return 'Mezo Mainnet';
         case 42161:
             return 'Arbitrum One';
         case 421614:

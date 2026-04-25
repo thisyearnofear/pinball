@@ -1,5 +1,6 @@
 import { ethers } from 'ethers';
 import { EventEmitter } from 'events';
+import { getAppConfig } from '../config/app-config';
 
 // WalletConnect Bridge URL (for v1)
 const BRIDGE_URL = 'https://bridge.walletconnect.org';
@@ -337,7 +338,28 @@ class Web3Service extends EventEmitter {
 
         const chainIdHex = `0x${chainId.toString(16)}`;
 
-        // Arbitrum One network configuration
+        // Prefer env-driven chain config (single source of truth).
+        // This allows switching networks without code changes.
+        try {
+            const cfg = getAppConfig();
+            if (cfg.chain.chainId === chainId && cfg.chain.chainName && cfg.chain.nativeCurrency) {
+                await provider.request({
+                    method: 'wallet_addEthereumChain',
+                    params: [{
+                        chainId: chainIdHex,
+                        chainName: cfg.chain.chainName,
+                        rpcUrls: [cfg.chain.rpcUrlPublic],
+                        nativeCurrency: cfg.chain.nativeCurrency,
+                        blockExplorerUrls: cfg.chain.blockExplorerUrl ? [cfg.chain.blockExplorerUrl] : [],
+                    }],
+                });
+                return;
+            }
+        } catch {
+            // ignore and fall back to built-in defaults below
+        }
+
+        // Backwards-compatible default: Arbitrum One.
         if (chainId === 42161) {
             await provider.request({
                 method: 'wallet_addEthereumChain',
@@ -353,9 +375,13 @@ class Web3Service extends EventEmitter {
                     blockExplorerUrls: ['https://arbiscan.io'],
                 }],
             });
-        } else {
-            throw new Error(`Unsupported chain ID: ${chainId}`);
+            return;
         }
+
+        throw new Error(
+            `Chain ${chainId} is not configured for wallet_addEthereumChain. ` +
+            `Set VITE_CHAIN_NAME, VITE_NATIVE_CURRENCY_*, and VITE_BLOCK_EXPLORER_URL to enable one-click adding.`
+        );
     }
 
     private async connectFarcasterWallet(): Promise<{ address: string; chainId: number } | null> {

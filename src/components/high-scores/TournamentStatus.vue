@@ -1,7 +1,7 @@
 <template>
   <div class="tournament-status">
     <div v-if="wrongChain" class="banner">
-      <span>Wrong network. Please switch to Arbitrum One ({{ chainId }}).</span>
+      <span>Wrong network. Please switch to {{ targetNetworkName }} ({{ chainId }}).</span>
       <button @click="switchChain">Switch Network</button>
     </div>
     <div class="row">
@@ -62,6 +62,7 @@
 <script setup lang="ts">
 import { onMounted, computed, ref } from 'vue';
 import { getContractsConfig } from '@/config/contracts';
+import { getAppConfig } from '@/config/app-config';
 import { useTournamentState } from '@/model/tournament-state';
 import { web3Service } from '@/services/web3-service';
 
@@ -69,26 +70,34 @@ const { tournamentId, entryFeeWei, finalized, totalPotWei, endTime, topN, timeRe
 const providerChainId = ref<number | null>(null);
 
 const chainId = computed(() => getContractsConfig().chainId);
+const targetNetworkName = computed(() => {
+  try {
+    const cfg = getAppConfig();
+    return cfg.chain.chainName || `Chain ${cfg.chain.chainId}`;
+  } catch {
+    return `Chain ${chainId.value}`;
+  }
+});
 const contractAddress = computed(() => getContractsConfig().tournamentManager.address);
 const shortAddress = computed(() => {
   const a = web3Service.getAddress();
   if (!a) return '-';
   return `${a.substring(0,6)}...${a.substring(a.length-4)}`;
 });
-const toEth = (wei?: bigint | null) => {
-  if (!wei) return '0 ETH';
+const toMusd = (wei?: bigint | null) => {
+  if (!wei) return '0 MUSD';
   const v = Number(wei) / 1e18;
   // Show more decimals for small amounts
   if (v < 0.01) {
-    return `${v.toFixed(6)} ETH`;
+    return `${v.toFixed(6)} MUSD`;
   } else if (v < 1) {
-    return `${v.toFixed(4)} ETH`;
+    return `${v.toFixed(4)} MUSD`;
   } else {
-    return `${v.toFixed(3)} ETH`;
+    return `${v.toFixed(3)} MUSD`;
   }
 };
-const formattedFee = computed(() => toEth(entryFeeWei.value));
-const formattedPot = computed(() => toEth(totalPotWei.value));
+const formattedFee = computed(() => toMusd(entryFeeWei.value));
+const formattedPot = computed(() => toMusd(totalPotWei.value));
 const endLabel = computed(() => {
   if (!endTime.value) return '-';
   const d = new Date(endTime.value * 1000);
@@ -114,7 +123,7 @@ const prizeSplits = computed(() => {
   return prizeBps.value.map((bps, index) => {
     const percentage = (bps / 100).toFixed(1);
     const wei = (totalPotWei.value * BigInt(bps)) / 10000n;
-    const amount = toEth(wei);
+    const amount = toMusd(wei);
     const rank = index === 0 ? '1st' : index === 1 ? '2nd' : index === 2 ? '3rd' : `${index + 1}th`;
     
     return {
@@ -146,7 +155,7 @@ async function switchChain(){
       await refresh();
       
       if (!wrongChain.value) {
-        console.log('Successfully switched to Arbitrum One!');
+        console.log(`Successfully switched to ${targetNetworkName.value}!`);
         break;
       }
       
@@ -165,7 +174,7 @@ async function switchChain(){
     if (error.code === 4001) {
       errorMessage += 'You rejected the network switch request.';
     } else if (error.code === 4902) {
-      errorMessage += 'Arbitrum One needs to be added to your wallet first.';
+      errorMessage += `${targetNetworkName.value} needs to be added to your wallet first.`;
     } else if (error.message?.includes('User rejected')) {
       errorMessage += 'You rejected the network switch request.';
     } else {

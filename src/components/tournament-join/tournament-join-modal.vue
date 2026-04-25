@@ -120,8 +120,8 @@
 
 <script lang="ts">
 import { web3Service } from '@/services/web3-service';
-import { enterTournament as joinTournament, getEntryFeeWei, getTournamentInfo } from '@/services/contracts/tournament-client';
-import { getContractsConfig } from '@/config/contracts';
+import { enterTournament as joinTournament, getEntryFee, getTournamentInfo } from '@/services/contracts/tournament-client';
+import { getAppConfig } from '@/config/app-config';
 import { ethers } from 'ethers';
 import { showToast } from '@/services/toast';
 
@@ -139,7 +139,7 @@ export default {
             state: 'loading-details' as ModalState,
             errorMessage: '',
             isLoading: false,
-            entryFeeWei: 0n,
+            entryFee: 0n,
             endTime: null as number | null,
             currentTime: Math.floor(Date.now() / 1000),
             timerInterval: null as ReturnType<typeof setInterval> | null,
@@ -154,8 +154,8 @@ export default {
         },
         displayEntryFee(): string {
             try {
-                const eth = ethers.formatEther(this.entryFeeWei);
-                return `${eth} ETH`;
+                const v = ethers.formatUnits(this.entryFee, 18);
+                return `${v} MUSD`;
             } catch {
                 return 'Loading...';
             }
@@ -180,7 +180,12 @@ export default {
             return this.providerChainId !== null && this.providerChainId !== config.chainId;
         },
         targetNetworkName(): string {
-            return 'Arbitrum One';
+            try {
+                const cfg = getAppConfig();
+                return cfg.chain.chainName || `Chain ${cfg.chain.chainId}`;
+            } catch {
+                return 'Mezo';
+            }
         },
     },
     async mounted(): Promise<void> {
@@ -277,9 +282,9 @@ export default {
             try {
                 console.log('Loading tournament details for ID:', this.tournamentId);
                 
-                const fee = await getEntryFeeWei();
-                console.log('Entry fee loaded:', ethers.formatEther(fee), 'ETH');
-                this.entryFeeWei = fee;
+                const fee = await getEntryFee();
+                console.log('Entry fee loaded:', ethers.formatUnits(fee, 18), 'MUSD');
+                this.entryFee = fee;
                 
                 const info = await getTournamentInfo(this.tournamentId);
                 console.log('Tournament info loaded:', info);
@@ -287,7 +292,7 @@ export default {
                 
                 // Validate we got real data
                 if (fee === 0n) {
-                    throw new Error('Failed to load entry fee - got 0 ETH');
+                    throw new Error('Failed to load entry fee - got 0 MUSD');
                 }
                 if (info.endTime === 0) {
                     throw new Error('Failed to load tournament end time');

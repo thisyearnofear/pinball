@@ -34,7 +34,7 @@ jobs:
           ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} <<'EOF'
           set -euo pipefail
           cd /opt/pinball/backend
-          npm install --no-audit --no-fund
+          npm install --no-audit --no-fund --ignore-scripts
           npm run build
           systemctl restart pinball-backend
           systemctl status pinball-backend --no-pager --full | sed -n '1,80p'

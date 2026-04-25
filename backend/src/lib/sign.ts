@@ -1,8 +1,5 @@
 import { Wallet, keccak256, toUtf8Bytes, getBytes, concat, solidityPacked } from 'ethers';
 
-// Arbitrum One chain ID (only chain supported)
-const ARBITRUM_ONE_CHAIN_ID = 42161n;
-
 // EIP-191 personal_sign style: keccak256("\x19Ethereum Signed Message:\n32" || innerHash)
 export function buildPersonalDigest(innerHash: string): string {
   const prefix = toUtf8Bytes("\x19Ethereum Signed Message:\n32");
@@ -42,6 +39,8 @@ export function innerScoreHashV2(
   player: string,
   score: bigint,
   nonce: bigint,
+  chainId: bigint,
+  scorePrefix: string,
   nameHash: string,
   metaHash: string
 ): string {
@@ -50,12 +49,12 @@ export function innerScoreHashV2(
     solidityPacked(
       ['bytes', 'uint256', 'address', 'uint256', 'uint256', 'uint256', 'bytes32', 'bytes32'],
       [
-        toUtf8Bytes('PINBALL_SCORE:v2'),
+        toUtf8Bytes(scorePrefix),
         tournamentId,
         player,
         score,
         nonce,
-        ARBITRUM_ONE_CHAIN_ID,
+        chainId,
         nameHash,
         metaHash
       ]
@@ -73,6 +72,8 @@ export async function signScore(
   player: string,
   score: number,
   nonce: bigint,
+  chainId: bigint,
+  scorePrefix: string,
   name: string,
   metadata: string
 ): Promise<string> {
@@ -84,6 +85,8 @@ export async function signScore(
     player,
     BigInt(score),
     nonce,
+    chainId,
+    scorePrefix,
     nameHash,
     metaHash
   );
@@ -94,6 +97,8 @@ export async function signScore(
     player,
     BigInt(score),
     nonce,
+    chainId,
+    scorePrefix,
     nameHash,
     metaHash
   );
@@ -115,7 +120,8 @@ export async function signScore(
     innerHash: inner,
     signature: sig,
     signatureLength: sig.length,
-    chainId: ARBITRUM_ONE_CHAIN_ID.toString()
+    chainId: chainId.toString(),
+    scorePrefix
   });
   
   return sig;

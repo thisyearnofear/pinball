@@ -6,6 +6,7 @@ import { validateScoreSubmission, MAX_SCORE } from '../lib/validation.js';
 import { scoreSignatureRateLimiter } from '../lib/rate-limiter.js';
 import { nonceTracker } from '../lib/nonce-tracker.js';
 import { keccak256, toUtf8Bytes } from 'ethers';
+import { awardMissionWinner } from '../lib/mission-awarder.js';
 
 const SignBody = z.object({
   tournamentId: z.number().int().positive(),
@@ -14,6 +15,8 @@ const SignBody = z.object({
   name: z.string().default(''),  // Wallet-derived, no length limit
   metadata: z.string().default(''),
   nonce: z.string().optional(),
+  // Optional differentiator: if provided, backend may award a Sponsored Mission bounty.
+  missionId: z.number().int().positive().optional(),
 });
 
 export async function scoresRoutes(app: FastifyInstance) {
@@ -30,6 +33,7 @@ export async function scoresRoutes(app: FastifyInstance) {
     }
 
     const { tournamentId, address, score, name, metadata } = parsed.data;
+    const missionId = parsed.data.missionId;
 
     // Check per-address rate limit
     const rateLimitResult = scoreSignatureRateLimiter.isAllowed(address);
@@ -92,6 +96,8 @@ export async function scoresRoutes(app: FastifyInstance) {
         addr,
         s,
         nonce,
+        BigInt(env.CHAIN_ID),
+        env.SCORE_PREFIX,
         n,
         metadata // Use original metadata string, not JSON.stringify(m)
       );
@@ -132,7 +138,33 @@ export async function scoresRoutes(app: FastifyInstance) {
         signature,
         nonce: nonce.toString(),
         rateLimitRemaining: rateLimitResult.remaining,
-        rateLimitResetAt: rateLimitResult.resetAt
+        rateLimitResetAt: rateLimitResult.resetAt,
+        ...(await (async () => {
+          // Optional: award Sponsored Mission bounty (attestor broadcasts tx).
+          // This keeps the frontend integration seamless: "submit score" can trigger a reward.
+          if (!missionId) return {};
+          if (!env.MISSION_POOL_ADDRESS) return { missionAwarded: false, missionError: 'MISSION_POOL_ADDRESS not configured' };
+          if (s < env.MISSION_SCORE_THRESHOLD) return { missionAwarded: false, missionError: `Score below threshold (${env.MISSION_SCORE_THRESHOLD})` };
+          if (env.MISSION_REQUIRE_MULTIBALL) {
+            try {
+              const parsed = JSON.parse(metadata);
+              const multiball = Boolean(parsed?.multiball ?? parsed?.events?.multiball);
+              if (!multiball) {
+                return { missionAwarded: false, missionError: 'Multiball not achieved' };
+              }
+            } catch {
+              return { missionAwarded: false, missionError: 'Invalid metadata (multiball check)' };
+            }
+          }
+
+          try {
+            const txHash = await awardMissionWinner({ missionId, winner: addr });
+            return { missionAwarded: true, missionTxHash: txHash };
+          } catch (e: any) {
+            app.log.warn({ event: 'MISSION_AWARD_FAILED', missionId, address: addr, error: e?.message });
+            return { missionAwarded: false, missionError: e?.message || 'Mission award failed' };
+          }
+        })())
       };
     } catch (e: any) {
       app.log.error({

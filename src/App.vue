@@ -40,6 +40,7 @@
             :use-vhs="config.useVHS"
             :is-farcaster="isFarcaster"
             :touchscreen="hasTouchScreen"
+            @game-event="onGameEvent"
         />
         <ScoreSubmissionOverlay
             v-if="showSubmissionOverlay"
@@ -165,6 +166,7 @@ export default {
             tableName: "",
         },
         isTournamentMode: false, // Explicit tournament mode flag
+        multiballTriggered: false,
         game: {
             active: false,
         },
@@ -269,6 +271,13 @@ export default {
         document.addEventListener( "touchstart", touchHandler );
     },
     methods: {
+        onGameEvent(evt: any): void {
+            // Keep this tiny: it bridges engine messages to app-level mechanics.
+            if (evt?.type === "message" && evt?.message === "MULTIBALL") {
+                this.multiballTriggered = true;
+                this.showToast("Multiball! Jackpot eligibility activated.", "info");
+            }
+        },
         async initGame(): Promise<void> {
             if ( this.startPending ) {
                 return;
@@ -276,6 +285,8 @@ export default {
             if ( getFromStorage( STORED_FULLSCREEN ) === "true" && !isFullscreen() ) {
                 toggleFullscreen();
             }
+            // Reset per-run flags
+            this.multiballTriggered = false;
             this.startPending = true;
             
             // Check if wallet is connected and on correct chain before tournament mode
@@ -298,7 +309,7 @@ export default {
                 } catch (error) {
                     console.error('Tournament setup failed:', error);
                     // Show user-friendly error and fallback to practice mode
-                    this.showToast('Please connect to the correct network (Arbitrum One) for tournament mode', 'error');
+                    this.showToast(`Please connect to the correct network (chain ${getContractsConfig().chainId}) for tournament mode`, 'error');
                     this.newGameProps.playerName = 'Anonymous Player';
                     // Continue with practice mode
                 }
@@ -502,6 +513,8 @@ export default {
                 // Include client version
                 clientVersion: 'v1.0.0', // Could be made dynamic
                 timestamp: Date.now(),
+                // Differentiator hook: allow "Multiball Jackpot" style missions without extra UX steps
+                multiball: this.multiballTriggered,
             };
 
             try {
