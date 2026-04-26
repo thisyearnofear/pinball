@@ -20,8 +20,6 @@
  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-import axios from "axios";
-import Config from "@/config/config";
 import { GameSounds } from "@/definitions/game";
 import { STORED_MUTED_FX_SETTING, STORED_MUTED_MUSIC_SETTING } from "@/definitions/settings";
 import { getFromStorage, setInStorage } from "@/utils/local-storage";
@@ -41,13 +39,9 @@ let masterBus: AudioNode;
 let sound: HTMLMediaElement | undefined;
 let acSound: MediaElementAudioSourceNode | undefined;
 
-/**
- * Dec 2024 : we could use the SoundCloud API to stream music
- * directly from there, but all old tokens were invalidated and until
- * further notice, new API tokens cannot be requested... fall back to local.
- */
-type MusicSourceType = "soundcloud" | "local";
-const MUSIC_SOURCE = "local" as MusicSourceType;
+// Music is served from local assets only.
+// (SoundCloud streaming was removed to reduce deps + avoid fragile OAuth/CORS flows.)
+const MUSIC_SOURCE = "local" as const;
 
 const SOUND_FX_PATH = "./assets/audio/";
 const SOUND_EFFECTS = [
@@ -116,33 +110,9 @@ export const enqueueTrack = async( trackId: string ): Promise<void> => {
 
     stop();
 
-    if ( MUSIC_SOURCE === "soundcloud" ) {
-        // prepare the stream from SoundCloud, we create an inline <audio> tag instead
-        // of using SC stream to overcome silence on mobile devices (looking at you, Apple!)
-        // this will not actually play the track yet (see playEnqueuedTrack())
-
-        const requestData = {
-            headers: {
-                "Content-Type"  : "application/json; charset=utf-8",
-                "Authorization" : `OAuth ${Config.getSoundCloudClientId()}`
-            }
-        };
-
-        let { data } = await axios.get( `https://api.soundcloud.com/tracks/${trackId}`, requestData );
-        if ( data?.access === "playable" && data.stream_url ) {
-            //trackMeta = data;
-            // data.stream_url should be the way to go but this leads to CORS errors when following
-            // a redirect... for now use the /streams endpoint
-            ({ data } = await axios.get( `https://api.soundcloud.com/tracks/${trackId}/streams`, requestData ));
-            if ( data?.http_mp3_128_url ) {
-                sound = createAudioElement( data.http_mp3_128_url, true, masterBus );
-                _startPlayingEnqueuedTrack( trackId );
-            }
-        }
-    } else {
-        sound = createAudioElement( `${SOUND_FX_PATH}music_${trackId}.mp3`, true, masterBus );
-        _startPlayingEnqueuedTrack( trackId );
-    }
+    // Local-only music
+    sound = createAudioElement( `${SOUND_FX_PATH}music_${trackId}.mp3`, true, masterBus );
+    _startPlayingEnqueuedTrack( trackId );
 };
 
 export const stop = (): void => {

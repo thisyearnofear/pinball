@@ -2,13 +2,13 @@
 
 Mezo Pinball Arcade is a Web3 pinball game built for the Mezo ecosystem, featuring on-chain tournaments where players compete for **MUSD** prizes. It combines retro pinball gameplay with blockchain tournament rails, allowing users to connect a wallet (Mezo Passport) and win Bitcoin-backed stablecoin rewards based on their scores.
 
-The game is built with Vue 3, uses Matter.js for physics simulation, and leverages Web3 technologies for tournament management. It currently runs as a Farcaster Frame and supports various EIP-1193 compatible wallets.
+The game is built with **React** (Mezo Passport-first), uses Matter.js for physics simulation, and leverages Web3 technologies for tournament management.
 
 ## Architecture
 
 This is a monorepo containing three main components:
 
-- **Frontend**: Vue 3 application (legacy shell) + React shell (Mezo Passport migration in progress)
+- **Frontend**: React application (primary UI shell)
 - **Backend**: Node.js server that handles score signing for tournament submissions
 - **Contracts**: Solidity smart contracts for tournament management on Mezo (MUSD-based)
 
@@ -25,12 +25,12 @@ This is a monorepo containing three main components:
 
 ### Prerequisites
 - Node.js 18+
-- npm or pnpm
+- pnpm (recommended; npm can error due to an npm/arborist issue in some environments)
 
 ### Installation
 
 ```bash
-npm install
+pnpm install
 ```
 
 ### Development
@@ -38,7 +38,7 @@ npm install
 Start the local development server:
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 ### Production Build
@@ -46,13 +46,13 @@ npm run dev
 Build for production (output goes to `./dist`):
 
 ```bash
-npm run build
+pnpm run build
 ```
 
 ### Preview Production Build
 
 ```bash
-npm run serve
+pnpm run serve
 ```
 
 ## Backend Setup

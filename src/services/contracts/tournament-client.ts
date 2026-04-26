@@ -1,44 +1,27 @@
 import { ethers } from 'ethers';
 import { getContractsConfig } from '../../config/contracts';
-import { web3Service } from '../web3-service';
 import { approveMUSD, getMUSDAllowance, getMUSDBalance } from './musd-client';
+import { TOURNAMENT_MANAGER_ABI } from './abi';
+import {
+  estimateGasWithBuffer,
+  getPublicContract as getPublicEthersContract,
+  getWriteContract,
+  waitForTxPublic,
+} from './contract-utils';
+import type { WalletPort } from '@/domains/wallet/wallet-port';
+import { getLegacyWalletPort } from '@/domains/wallet/legacy-web3service-wallet-port';
 
-// Minimal ABI for the functions we use; replace with full ABI from deployed contract
-export const TOURNAMENT_MANAGER_ABI = [
-  "function entryFee() view returns (uint256)",
-  "function musd() view returns (address)",
-  "function scoreSigner() view returns (address)",
-  "function tournaments(uint256) view returns (uint256 id, uint64 startTime, uint64 endTime, uint16 topN, bool finalized, uint256 totalPot)",
-  "function lastTournamentId() view returns (uint256)",
-  "function getPrizeBps(uint256 id) view returns (uint16[])",
-  "function enterTournament(uint256 id)",
-  "function submitScoreWithSignature(uint256 id, uint256 score, uint256 nonce, string name, string metadata, bytes signature)",
-  "function viewLeaderboard(uint256 id, uint256 offset, uint256 limit) view returns (address[] addrs, uint256[] scores)",
-  "function finalize(uint256 id)",
-  "function getWinners(uint256 id) view returns (address[])",
-  "function claimReward(uint256 id)",
-];
-
-function getContract(): ethers.Contract {
-  const signer = web3Service.getSigner();
-  const provider = web3Service.getProvider();
-  if (!provider) throw new Error('Wallet not connected');
-  const { chainId, tournamentManager } = getContractsConfig();
-  // optional: validate chainId matches current provider network
-  // we can't await here; rely on UI to enforce switchChain before actions
-  const runner = signer ?? provider;
-  return new ethers.Contract(tournamentManager.address, TOURNAMENT_MANAGER_ABI, runner);
+async function getContract(wallet?: WalletPort): Promise<ethers.Contract> {
+  const { tournamentManager } = getContractsConfig();
+  const w = wallet ?? getLegacyWalletPort();
+  return await getWriteContract(tournamentManager.address, TOURNAMENT_MANAGER_ABI, w);
 }
 
 // Public read-only contract that doesn't require wallet connection
 // Always use public RPC for reads - Farcaster's provider RPC has connectivity issues
 function getPublicContract(): ethers.Contract {
-  const { rpcUrlPublic, tournamentManager } = getContractsConfig();
-
-  // Always use a configured public RPC for read operations.
-  // This avoids wallet-provider-specific RPC quirks (incl. Farcaster/embedded providers).
-  const provider = new ethers.JsonRpcProvider(rpcUrlPublic);
-  return new ethers.Contract(tournamentManager.address, TOURNAMENT_MANAGER_ABI, provider);
+  const { tournamentManager } = getContractsConfig();
+  return getPublicEthersContract(tournamentManager.address, TOURNAMENT_MANAGER_ABI);
 }
 
 export async function getActiveTournamentId(): Promise<number> {
@@ -50,6 +33,26 @@ export async function getActiveTournamentId(): Promise<number> {
     console.error('Failed to get active tournament ID:', error);
     throw error;
   }
+}
+
+export async function getNextPlayerNonce(tournamentId: number, address: string): Promise<string> {
+  const c = getPublicContract();
+  const lastNonce: bigint = await c.playerNonces(tournamentId, address);
+  return (lastNonce + 1n).toString();
+}
+
+export async function getPlayerInfo(tournamentId: number, address: string): Promise<{
+  entered: boolean;
+  bestScore: bigint;
+  rewardClaimed: boolean;
+}> {
+  const c = getPublicContract();
+  const p = await c.playerInfo(tournamentId, address);
+  return {
+    entered: Boolean(p.entered),
+    bestScore: BigInt(p.bestScore ?? 0),
+    rewardClaimed: Boolean(p.rewardClaimed),
+  };
 }
 
 async function _getActiveTournamentId(contract: ethers.Contract): Promise<number> {
@@ -64,15 +67,14 @@ async function _getActiveTournamentId(contract: ethers.Contract): Promise<number
   return Number(lastId);
 }
 
-export async function enterTournament(tournamentId: number): Promise<string> {
-  const c = getContract();
+export async function enterTournament(tournamentId: number, wallet?: WalletPort): Promise<string> {
+  const w = wallet ?? getLegacyWalletPort();
+  const c = await getContract(w);
 
   try {
     // Pre-flight checks
-    const signer = web3Service.getSigner();
-    if (!signer) throw new Error('No signer available');
-
-    const address = await signer.getAddress();
+    const signer = await w.getSigner();
+    const address = await w.getAddress();
     console.log('=== ENTER TOURNAMENT DEBUG ===');
     console.log('Tournament ID:', tournamentId);
     console.log('Player address:', address);
@@ -92,13 +94,11 @@ export async function enterTournament(tournamentId: number): Promise<string> {
     }
 
     // Check provider type (Farcaster vs MetaMask)
-    const provider = web3Service.getProvider();
-    if (provider) {
-      console.log('Provider type:', provider.constructor.name);
-      // @ts-ignore - accessing internal property for debugging
-      const underlyingProvider = provider._getConnection?.()?.url || 'unknown';
-      console.log('Underlying provider:', underlyingProvider);
-    }
+    const provider = await w.getProvider();
+    console.log('Provider type:', provider.constructor.name);
+    // @ts-ignore - accessing internal property for debugging
+    const underlyingProvider = provider._getConnection?.()?.url || 'unknown';
+    console.log('Underlying provider:', underlyingProvider);
 
     // Check player's current status (for logging only - pay-per-play model allows multiple entries)
     const publicContract = getPublicContract();
@@ -158,24 +158,17 @@ export async function enterTournament(tournamentId: number): Promise<string> {
     const allowance = await getMUSDAllowance(address, tournamentManager.address);
     if (allowance < fee) {
       console.log('Approving MUSD for tournament entry...');
-      await approveMUSD(tournamentManager.address, ethers.MaxUint256);
+      await approveMUSD(tournamentManager.address, ethers.MaxUint256, w);
     }
 
     // Estimate gas using PUBLIC RPC
     // This avoids "missing revert data" errors from Farcaster provider
-    let gasLimit = 500000n; // Safe default
-    try {
-      console.log('Estimating gas via Public RPC...');
-      const estimatedGas = await publicContract.enterTournament.estimateGas(tournamentId, { from: address });
-      console.log('✓ Gas estimated via Public RPC:', estimatedGas.toString());
-      gasLimit = (estimatedGas * 150n) / 100n; // Add 50% buffer to be safe
-    } catch (estimateError: any) {
-      console.warn('❌ Public RPC gas estimation failed, using default 500k:', estimateError.message);
-      // If public RPC fails, it might be a real revert (e.g. insufficient funds, not active)
-      if (estimateError.message?.includes('execution reverted')) {
-        throw new Error('Transaction would fail. Please check your balance and tournament status.');
-      }
-    }
+    console.log('Estimating gas via Public RPC...');
+    const gasLimit = await estimateGasWithBuffer(
+      () => publicContract.enterTournament.estimateGas(tournamentId, { from: address }),
+      { fallback: 500000n, bufferBps: 5000n } // +50%
+    );
+    console.log('Gas limit (buffered):', gasLimit.toString());
 
     console.log('Submitting enterTournament transaction...');
     console.log('Params:', { tournamentId, gasLimit: gasLimit.toString() });
@@ -187,17 +180,8 @@ export async function enterTournament(tournamentId: number): Promise<string> {
     console.log('Transaction submitted:', tx.hash);
     console.log('Waiting for confirmation via Public RPC...');
 
-    // Use Public RPC to wait for confirmation since Farcaster provider doesn't support eth_getTransactionReceipt
-    const publicProvider = publicContract.runner?.provider;
-    let receipt;
-
-    if (publicProvider) {
-      // @ts-ignore - waitForTransaction exists on Provider in v6
-      receipt = await publicProvider.waitForTransaction(tx.hash);
-    } else {
-      console.warn('Public provider not available for waiting, trying default...');
-      receipt = await tx.wait();
-    }
+    const receiptPublic: ethers.TransactionReceipt | null = await waitForTxPublic(tx.hash).catch(() => null);
+    const receipt: ethers.TransactionReceipt = receiptPublic ?? (await tx.wait());
 
     console.log('Transaction confirmed:', {
       hash: receipt?.hash,
@@ -290,43 +274,36 @@ export async function submitScoreWithSignature(
   nonce: number,
   name: string,
   metadata: string,
-  signature: string
+  signature: string,
+  wallet?: WalletPort
 ): Promise<string> {
-  const address = web3Service.getAddress();
-  if (!address) {
-    throw new Error("Wallet not connected");
-  }
+  const w = wallet ?? getLegacyWalletPort();
+  const address = await w.getAddress();
 
-  const c = getContract();
+  const c = await getContract(w);
   const publicContract = getPublicContract();
 
-  let gasLimit = 500000n; // Safe default
-
-  try {
-    console.log('Estimating gas for submitScore via Public RPC...');
-    const estimatedGas = await publicContract.submitScoreWithSignature.estimateGas(
-      tournamentId, score, nonce, name, metadata, signature,
-      { from: address }
-    );
-    console.log('✓ Gas estimated via Public RPC:', estimatedGas.toString());
-    gasLimit = (estimatedGas * 120n) / 100n; // 20% buffer
-  } catch (e) {
-    console.warn('Public RPC gas estimation failed for submitScore, using default:', e);
-  }
+  console.log('Estimating gas for submitScore via Public RPC...');
+  const gasLimit = await estimateGasWithBuffer(
+    () =>
+      publicContract.submitScoreWithSignature.estimateGas(
+        tournamentId,
+        score,
+        nonce,
+        name,
+        metadata,
+        signature,
+        { from: address }
+      ),
+    { fallback: 500000n, bufferBps: 2000n } // +20%
+  );
 
   // Use the calculated gas limit to bypass gas estimation issues on Farcaster provider
   const tx = await c.submitScoreWithSignature(tournamentId, score, nonce, name, metadata, signature, {
     gasLimit: gasLimit
   });
 
-  // Use Public RPC to wait for confirmation since Farcaster provider doesn't support eth_getTransactionReceipt
-  const publicProvider = publicContract.runner?.provider;
-  if (publicProvider) {
-    // @ts-ignore - waitForTransaction exists on Provider in v6
-    await publicProvider.waitForTransaction(tx.hash);
-  } else {
-    await tx.wait();
-  }
+  await waitForTxPublic(tx.hash).catch(() => tx.wait());
 
   return tx.hash;
 }
@@ -428,20 +405,20 @@ async function _getTournamentInfo(contract: ethers.Contract, tournamentId: numbe
   throw lastError;
 }
 
-export async function getWinners(tournamentId: number): Promise<string[]> {
+export async function getWinners(tournamentId: number, wallet?: WalletPort): Promise<string[]> {
   try {
     const c = getPublicContract();
     const w: string[] = await c.getWinners(tournamentId);
     return w;
   } catch (error: any) {
     console.warn('Public RPC failed for getWinners, trying wallet provider:', error);
-    const c = getContract();
+    const c = await getContract(wallet);
     const w: string[] = await c.getWinners(tournamentId);
     return w;
   }
 }
 
-export async function getPrizeBps(tournamentId: number): Promise<number[]> {
+export async function getPrizeBps(tournamentId: number, wallet?: WalletPort): Promise<number[]> {
   try {
     const c = getPublicContract();
     const arr: bigint[] = await c.getPrizeBps(tournamentId);
@@ -449,7 +426,7 @@ export async function getPrizeBps(tournamentId: number): Promise<number[]> {
   } catch (error: any) {
     console.warn('Public RPC failed for getPrizeBps, trying wallet provider:', error);
     try {
-      const c = getContract();
+      const c = await getContract(wallet);
       const arr: bigint[] = await c.getPrizeBps(tournamentId);
       return arr.map(n => Number(n));
     } catch (walletError: any) {
@@ -458,8 +435,8 @@ export async function getPrizeBps(tournamentId: number): Promise<number[]> {
   }
 }
 
-export async function claimReward(tournamentId: number): Promise<string> {
-  const c = getContract();
+export async function claimReward(tournamentId: number, wallet?: WalletPort): Promise<string> {
+  const c = await getContract(wallet);
   const tx = await c.claimReward(tournamentId);
   const receipt = await tx.wait();
   return receipt?.hash as string;

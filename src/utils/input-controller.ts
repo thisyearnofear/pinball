@@ -58,7 +58,9 @@ export function createInputController(cb: Callbacks) {
 
   function handleTouchStart(isLeft: boolean, event: TouchEvent) {
     isLeft ? cb.onLeftFlip(true) : cb.onRightFlip(true);
-    for (const t of event.touches) {
+    for (let i = 0; i < event.touches.length; i++) {
+      const t = event.touches.item(i);
+      if (!t) continue;
       touchStart.y = t.pageY;
       touchStart.time = window.performance.now();
     }

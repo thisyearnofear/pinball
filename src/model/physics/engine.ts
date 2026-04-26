@@ -21,7 +21,6 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 import * as Matter from "matter-js";
-// @ts-expect-error no type definitions for matter-attractors
 import MatterAttractors from "matter-attractors";
 import type { Point } from "zcanvas";
 import {

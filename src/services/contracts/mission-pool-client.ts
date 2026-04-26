@@ -1,17 +1,10 @@
 import { ethers } from "ethers";
 import { getContractsConfig } from "../../config/contracts";
-import { web3Service } from "../web3-service";
 import { approveMUSD, getMUSDAllowance, getMUSDBalance } from "./musd-client";
-
-const MISSION_POOL_ABI = [
-  "function attestor() view returns (address)",
-  "function musd() view returns (address)",
-  "function lastMissionId() view returns (uint256)",
-  "function missions(uint256) view returns (address sponsor, uint256 rewardPerWinner, uint16 maxWinners, uint16 winnersCount, bool active)",
-  "function createMission(uint256 rewardPerWinner, uint16 maxWinners) returns (uint256)",
-  "function awardWinner(uint256 missionId, address winner)",
-  "function setMissionActive(uint256 missionId, bool active)"
-];
+import { MISSION_POOL_ABI } from "./abi";
+import { getPublicContract, getWriteContract as getWriteEthersContract } from "./contract-utils";
+import type { WalletPort } from "@/domains/wallet/wallet-port";
+import { getLegacyWalletPort } from "@/domains/wallet/legacy-web3service-wallet-port";
 
 function getMissionPoolAddress(): string {
   const { missionPool } = getContractsConfig();
@@ -21,26 +14,21 @@ function getMissionPoolAddress(): string {
   return missionPool.address;
 }
 
-function getPublicProvider(): ethers.Provider {
-  const { rpcUrlPublic } = getContractsConfig();
-  return new ethers.JsonRpcProvider(rpcUrlPublic);
-}
-
 function getReadContract(): ethers.Contract {
-  return new ethers.Contract(getMissionPoolAddress(), MISSION_POOL_ABI, getPublicProvider());
+  return getPublicContract(getMissionPoolAddress(), MISSION_POOL_ABI);
 }
 
-function getWriteContract(): ethers.Contract {
-  const provider = web3Service.getProvider();
-  const signer = web3Service.getSigner();
-  if (!provider) throw new Error("Wallet not connected");
-  const runner = signer ?? provider;
-  return new ethers.Contract(getMissionPoolAddress(), MISSION_POOL_ABI, runner);
+async function getWriteContract(wallet?: WalletPort): Promise<ethers.Contract> {
+  const w = wallet ?? getLegacyWalletPort();
+  return await getWriteEthersContract(getMissionPoolAddress(), MISSION_POOL_ABI, w);
 }
 
-export async function createSponsoredMission(params: { rewardPerWinner: bigint; maxWinners: number }): Promise<string> {
-  const address = web3Service.getAddress();
-  if (!address) throw new Error("Wallet not connected");
+export async function createSponsoredMission(
+  params: { rewardPerWinner: bigint; maxWinners: number },
+  wallet?: WalletPort
+): Promise<string> {
+  const w = wallet ?? getLegacyWalletPort();
+  const address = await w.getAddress();
 
   const total = params.rewardPerWinner * BigInt(params.maxWinners);
 
@@ -52,10 +40,10 @@ export async function createSponsoredMission(params: { rewardPerWinner: bigint; 
   const spender = getMissionPoolAddress();
   const allowance = await getMUSDAllowance(address, spender);
   if (allowance < total) {
-    await approveMUSD(spender, ethers.MaxUint256);
+    await approveMUSD(spender, ethers.MaxUint256, w);
   }
 
-  const c = getWriteContract();
+  const c = await getWriteContract(w);
   const tx = await c.createMission(params.rewardPerWinner, params.maxWinners);
   const receipt = await tx.wait();
   return receipt?.hash as string;
@@ -66,4 +54,3 @@ export async function getLatestMissionId(): Promise<number> {
   const id: bigint = await c.lastMissionId();
   return Number(id);
 }
-

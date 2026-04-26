@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
 import path from "path";
-import vue from "@vitejs/plugin-vue";
+import react from "@vitejs/plugin-react";
 import { viteStaticCopy } from "vite-plugin-static-copy";
 
 const dirLib    = `${__dirname}/node_modules`;
@@ -12,7 +12,7 @@ const dest      = `${__dirname}/dist`;
 export default defineConfig({
     base: "./",
     plugins: [
-        vue(),
+        react(),
         viteStaticCopy({
             targets: [
                 {
@@ -43,6 +43,13 @@ export default defineConfig({
             }
         }
     },
+    test: {
+        // Keep frontend tests scoped to the frontend only.
+        // Backend and contracts have their own packages and test runners.
+        include: [ "tests/**/*.spec.ts" ],
+        exclude: [ "backend/**", "contracts/**", "apps/**", "dist/**", "node_modules/**" ],
+        environment: "jsdom",
+    },
     define: {
         global: 'globalThis',
         process: {
@@ -61,7 +68,6 @@ export default defineConfig({
                     version: ''
                 })
             }
-        },
-        include: ['buffer']
+        }
     }
 });

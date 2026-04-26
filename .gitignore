@@ -2,10 +2,22 @@
 node_modules
 /dist
 /backend/dist
+/apps/web-react/dist/
+.pnpm-store/
 *.tsbuildinfo
 build.sh
 
+# Lockfiles
+*-lock.json
+pnpm-lock.yaml
+
+# Hardhat/Contracts
+contracts/artifacts/
+contracts/cache/
+contracts/typechain-types/
+
 # local env files
+.env
 .env.local
 .env.*.local
 
@@ -23,14 +35,9 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 *.sw?
-
-.env
-.env.local
-
-.trae
-.qoder
 .gemini
 
 # Local Netlify folder
 .netlify
 .blackboxcli/
+

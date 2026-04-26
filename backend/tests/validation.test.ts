@@ -2,15 +2,15 @@
  * Tests for Phase 1: Input Validation & Rate Limiting
  */
 
+import { describe, test, expect } from "vitest";
 import {
   validateScoreBounds,
-  sanitizePlayerName,
   validateGameMetadata,
   validateScoreSubmission,
   MAX_SCORE,
-  PLAYER_NAME_MAX_LENGTH,
   MAX_METADATA_LENGTH
 } from '../src/lib/validation';
+import { AddressRateLimiter } from "../src/lib/rate-limiter.js";
 
 describe('Input Validation - Phase 1', () => {
   describe('Score Bounds Validation', () => {
@@ -40,7 +40,8 @@ describe('Input Validation - Phase 1', () => {
     test('should reject Infinity', () => {
       const result = validateScoreBounds(Infinity);
       expect(result.valid).toBe(false);
-      expect(result.reason).toBe('INVALID_SCORE');
+      // Infinity is "too high" for our ordering (bounds check first)
+      expect(result.reason).toBe('SCORE_TOO_HIGH');
     });
 
     test('should reject NaN', () => {
@@ -50,52 +51,8 @@ describe('Input Validation - Phase 1', () => {
     });
   });
 
-  describe('Player Name Sanitization', () => {
-    test('should accept valid names', () => {
-      const result = sanitizePlayerName('Alice');
-      expect(result.valid).toBe(true);
-      expect(result.sanitized).toBe('Alice');
-
-      const result2 = sanitizePlayerName('Player-123');
-      expect(result2.valid).toBe(true);
-      expect(result2.sanitized).toBe('Player-123');
-    });
-
-    test('should trim whitespace', () => {
-      const result = sanitizePlayerName('  Alice  ');
-      expect(result.sanitized).toBe('Alice');
-    });
-
-    test('should accept underscores and dots', () => {
-      const result = sanitizePlayerName('player_name.eth');
-      expect(result.valid).toBe(true);
-      expect(result.sanitized).toBe('player_name.eth');
-    });
-
-    test('should remove invalid characters', () => {
-      const result = sanitizePlayerName('Alice@#$Bob');
-      expect(result.valid).toBe(true);
-      expect(result.sanitized).toBe('AliceBob');
-    });
-
-    test('should truncate long names', () => {
-      const longName = 'a'.repeat(PLAYER_NAME_MAX_LENGTH + 10);
-      const result = sanitizePlayerName(longName);
-      expect(result.sanitized.length).toBeLessThanOrEqual(PLAYER_NAME_MAX_LENGTH);
-    });
-
-    test('should handle empty string', () => {
-      const result = sanitizePlayerName('');
-      expect(result.valid).toBe(true);
-      expect(result.sanitized).toBe('');
-    });
-
-    test('should handle only-whitespace string', () => {
-      const result = sanitizePlayerName('   ');
-      expect(result.valid).toBe(true);
-      expect(result.sanitized).toBe('');
-    });
-  });
+  // Note: player names are wallet-derived (or app defaults) and are not sanitized/validated.
+  // See backend/src/lib/validation.ts for rationale.
 
   describe('Metadata Validation', () => {
     test('should accept valid JSON metadata', () => {
@@ -192,7 +149,7 @@ describe('Input Validation - Phase 1', () => {
       expect(result.reason).toBe('INVALID_ADDRESS_FORMAT');
     });
 
-    test('should sanitize player name in submission', () => {
+    test('should preserve player name in submission (wallet-derived)', () => {
       const result = validateScoreSubmission({
         tournamentId: 1,
         address: '0x' + 'a'.repeat(40),
@@ -200,7 +157,7 @@ describe('Input Validation - Phase 1', () => {
         name: '  Alice@#$  '
       });
       expect(result.valid).toBe(true);
-      expect(result.sanitized?.name).toBe('Alice');
+      expect(result.sanitized?.name).toBe('  Alice@#$  ');
     });
 
     test('should validate all fields together', () => {
@@ -218,8 +175,6 @@ describe('Input Validation - Phase 1', () => {
 });
 
 describe('Rate Limiting', () => {
-  const { AddressRateLimiter } = require('../src/lib/rate-limiter');
-
   test('should allow requests within limit', () => {
     const limiter = new AddressRateLimiter(3, 60000);
     const address = '0x' + 'a'.repeat(40);

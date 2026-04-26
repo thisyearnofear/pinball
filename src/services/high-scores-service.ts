@@ -8,15 +8,14 @@
 // Keeps the same public API (startGame, stopGame, getHighScores)
 
 import { web3Service } from './web3-service';
-import { getActiveTournamentId, fetchLeaderboard, submitScoreWithSignature, enterTournament, getEntryFee, getTournamentInfo } from './contracts/tournament-client';
+import { getActiveTournamentId, fetchLeaderboard, submitScoreWithSignature, getNextPlayerNonce, getPlayerInfo } from './contracts/tournament-client';
 import { requestScoreSignature } from './backend-scores-client';
 import { getContractsConfig } from '../config/contracts';
 import { getAppConfig } from '../config/app-config';
 import { showToast } from './toast';
 import { getFromStorage, setInStorage } from '../utils/local-storage';
-
-// Import ethers for direct contract access if needed
-import { ethers } from 'ethers';
+import type { WalletPort } from '@/domains/wallet/wallet-port';
+import { getLegacyWalletPort } from '@/domains/wallet/legacy-web3service-wallet-port';
 
 // Submission state tracking for UI feedback
 export type SubmissionStep = 'validating' | 'signing' | 'ready' | 'error';
@@ -77,23 +76,29 @@ export const startGame = async (): Promise<string | null> => {
 
 // NOTE: To submit a score we require a server signature proving validity.
 // The caller must obtain `signature` out-of-band (server API) and pass via metaData (or adapt as needed).
-export const stopGame = async (gameId: string, score: number, playerName?: string, metaData?: string): Promise<HighScoreDef[]> => {
+export const stopGame = async (
+    gameId: string,
+    score: number,
+    playerName?: string,
+    metaData?: string,
+    walletPort?: WalletPort
+): Promise<HighScoreDef[]> => {
     try {
         const tournamentId = Number(gameId);
-        if (!web3Service.isConnected()) throw new Error('Wallet not connected');
+        const wallet = walletPort ?? getLegacyWalletPort();
 
         notifySubmissionState('validating');
 
         // Verify we're on the correct chain
         const config = getContractsConfig();
-        const provider = web3Service.getProvider();
-        if (!provider) throw new Error('No provider available');
+        const provider = await wallet.getProvider();
         const currentNetwork = await provider.getNetwork();
         const currentChainId = Number(currentNetwork.chainId);
 
         if (currentChainId !== config.chainId) {
             try {
-                await web3Service.switchChain(config.chainId);
+                if (!wallet.switchChain) throw new Error('Wallet cannot switch chain');
+                await wallet.switchChain(config.chainId);
             } catch {
                 showToast(`Please switch to ${getChainName(config.chainId)} to submit scores`, 'error');
                 notifySubmissionState('error', `Please switch to ${getChainName(config.chainId)} network`);
@@ -111,8 +116,7 @@ export const stopGame = async (gameId: string, score: number, playerName?: strin
                 metadata = metaData;
             }
         }
-        const address = web3Service.getAddress();
-        if (!address) throw new Error('No wallet address');
+        const address = await wallet.getAddress();
 
         // Log debugging information
         console.log('Submitting score to tournament:', {
@@ -158,16 +162,8 @@ export const stopGame = async (gameId: string, score: number, playerName?: strin
         // Fetch current nonce from contract to ensure synchronization
         let nextNonce: string | undefined;
         try {
-            const contractAddress = getContractsConfig().tournamentManager.address;
-            const provider = web3Service.getProvider();
-            if (provider) {
-                const contract = new ethers.Contract(contractAddress, [
-                    "function playerNonces(uint256,address) view returns (uint256)"
-                ], provider);
-                const lastNonce = await contract.playerNonces(tournamentId, address);
-                nextNonce = (BigInt(lastNonce) + 1n).toString();
-                console.log('Fetched next nonce from contract:', nextNonce);
-            }
+            nextNonce = await getNextPlayerNonce(tournamentId, address);
+            console.log('Fetched next nonce from contract:', nextNonce);
         } catch (nonceErr) {
             console.warn('Could not fetch nonce from contract, relying on backend:', nonceErr);
         }
@@ -236,28 +232,20 @@ export const stopGame = async (gameId: string, score: number, playerName?: strin
 
             // Additional validation - try to fetch player info to confirm they're registered
             try {
-                const contractAddress = getContractsConfig().tournamentManager.address;
-                const provider = web3Service.getProvider();
-                if (provider) {
-                    const contract = new ethers.Contract(contractAddress, [
-                        "function playerInfo(uint256,address) view returns (bool entered, uint256 bestScore, bool rewardClaimed)"
-                    ], provider);
-
-                    const playerInfo = await contract.playerInfo(tournamentId, address);
-                    console.log('Player info fetched from contract:', {
-                        entered: playerInfo.entered,
-                        bestScore: playerInfo.bestScore?.toString()
-                    });
-                    if (!playerInfo.entered) {
-                        throw new Error('Player not registered in tournament despite successful entry attempt');
-                    }
+                const playerInfo = await getPlayerInfo(tournamentId, address);
+                console.log('Player info fetched from contract:', {
+                    entered: playerInfo.entered,
+                    bestScore: playerInfo.bestScore.toString()
+                });
+                if (!playerInfo.entered) {
+                    throw new Error('Player not registered in tournament');
                 }
             } catch (validationErr) {
                 console.warn('Could not validate player registration:', validationErr);
                 // Continue anyway, this is just for debugging
             }
 
-            await submitScoreWithSignature(tournamentId, score, Number(nonceAsBigInt), playerName || '', metadata, signature);
+            await submitScoreWithSignature(tournamentId, score, Number(nonceAsBigInt), playerName || '', metadata, signature, wallet);
             console.log('Score successfully submitted to blockchain');
             showToast('Score submitted!', 'success');
             try {

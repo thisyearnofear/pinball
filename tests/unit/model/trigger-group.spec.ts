@@ -54,7 +54,7 @@ describe( "Trigger Group", () => {
         const triggerGroup = new TriggerGroup( TRIGGER_DEF, engine, canvas );
 
         const trigger1dispose = vi.spyOn( triggerGroup.triggers[ 0 ], "dispose" );
-        const trigger2dispose = vi.spyOn( triggerGroup.triggers[ 0 ], "dispose" );
+        const trigger2dispose = vi.spyOn( triggerGroup.triggers[ 1 ], "dispose" );
 
         triggerGroup.dispose( engine );
 

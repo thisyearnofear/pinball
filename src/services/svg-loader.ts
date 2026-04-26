@@ -22,7 +22,6 @@
  */
 import Matter from "matter-js";
 import type { Vector } from "matter-js";
-// @ts-expect-error no type definitions for poly-decomp
 import PolyDecomp from "poly-decomp";
 
 // note pathseg polyfill should also be provided onto window as SVGPathSeg

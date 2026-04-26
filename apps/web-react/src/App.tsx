@@ -5,7 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 import { WagmiProvider } from "wagmi";
 import { getConfig, mezoTestnet } from "@mezo-org/passport";
-import LegacyGameFrame from "./LegacyGameFrame";
+import GameMount from "./GameMount";
+import GameScreen from "./GameScreen";
 
 const queryClient = new QueryClient();
 
@@ -23,7 +24,7 @@ export default function App() {
               game loop here and removing the legacy Vue shell once parity is reached.
             </p>
 
-            <LegacyGameFrame />
+            <GameScreen />
           </div>
         </RainbowKitProvider>
       </QueryClientProvider>

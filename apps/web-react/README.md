@@ -4,10 +4,20 @@ This folder is the start of the **full React migration** required for clean Mezo
 
 Current state:
 - React + RainbowKit + `@mezo-org/passport` connect button works (once deps are installed).
-- The legacy Vue game is temporarily embedded via an iframe (`VITE_LEGACY_GAME_URL`) to avoid blocking on a full UI rewrite.
+- The pinball game is now mounted directly in React (no iframe).
 
 Next steps:
-1. Move the pinball engine into a reusable TS module (no Vue dependencies).
-2. Mount the game directly in React (remove iframe).
-3. Delete the Vue shell once feature parity is reached.
+1. Wire up the remaining tournament UX in React (enter + play + submit + leaderboard parity).
+2. Delete the Vue shell once feature parity is reached.
 
+## Quickstart
+
+```sh
+pnpm install
+pnpm run dev
+```
+
+### Why pnpm?
+
+In this repo, `npm install` has intermittently failed due to an npm/arborist internal error.
+`pnpm` installs and builds reliably and is the recommended workflow for `apps/web-react`.

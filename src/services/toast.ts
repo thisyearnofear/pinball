@@ -1,5 +1,3 @@
-import { reactive } from 'vue';
-
 export type ToastType = 'info' | 'success' | 'error';
 
 export interface ToastItem {
@@ -8,7 +6,7 @@ export interface ToastItem {
   type: ToastType;
 }
 
-const list = reactive<ToastItem[]>([]);
+const list: ToastItem[] = [];
 
 export function useToasts(): ToastItem[] {
   return list;

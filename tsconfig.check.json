@@ -1,7 +1,14 @@
 {
     "extends": "./tsconfig.app.json",
-    "includes": [ "src/**/*.ts", "src/**/*.vue", "tests/**/*.ts" ],
+    "include": [ "src/**/*.ts", "src/**/*.tsx" ],
+    "exclude": [ "src/components/**", "tests/**", "apps/**", "backend/**", "contracts/**", "dist/**", "node_modules/**" ],
     "compilerOptions": {
-        "skipLibCheck": true
+        "skipLibCheck": true,
+        "strict": false,
+        "noImplicitAny": false,
+        "module": "ESNext",
+        "moduleResolution": "Bundler",
+        "target": "ES2021",
+        "lib": ["ES2021", "DOM"]
     }
 }

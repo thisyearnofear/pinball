@@ -1,8 +1,8 @@
 {
     "include": [
         "env.d.ts",
-        "src/**/*",
-        "src/**/*.vue"
+        "src/**/*.ts",
+        "src/**/*.tsx"
     ],
     "compilerOptions": {
         "target": "es2020",
@@ -13,6 +13,7 @@
         "baseUrl": ".",
         "esModuleInterop": true,
         "allowJs": true,
+        "jsx": "react-jsx",
         "declaration": true,
         "noUnusedParameters": true,
         "noImplicitAny": true,
@@ -25,6 +26,7 @@
         }
     },
     "exclude": [
+        "src/components/**",
         "**/node_modules"
     ]
 }

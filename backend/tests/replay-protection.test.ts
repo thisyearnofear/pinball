@@ -6,6 +6,9 @@ describe('Replay Protection (Phase 2)', () => {
   const tournamentId = 1n;
   const playerAddr = '0x1234567890123456789012345678901234567890';
   const score = 50000n;
+  const nonce = 1n;
+  const chainId = 42161n;
+  const scorePrefix = "PINBALL_SCORE:v2";
   const name = 'Alice';
   const metadata = '{}';
 
@@ -18,8 +21,8 @@ describe('Replay Protection (Phase 2)', () => {
       const nameHash = keccak256(toUtf8Bytes(name));
       const metaHash = keccak256(toUtf8Bytes(metadata));
 
-      const hash1 = innerScoreHashV2(tournamentId, playerAddr, score, 1n, nameHash, metaHash);
-      const hash2 = innerScoreHashV2(tournamentId, playerAddr, score, 2n, nameHash, metaHash);
+      const hash1 = innerScoreHashV2(tournamentId, playerAddr, score, 1n, chainId, scorePrefix, nameHash, metaHash);
+      const hash2 = innerScoreHashV2(tournamentId, playerAddr, score, 2n, chainId, scorePrefix, nameHash, metaHash);
 
       expect(hash1).not.toBe(hash2);
     });
@@ -28,8 +31,8 @@ describe('Replay Protection (Phase 2)', () => {
       const nameHash = keccak256(toUtf8Bytes(name));
       const metaHash = keccak256(toUtf8Bytes(metadata));
 
-      const hash1 = innerScoreHashV2(tournamentId, playerAddr, score, 1n, nameHash, metaHash);
-      const hash2 = innerScoreHashV2(tournamentId, playerAddr, score, 1n, nameHash, metaHash);
+      const hash1 = innerScoreHashV2(tournamentId, playerAddr, score, nonce, chainId, scorePrefix, nameHash, metaHash);
+      const hash2 = innerScoreHashV2(tournamentId, playerAddr, score, nonce, chainId, scorePrefix, nameHash, metaHash);
 
       expect(hash1).toBe(hash2);
     });
@@ -41,10 +44,10 @@ describe('Replay Protection (Phase 2)', () => {
       const metaHash = keccak256(toUtf8Bytes(metadata));
 
       // V2 hash includes 42161 (Arbitrum One)
-      const hash = innerScoreHashV2(tournamentId, playerAddr, score, 1n, nameHash, metaHash);
+      const hash = innerScoreHashV2(tournamentId, playerAddr, score, nonce, chainId, scorePrefix, nameHash, metaHash);
 
       // The hash should be stable for Arbitrum One
-      const hash2 = innerScoreHashV2(tournamentId, playerAddr, score, 1n, nameHash, metaHash);
+      const hash2 = innerScoreHashV2(tournamentId, playerAddr, score, nonce, chainId, scorePrefix, nameHash, metaHash);
       expect(hash).toBe(hash2);
     });
   });
@@ -56,7 +59,7 @@ describe('Replay Protection (Phase 2)', () => {
       const nameHash = keccak256(toUtf8Bytes(name));
       const metaHash = keccak256(toUtf8Bytes(metadata));
 
-      const hashV2 = innerScoreHashV2(tournamentId, playerAddr, score, 1n, nameHash, metaHash);
+      const hashV2 = innerScoreHashV2(tournamentId, playerAddr, score, nonce, chainId, scorePrefix, nameHash, metaHash);
 
       // Hash should be created (if we had a V1 hash function, they would differ)
       expect(hashV2).toBeDefined();
@@ -93,7 +96,7 @@ describe('Replay Protection (Phase 2)', () => {
       // Generate hashes for sequential nonces
       const nonces = [1n, 2n, 3n, 4n, 5n];
       const hashes = nonces.map(nonce =>
-        innerScoreHashV2(tournamentId, playerAddr, score, nonce, nameHash, metaHash)
+        innerScoreHashV2(tournamentId, playerAddr, score, nonce, chainId, scorePrefix, nameHash, metaHash)
       );
 
       // All hashes should be unique
@@ -109,8 +112,8 @@ describe('Replay Protection (Phase 2)', () => {
       // So if player has submitted nonce 1, they cannot submit nonce 3 next
       // (though the signature would be valid, the nonce check prevents it)
 
-      const hash1 = innerScoreHashV2(tournamentId, playerAddr, score, 1n, nameHash, metaHash);
-      const hash3 = innerScoreHashV2(tournamentId, playerAddr, score, 3n, nameHash, metaHash);
+      const hash1 = innerScoreHashV2(tournamentId, playerAddr, score, 1n, chainId, scorePrefix, nameHash, metaHash);
+      const hash3 = innerScoreHashV2(tournamentId, playerAddr, score, 3n, chainId, scorePrefix, nameHash, metaHash);
 
       // Hashes are different, but contract validation ensures sequence
       expect(hash1).not.toBe(hash3);
@@ -122,8 +125,8 @@ describe('Replay Protection (Phase 2)', () => {
       const nameHash = keccak256(toUtf8Bytes(name));
       const metaHash = keccak256(toUtf8Bytes(metadata));
 
-      const hash1 = innerScoreHashV2(tournamentId, playerAddr, 1000n, 1n, nameHash, metaHash);
-      const hash2 = innerScoreHashV2(tournamentId, playerAddr, 2000n, 1n, nameHash, metaHash);
+      const hash1 = innerScoreHashV2(tournamentId, playerAddr, 1000n, 1n, chainId, scorePrefix, nameHash, metaHash);
+      const hash2 = innerScoreHashV2(tournamentId, playerAddr, 2000n, 1n, chainId, scorePrefix, nameHash, metaHash);
 
       // Same nonce, different score => different hash
       expect(hash1).not.toBe(hash2);
@@ -134,10 +137,10 @@ describe('Replay Protection (Phase 2)', () => {
       const metaHash = keccak256(toUtf8Bytes(metadata));
 
       // Score 1000 with nonce 1
-      const hash1a = innerScoreHashV2(tournamentId, playerAddr, 1000n, 1n, nameHash, metaHash);
+      const hash1a = innerScoreHashV2(tournamentId, playerAddr, 1000n, 1n, chainId, scorePrefix, nameHash, metaHash);
 
       // Score 1000 with nonce 2
-      const hash1b = innerScoreHashV2(tournamentId, playerAddr, 1000n, 2n, nameHash, metaHash);
+      const hash1b = innerScoreHashV2(tournamentId, playerAddr, 1000n, 2n, chainId, scorePrefix, nameHash, metaHash);
 
       // Same score, different nonce => different hash
       expect(hash1a).not.toBe(hash1b);
@@ -150,8 +153,8 @@ describe('Replay Protection (Phase 2)', () => {
       const metaHash1 = keccak256(toUtf8Bytes('{"duration": 300}'));
       const metaHash2 = keccak256(toUtf8Bytes('{"duration": 600}'));
 
-      const hash1 = innerScoreHashV2(tournamentId, playerAddr, score, 1n, nameHash, metaHash1);
-      const hash2 = innerScoreHashV2(tournamentId, playerAddr, score, 1n, nameHash, metaHash2);
+      const hash1 = innerScoreHashV2(tournamentId, playerAddr, score, 1n, chainId, scorePrefix, nameHash, metaHash1);
+      const hash2 = innerScoreHashV2(tournamentId, playerAddr, score, 1n, chainId, scorePrefix, nameHash, metaHash2);
 
       // Same score/nonce, different metadata => different hash
       expect(hash1).not.toBe(hash2);

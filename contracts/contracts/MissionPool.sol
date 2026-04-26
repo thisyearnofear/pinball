@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+// Minimal ERC20 surface (avoid external deps for hackathon simplicity)
+interface IERC20 {
+    function transfer(address to, uint256 amount) external returns (bool);
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+}
+
 /**
  * MissionPool (MUSD)
  *
@@ -12,11 +18,6 @@ pragma solidity ^0.8.28;
  * a compelling demo: "hit an achievement → backend verifies → onchain award in MUSD".
  */
 contract MissionPool {
-    interface IERC20 {
-        function transfer(address to, uint256 amount) external returns (bool);
-        function transferFrom(address from, address to, uint256 amount) external returns (bool);
-    }
-
     struct Mission {
         address sponsor;
         uint256 rewardPerWinner;
@@ -104,4 +105,3 @@ contract MissionPool {
         }
     }
 }
-

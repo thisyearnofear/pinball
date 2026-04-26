@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+// Minimal ERC20 surface (avoid external deps for hackathon simplicity)
+interface IERC20 {
+    function transfer(address to, uint256 amount) external returns (bool);
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+}
+
 /**
  * TournamentManager (MUSD)
  *
@@ -12,12 +18,6 @@ pragma solidity ^0.8.28;
  * Entry fees and payouts are denominated in MUSD.
  */
 contract TournamentManager {
-    // Minimal ERC20 surface (avoid external deps for hackathon simplicity)
-    interface IERC20 {
-        function transfer(address to, uint256 amount) external returns (bool);
-        function transferFrom(address from, address to, uint256 amount) external returns (bool);
-    }
-
     string internal constant SCORE_PREFIX_V2 = "PINBALL_SCORE:v2";
 
     struct Tournament {

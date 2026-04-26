@@ -24,6 +24,7 @@ const config: HardhatUserConfig = {
     version: "0.8.28",
     settings: {
       optimizer: { enabled: true, runs: 200 },
+      viaIR: true,
       evmVersion: "london",
     },
   },
@@ -48,4 +49,3 @@ if (process.env.npm_lifecycle_script?.includes("hardhat run") && !PRIVATE_KEY) {
 }
 
 export default config;
-

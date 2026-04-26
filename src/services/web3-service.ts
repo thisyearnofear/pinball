@@ -1,18 +1,45 @@
 import { ethers } from 'ethers';
-import { EventEmitter } from 'events';
 import { getAppConfig } from '../config/app-config';
 
-// WalletConnect Bridge URL (for v1)
-const BRIDGE_URL = 'https://bridge.walletconnect.org';
+type Web3EventMap = {
+    connected: { address: string; chainId: number };
+    disconnected: void;
+    chainChanged: { chainId: number };
+};
 
-class Web3Service extends EventEmitter {
+type Listener<T> = (payload: T) => void;
+
+class Web3Service {
+    // Keep the runtime store untyped (avoids TS variance issues with Set + generics),
+    // while exposing a typed API via on/off.
+    private listeners: Record<keyof Web3EventMap, Set<(payload: any) => void>> = {
+        connected: new Set(),
+        disconnected: new Set(),
+        chainChanged: new Set(),
+    };
+
     private provider: ethers.BrowserProvider | null = null;
     private signer: ethers.Signer | null = null;
     private address: string | null = null;
-    private walletConnectProvider: any = null;
 
     constructor() {
-        super();
+        // no-op
+    }
+
+    on<K extends keyof Web3EventMap>(event: K, listener: Listener<Web3EventMap[K]>): void {
+        this.listeners[event].add(listener as any);
+    }
+
+    off<K extends keyof Web3EventMap>(event: K, listener?: Listener<Web3EventMap[K]>): void {
+        if (!listener) {
+            this.listeners[event].clear();
+            return;
+        }
+        this.listeners[event].delete(listener as any);
+    }
+
+    private emit<K extends keyof Web3EventMap>(event: K, payload: Web3EventMap[K]): void {
+        for (const listener of this.listeners[event]) listener(payload);
     }
 
     /**
@@ -156,58 +183,12 @@ class Web3Service extends EventEmitter {
         }
     }
 
-    private async connectWalletConnect(): Promise<{ address: string; chainId: number } | null> {
-        try {
-            // Try to use web3modal or WalletConnect if available
-            // Otherwise fall back to browser defaults
-            console.log('Attempting WalletConnect connection...');
-
-            // For now, WalletConnect v1 has compatibility issues with Vite/browser
-            // Try to use any available provider extension
-            if (window.ethereum) {
-                // If we have a provider available (MetaMask, Brave, etc), use it
-                try {
-                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                    if (accounts && accounts.length > 0) {
-                        this.provider = new ethers.BrowserProvider(window.ethereum);
-                        this.signer = await this.provider.getSigner();
-                        this.address = await this.signer.getAddress();
-                        const network = await this.provider.getNetwork();
-                        const chainId = Number(network.chainId);
-                        console.log('Secondary provider connected:', this.address);
-                        this.emit('connected', { address: this.address, chainId });
-                        return { address: this.address, chainId };
-                    }
-                } catch (e) {
-                    console.log('Secondary provider request failed');
-                }
-            }
-
-            // If no fallback provider available, show error message
-            console.error('WalletConnect v1 has compatibility issues in browser. Please use MetaMask or other browser extension.');
-            throw new Error('WalletConnect unavailable - please use a browser wallet extension');
-        } catch (error) {
-            console.error('WalletConnect connection failed:', error);
-            return null;
-        }
-    }
-
     async disconnect(): Promise<void> {
         try {
-            // For WalletConnect providers
-            if (this.walletConnectProvider) {
-                await this.walletConnectProvider.disconnect();
-            }
-
-            // For MetaMask and other browser wallets, we can't programmatically disconnect
-            // but we can clear our local state and let the user know they need to disconnect manually
-            // from their wallet if they want to completely disconnect
-
             // Clear all local state
             this.provider = null;
             this.signer = null;
             this.address = null;
-            this.walletConnectProvider = null;
 
             console.log('Wallet disconnected from application');
 
@@ -217,10 +198,9 @@ class Web3Service extends EventEmitter {
             this.provider = null;
             this.signer = null;
             this.address = null;
-            this.walletConnectProvider = null;
         } finally {
             // Always emit disconnection event
-            this.emit('disconnected');
+            this.emit('disconnected', undefined as unknown as void);
         }
     }
 
@@ -314,7 +294,8 @@ class Web3Service extends EventEmitter {
     private async getWalletProvider(): Promise<any> {
         // Try to get Farcaster provider first
         try {
-            const { sdk } = await import("@farcaster/miniapp-sdk");
+            const mod = (await import("@farcaster/miniapp-sdk")) as any;
+            const sdk = mod?.sdk ?? mod?.default?.sdk ?? mod?.default ?? mod;
             if (typeof sdk?.wallet?.getEthereumProvider === "function") {
                 const provider = await sdk.wallet.getEthereumProvider();
                 if (provider && typeof provider.request === "function") {
@@ -388,7 +369,8 @@ class Web3Service extends EventEmitter {
         console.log('Connecting Farcaster wallet...');
 
         try {
-            const { sdk } = await import("@farcaster/miniapp-sdk");
+            const mod = (await import("@farcaster/miniapp-sdk")) as any;
+            const sdk = mod?.sdk ?? mod?.default?.sdk ?? mod?.default ?? mod;
 
             if (typeof sdk?.wallet?.getEthereumProvider !== "function") {
                 throw new Error('Farcaster wallet not available');
