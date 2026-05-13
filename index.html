@@ -31,10 +31,28 @@
   </noscript>
   <div id="app"></div>
   
-  <!-- SparkJS for Gaussian Splat world rendering -->
-  <script type="module">
-    import * as Spark from 'https://cdn.jsdelivr.net/npm/@sparkjs/engine@2.0.0-preview/dist/spark.esm.js';
-    window.Spark = Spark;
+  <!-- SparkJS for Gaussian Splat world rendering - loaded dynamically on demand -->
+  <script>
+    // Placeholder until Spark is loaded on demand
+    window.__sparkLoadPromise = null;
+    window.__loadSpark = function() {
+      if (window.Spark) return Promise.resolve(window.Spark);
+      if (window.__sparkLoadPromise) return window.__sparkLoadPromise;
+      
+      window.__sparkLoadPromise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.type = 'module';
+        script.textContent = `
+          import * as Spark from 'https://cdn.jsdelivr.net/npm/@sparkjs/engine@2.0.0-preview/dist/spark.esm.js';
+          window.Spark = Spark;
+          window.__sparkResolve?.();
+        `;
+        script.onerror = () => reject(new Error('Failed to load SparkJS'));
+        document.head.appendChild(script);
+      });
+      
+      return window.__sparkLoadPromise;
+    };
   </script>
   
   <!-- Global shim for WalletConnect compatibility -->

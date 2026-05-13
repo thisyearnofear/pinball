@@ -330,6 +330,11 @@ If/when we move to Rapier 3D:
 7. ✅ SparkJS loaded via CDN in `index.html`
 8. ✅ Per-world camera presets (custom plunger/overview/drain per world)
 9. ✅ World selection persisted in localStorage
+10. ✅ Post-processing pipeline (vignette, bloom, color grading)
+11. ✅ Loading overlay component (WorldLoadingOverlay)
+12. ✅ Error recovery (getLoadError, fallback background)
+13. ✅ SparkJS lazy-loaded on demand (not in initial bundle)
+14. ✅ Accessibility: aria-label on world dropdown
 
 **Status:** Tables render inside Marble worlds on desktop. Mobile TBD.
 

@@ -24,6 +24,8 @@ export interface WorldHandle {
   flyToPreset(preset: CameraPreset, options?: { duration?: number; onComplete?: () => void }): void;
   /** Fly camera to specific position */
   flyTo(position: [number, number, number], target: [number, number, number], options?: { duration?: number; onComplete?: () => void }): void;
+  /** Get load error if world failed to load */
+  getLoadError(): Error | null;
 }
 
 interface WorldHostConfig {
@@ -67,11 +69,17 @@ export async function mountWorld(
     onProgress: options?.onProgress,
   };
   
-  await host.initialize(config);
-  
-  // If loaded from network, cache for next time
-  if (!cachedUrl) {
-    cacheSplat(world.id, world.spzUrl).catch(console.warn);
+  try {
+    await host.initialize(config);
+    
+    // If loaded from network, cache for next time
+    if (!cachedUrl) {
+      cacheSplat(world.id, world.spzUrl).catch(console.warn);
+    }
+  } catch (initError) {
+    console.error('World host initialization failed:', initError);
+    host.dispose();
+    throw initError;
   }
   
   return {
@@ -85,6 +93,7 @@ export async function mountWorld(
     getWorldId: () => world.id,
     flyToPreset: (preset, options) => host.flyToPreset(preset, options),
     flyTo: (position, target, options) => host.flyTo(position, target, options),
+    getLoadError: () => host.getLoadError(),
   };
 }
 

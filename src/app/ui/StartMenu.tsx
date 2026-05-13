@@ -107,9 +107,21 @@ export function StartMenu(props: Props) {
 
         <div style={{ marginTop: 14, padding: 12, border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10 }}>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>World</div>
+          <label htmlFor="world-select" style={{
+            position: 'absolute',
+            width: 1,
+            height: 1,
+            padding: 0,
+            margin: -1,
+            overflow: 'hidden',
+            clip: 'rect(0, 0, 0, 0)',
+            border: 0,
+          }}>Select a world environment</label>
           <select
+            id="world-select"
             value={props.selectedWorldId}
             onChange={(e) => props.onWorldChange(e.target.value)}
+            aria-label="Select world environment"
             style={{
               padding: "8px 12px",
               borderRadius: 6,
@@ -127,6 +139,9 @@ export function StartMenu(props: Props) {
             <option value="PIRATE_SHIP">Sunken Pirate Ship</option>
             <option value="HAUNTED_HOUSE">Haunted House</option>
           </select>
+          <div style={{ marginTop: 8, fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
+            Each world renders behind the pinball table
+          </div>
         </div>
 
         <div style={{ marginTop: 14, display: "flex", gap: 12, flexWrap: "wrap" }}>

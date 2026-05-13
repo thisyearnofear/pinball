@@ -9,8 +9,9 @@ import { type MarbleWorld } from '@/config/worlds';
 import { type QualityTier, getQualityConfig } from './quality';
 import { getOptimalSplatUrl, loadSplat } from './splat-loader';
 import { CameraRig, type CameraPreset } from './camera-rig';
+import { PostProcessingManager, getPostProcessingConfig } from './post-processing';
 
-// SparkJS types - loaded via CDN in index.html
+// SparkJS types - loaded dynamically via window.__loadSpark
 interface SparkInstance {
   loadSplat(url: string, options?: Record<string, unknown>): Promise<unknown>;
   loadSplatFromArrayBuffer(buffer: ArrayBuffer, options?: Record<string, unknown>): Promise<unknown>;
@@ -20,15 +21,11 @@ interface SparkInstance {
   setQuality(tier: QualityTier): void;
 }
 
-interface ThreeScene {
-  add(object: unknown): void;
-  remove(object: unknown): void;
-}
-
-// Declare global Spark on window (loaded via CDN in index.html)
+// Declare global Spark on window (loaded via window.__loadSpark)
 declare global {
   interface Window {
     Spark?: new (options: { container: HTMLElement; background?: boolean; maxFPS?: number }) => SparkInstance;
+    __loadSpark?: () => Promise<unknown>;
   }
 }
 
@@ -45,6 +42,8 @@ export class WorldHost {
   private onProgress: ((progress: number) => void) | null = null;
   private cameraRig: CameraRig | null = null;
   private rafId: number | null = null;
+  private postProcessing: PostProcessingManager | null = null;
+  private loadError: Error | null = null;
 
   /**
    * Initialize the world host with a container and initial world
@@ -57,7 +56,18 @@ export class WorldHost {
     
     const qualityConfig = getQualityConfig(this.qualityTier);
     
-    // Wait for SparkJS to be available on window (loaded via CDN in index.html)
+    // Dynamically load SparkJS if not already loaded
+    if (window.__loadSpark) {
+      try {
+        await window.__loadSpark();
+      } catch (e) {
+        console.warn('Failed to load SparkJS:', e);
+        this.initialized = false;
+        return;
+      }
+    }
+    
+    // Wait for SparkJS to be available on window
     if (window.Spark) {
       this.spark = new window.Spark({
         container: this.container!,
@@ -69,6 +79,11 @@ export class WorldHost {
       this.cameraRig.initialize(config.world);
       this.cameraRig.setSparkCamera(this.spark.getCamera());
       
+      // Initialize post-processing
+      this.postProcessing = new PostProcessingManager();
+      this.postProcessing.initialize(this.container!);
+      this.postProcessing.setConfig(getPostProcessingConfig(this.qualityTier));
+      
       this.startRenderLoop();
       this.initialized = true;
       console.log('WorldHost initialized with quality tier:', this.qualityTier);
@@ -76,7 +91,7 @@ export class WorldHost {
       // Load the initial world
       await this.loadWorld(config.world);
     } else {
-      console.warn('SparkJS not loaded via CDN - world rendering disabled');
+      console.warn('SparkJS not available - world rendering disabled');
       this.initialized = false;
     }
   }
@@ -105,10 +120,20 @@ export class WorldHost {
       
       // Report completion
       this.onProgress?.(1);
+      this.loadError = null;
       console.log('Loaded world:', world.name, 'from', url);
     } catch (e) {
-      console.error('Failed to load world:', world.name, e);
+      this.loadError = e instanceof Error ? e : new Error(String(e));
+      console.error('Failed to load world:', world.name, this.loadError);
+      this.onProgress?.(-1); // Negative progress indicates error
     }
+  }
+
+  /**
+   * Get load error if world failed to load
+   */
+  getLoadError(): Error | null {
+    return this.loadError;
   }
 
   /**
@@ -159,6 +184,11 @@ export class WorldHost {
     if (this.cameraRig) {
       this.cameraRig.dispose();
       this.cameraRig = null;
+    }
+    
+    if (this.postProcessing) {
+      this.postProcessing.dispose();
+      this.postProcessing = null;
     }
     
     if (this.disposeFn) {

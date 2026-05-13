@@ -11,6 +11,7 @@ import type { WalletPort } from "@/domains/wallet/wallet-port";
 import type { SubmissionStep } from "./ui/ScoreSubmissionOverlay";
 import { mountWorld, isSplatSupported, prefersReducedMotion, type WorldHandle } from "@/presentation";
 import { MARBLE_WORLDS } from "@/config/worlds";
+import { WorldLoadingOverlay, WorldLoadingIndicator } from "./ui/WorldLoadingOverlay";
 
 type Props = {
   runKey: number;
@@ -304,47 +305,11 @@ export default function GameMount(props: Props) {
         />
         {/* World loading progress overlay */}
         {worldLoadingProgress !== null && worldLoadingProgress < 1 && (
-          <div
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: "100%",
-              height: "100%",
-              zIndex: 10,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              background: "rgba(0,0,0,0.7)",
-              borderRadius: 8,
-            }}
-          >
-            <div style={{ color: "#fff", fontSize: 14, marginBottom: 12 }}>
-              Loading world...
-            </div>
-            <div
-              style={{
-                width: 200,
-                height: 4,
-                background: "rgba(255,255,255,0.2)",
-                borderRadius: 2,
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  width: `${worldLoadingProgress * 100}%`,
-                  height: "100%",
-                  background: "linear-gradient(90deg, #6366f1, #8b5cf6)",
-                  transition: "width 0.3s ease",
-                }}
-              />
-            </div>
-            <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginTop: 8 }}>
-              {Math.round(worldLoadingProgress * 100)}%
-            </div>
-          </div>
+          <WorldLoadingOverlay
+            world={MARBLE_WORLDS[props.worldId?.toUpperCase() || 'HOBBITON'] || MARBLE_WORLDS.HOBBITON}
+            progress={worldLoadingProgress}
+            onDismiss={() => setWorldLoadingProgress(null)}
+          />
         )}
         <div
           ref={containerRef}
