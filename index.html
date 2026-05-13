@@ -31,6 +31,12 @@
   </noscript>
   <div id="app"></div>
   
+  <!-- SparkJS for Gaussian Splat world rendering -->
+  <script type="module">
+    import * as Spark from 'https://cdn.jsdelivr.net/npm/@sparkjs/engine@2.0.0-preview/dist/spark.esm.js';
+    window.Spark = Spark;
+  </script>
+  
   <!-- Global shim for WalletConnect compatibility -->
   <script>
     if (typeof globalThis === 'undefined') {

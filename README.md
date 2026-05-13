@@ -15,11 +15,12 @@ This is a monorepo containing three main components:
 ## Features
 
 - **Pinball Gameplay**: Retro-style vertically scrolling pinball with physics-driven gameplay
+- **Generative 3D Worlds**: Tables are hosted inside photoreal Marble worlds rendered in real time by Spark (Gaussian Splats on Three.js). Each tournament binds to a themed world. See [docs/MARBLE_INTEGRATION.md](docs/MARBLE_INTEGRATION.md).
 - **On-Chain Tournaments**: Enter tournaments by paying MUSD, compete for prizes distributed to top players
 - **Wallet Integration**: Connect MetaMask, Coinbase Wallet, or other Web3 wallets
 - **Farcaster Integration**: Optional (legacy); primary target is Mezo hackathon requirements
 - **Leaderboard**: View tournament rankings and scores
-- **Cross-Platform**: Play on desktop or mobile devices
+- **Cross-Platform**: Play on desktop or mobile devices, with reduced-motion / low-end fallback to the legacy 2D background
 
 ## Frontend Setup
 

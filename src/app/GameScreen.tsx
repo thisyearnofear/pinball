@@ -13,6 +13,7 @@ import {
   getTournamentInfo,
   getWinners,
 } from "@/services/contracts/tournament-client";
+import { getTournamentMeta } from "@/config/tournaments";
 import Tables, { START_TABLE_INDEX } from "@/definitions/tables";
 
 import GameMount from "./GameMount";
@@ -36,6 +37,7 @@ type TournamentState = {
   winners: string[];
   entered: boolean;
   leaderboard: { address: string; score: number }[];
+  worldId: string | null; // World theme for this tournament
 };
 
 export default function GameScreen() {
@@ -81,6 +83,7 @@ export default function GameScreen() {
     winners: [],
     entered: false,
     leaderboard: [],
+    worldId: null,
   });
 
   useEffect(() => {
@@ -137,6 +140,9 @@ export default function GameScreen() {
         }
       }
 
+      // Get world theme from tournament metadata
+      const meta = tournamentId ? getTournamentMeta(tournamentId) : null;
+      
       setTournament({
         tournamentId,
         entryFeeWei: fee,
@@ -148,6 +154,7 @@ export default function GameScreen() {
         winners,
         entered,
         leaderboard,
+        worldId: meta?.worldId ?? null,
       });
       setStatus("Tournament loaded.");
     } catch (e: any) {
@@ -350,6 +357,7 @@ export default function GameScreen() {
         runKey={runKey}
         mode={mode}
         tournamentId={tournament.tournamentId}
+        worldId={tournament.worldId}
         playerAddress={address ?? null}
         walletPort={walletPort}
         playerName={playerName}

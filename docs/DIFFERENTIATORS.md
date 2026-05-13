@@ -46,3 +46,33 @@ When a player triggers multiball in-game, the app adds `multiball: true` into th
 - It is pinball-native (not a generic “quest”).
 - It is seamless (no extra claim screens).
 - It’s auditable onchain (MUSD paid to winners).
+
+## Marble Worlds (generative 3D presentation)
+
+**Goal:** make the game visually unmistakable on the web by hosting the
+playfield inside generative photoreal 3D worlds authored with World Labs'
+Marble, rendered in real time by Spark on Three.js.
+
+### What it is
+- Each tournament binds to a `worldId` (Pirate Ship, Spaceship, Cozy Cottage,
+  …) authored in Marble and exported as a Gaussian splat (`.spz`/`.rad`).
+- The existing 2D Matter.js gameplay is composited *inside* the splat scene —
+  same engine, no gameplay change, dramatic visual upgrade.
+- A new isolated `src/presentation/` domain owns the Three.js + Spark
+  lifecycle and exposes a tiny imperative `mountWorld()` API that mirrors the
+  existing `mountGame()`. Game internals stay zero-dependency.
+
+### Why this is strong
+- **Differentiation:** no other Web3 pinball ships in a generative world
+  model. Hard to copy without the toolchain.
+- **Tournament-as-world:** the prize-pool theme literally is the rendered
+  universe — strong shareable surface area for the lobby and recap cards.
+- **UGC roadmap:** Tier 3 lets players generate their own table-worlds from a
+  prompt and stake them as on-chain custom tournaments — extending, not
+  replacing, the existing `MissionPool` flow.
+- **No gameplay risk:** Tier 1 leaves the engine, contracts, and wallet flow
+  untouched. Reduced-motion / low-end devices fall back to the legacy 2D
+  background.
+
+See [MARBLE_INTEGRATION.md](./MARBLE_INTEGRATION.md) for the full architecture
+and rollout plan.

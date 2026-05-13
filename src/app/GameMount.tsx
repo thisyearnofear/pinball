@@ -9,6 +9,8 @@ import { stopGame } from "@/services/high-scores-service";
 import { getPlayerInfo } from "@/services/contracts/tournament-client";
 import type { WalletPort } from "@/domains/wallet/wallet-port";
 import type { SubmissionStep } from "./ui/ScoreSubmissionOverlay";
+import { mountWorld, isSplatSupported, prefersReducedMotion, type WorldHandle } from "@/presentation";
+import { MARBLE_WORLDS } from "@/config/worlds";
 
 type Props = {
   runKey: number;
@@ -18,6 +20,7 @@ type Props = {
   walletPort: WalletPort | null;
   playerName: string;
   tableIndex: number;
+  worldId?: string; // Optional world override (for themed tournaments)
   paused: boolean;
   onActiveChange?: (active: boolean) => void;
   onRunEnd?: (score: number) => void;
@@ -36,17 +39,22 @@ type Props = {
 
 export default function GameMount(props: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const worldContainerRef = useRef<HTMLDivElement | null>(null);
   const mountedRef = useRef<MountedGame | null>(null);
+  const worldHandleRef = useRef<WorldHandle | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [hud, setHud] = useState<{ score: number; balls: number; multiplier: number }>({
     score: 0,
     balls: BALLS_PER_GAME,
     multiplier: 1,
   });
+  const [worldFallback, setWorldFallback] = useState(false);
+  const [worldLoadingProgress, setWorldLoadingProgress] = useState<number | null>(null);
   const multiballRef = useRef(false);
   const gameRef = useRef<GameDef | null>(null);
   const prevActiveRef = useRef<boolean>(false);
   const activeRef = useRef<boolean>(false);
+  const prevBallsRef = useRef<number>(BALLS_PER_GAME);
 
   const initialGame = useMemo<GameDef>(
     () => ({
@@ -71,6 +79,27 @@ export default function GameMount(props: Props) {
       // Shared loader: loads sprites + pathseg for SVG collision parsing.
       await preloadAssets();
       if (cancelled) return;
+
+      // Check if we should render a Marble world
+      const shouldRenderWorld = isSplatSupported() && !prefersReducedMotion();
+      
+      if (shouldRenderWorld && worldContainerRef.current) {
+        // Determine which world to load
+        const worldKey = props.worldId || 'HOBBITON';
+        const world = MARBLE_WORLDS[worldKey.toUpperCase()] || MARBLE_WORLDS.HOBBITON;
+        
+        try {
+          worldHandleRef.current = await mountWorld(worldContainerRef.current, world, {
+            onProgress: (progress) => setWorldLoadingProgress(progress),
+          });
+        } catch (e) {
+          console.warn('Failed to mount world, using fallback:', e);
+          setWorldFallback(true);
+        }
+      } else {
+        // Use fallback (static background)
+        setWorldFallback(true);
+      }
 
       mountedRef.current = await mountGame({
         container: containerRef.current,
@@ -97,9 +126,11 @@ export default function GameMount(props: Props) {
       cancelled = true;
       mountedRef.current?.destroy();
       mountedRef.current = null;
+      worldHandleRef.current?.dispose();
+      worldHandleRef.current = null;
       gameRef.current = null;
     };
-  }, [initialGame]);
+  }, [initialGame, props.worldId]);
 
   // Start/restart run when runKey changes.
   useEffect(() => {
@@ -155,6 +186,16 @@ export default function GameMount(props: Props) {
         balls: g.balls,
         multiplier: g.multiplier,
       });
+
+      // Ball drain detection - fly camera on ball loss
+      if (prevBallsRef.current > g.balls && g.balls > 0) {
+        worldHandleRef.current?.flyToPreset('drain', { duration: 600 });
+      }
+      // Ball start - fly camera to plunger for next ball
+      if (prevBallsRef.current < g.balls || (!prevActiveRef.current && isActive)) {
+        worldHandleRef.current?.flyToPreset('plunger', { duration: 800 });
+      }
+      prevBallsRef.current = g.balls;
 
       if (wasActive && !isActive && g.score > 0) {
         props.onRunEnd?.(g.score);
@@ -240,6 +281,21 @@ export default function GameMount(props: Props) {
       ) : null}
       <div style={{ position: "relative" }}>
         <div
+          ref={worldContainerRef}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            zIndex: -1,
+            // Fallback gradient when world isn't loaded
+            background: worldFallback 
+              ? "linear-gradient(180deg, #1a0a2e 0%, #16213e 50%, #0f0f23 100%)"
+              : undefined,
+          }}
+        />
+        <div
           ref={containerRef}
           style={{
             width: "100%",
@@ -247,7 +303,7 @@ export default function GameMount(props: Props) {
             border: "1px solid rgba(255,255,255,0.15)",
             borderRadius: 8,
             overflow: "hidden",
-            background: "#000",
+            background: "transparent",
           }}
         />
         <div
