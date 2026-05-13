@@ -55,6 +55,7 @@ export default function GameMount(props: Props) {
   const prevActiveRef = useRef<boolean>(false);
   const activeRef = useRef<boolean>(false);
   const prevBallsRef = useRef<number>(BALLS_PER_GAME);
+  const gameOverRef = useRef<boolean>(false);
 
   const initialGame = useMemo<GameDef>(
     () => ({
@@ -149,6 +150,7 @@ export default function GameMount(props: Props) {
 
     multiballRef.current = false;
     prevActiveRef.current = false;
+    gameOverRef.current = false;
     gameRef.current = g;
 
     mountedRef.current.start(g).catch((e) => {
@@ -194,6 +196,11 @@ export default function GameMount(props: Props) {
       // Ball start - fly camera to plunger for next ball
       if (prevBallsRef.current < g.balls || (!prevActiveRef.current && isActive)) {
         worldHandleRef.current?.flyToPreset('plunger', { duration: 800 });
+      }
+      // Game over - fly camera to overview for share screen
+      if (g.balls === 0 && !gameOverRef.current && g.score > 0) {
+        gameOverRef.current = true;
+        worldHandleRef.current?.flyToPreset('overview', { duration: 1200 });
       }
       prevBallsRef.current = g.balls;
 
@@ -295,6 +302,50 @@ export default function GameMount(props: Props) {
               : undefined,
           }}
         />
+        {/* World loading progress overlay */}
+        {worldLoadingProgress !== null && worldLoadingProgress < 1 && (
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+              zIndex: 10,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(0,0,0,0.7)",
+              borderRadius: 8,
+            }}
+          >
+            <div style={{ color: "#fff", fontSize: 14, marginBottom: 12 }}>
+              Loading world...
+            </div>
+            <div
+              style={{
+                width: 200,
+                height: 4,
+                background: "rgba(255,255,255,0.2)",
+                borderRadius: 2,
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  width: `${worldLoadingProgress * 100}%`,
+                  height: "100%",
+                  background: "linear-gradient(90deg, #6366f1, #8b5cf6)",
+                  transition: "width 0.3s ease",
+                }}
+              />
+            </div>
+            <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginTop: 8 }}>
+              {Math.round(worldLoadingProgress * 100)}%
+            </div>
+          </div>
+        )}
         <div
           ref={containerRef}
           style={{

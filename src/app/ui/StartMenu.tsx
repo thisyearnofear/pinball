@@ -8,6 +8,8 @@ type Props = {
   onPlayerNameChange: (v: string) => void;
   tableIndex: number;
   onTableIndexChange: (idx: number) => void;
+  selectedWorldId: string;
+  onWorldChange: (worldId: string) => void;
   tournamentId: number | null;
   entryFeeWei: bigint;
   totalPotWei: bigint;
@@ -101,6 +103,30 @@ export function StartMenu(props: Props) {
             <div style={{ minWidth: 240 }}>{table?.name ?? "Unknown"}</div>
             <button onClick={() => props.onTableIndexChange(clampTableIndex(props.tableIndex + 1))}>&gt;</button>
           </div>
+        </div>
+
+        <div style={{ marginTop: 14, padding: 12, border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10 }}>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>World</div>
+          <select
+            value={props.selectedWorldId}
+            onChange={(e) => props.onWorldChange(e.target.value)}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 6,
+              background: "#1a1a1a",
+              color: "#fff",
+              border: "1px solid rgba(255,255,255,0.2)",
+              fontSize: 14,
+              minWidth: 200,
+              cursor: "pointer",
+            }}
+          >
+            <option value="HOBBITON">Hobbiton</option>
+            <option value="SPACESHIP">Cozy Spaceship</option>
+            <option value="COTTAGE">Cozy Cottage</option>
+            <option value="PIRATE_SHIP">Sunken Pirate Ship</option>
+            <option value="HAUNTED_HOUSE">Haunted House</option>
+          </select>
         </div>
 
         <div style={{ marginTop: 14, display: "flex", gap: 12, flexWrap: "wrap" }}>

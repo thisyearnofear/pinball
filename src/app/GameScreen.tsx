@@ -14,6 +14,8 @@ import {
   getWinners,
 } from "@/services/contracts/tournament-client";
 import { getTournamentMeta } from "@/config/tournaments";
+import { getFromStorage } from "@/utils/local-storage";
+import { STORED_WORLD_ID } from "@/definitions/settings";
 import Tables, { START_TABLE_INDEX } from "@/definitions/tables";
 
 import GameMount from "./GameMount";
@@ -45,6 +47,7 @@ export default function GameScreen() {
 
   const [mode, setMode] = useState<"practice" | "tournament">("practice");
   const [runKey, setRunKey] = useState(0);
+  const [selectedWorldId, setSelectedWorldId] = useState<string>(() => getFromStorage(STORED_WORLD_ID) || "hobbiton");
   const [status, setStatus] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [walletPort, setWalletPort] = useState<WalletPort | null>(null);
@@ -277,6 +280,8 @@ export default function GameScreen() {
           }}
           tableIndex={tableIndex}
           onTableIndexChange={setTableIndex}
+          selectedWorldId={selectedWorldId}
+          onWorldChange={setSelectedWorldId}
           tournamentId={tournament.tournamentId}
           entryFeeWei={tournament.entryFeeWei}
           totalPotWei={tournament.totalPotWei}
@@ -357,7 +362,7 @@ export default function GameScreen() {
         runKey={runKey}
         mode={mode}
         tournamentId={tournament.tournamentId}
-        worldId={tournament.worldId}
+        worldId={mode === "practice" ? selectedWorldId : tournament.worldId}
         playerAddress={address ?? null}
         walletPort={walletPort}
         playerName={playerName}

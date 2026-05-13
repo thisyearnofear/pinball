@@ -66,6 +66,12 @@ export const TOURNAMENT_META: Record<number, TournamentMeta> = {
     worldId: 'hobbiton',
     description: 'Adventure in the Shire.',
   },
+  4: {
+    id: 4,
+    name: 'Haunted House',
+    worldId: 'haunted-house',
+    description: 'Spooky adventures await.',
+  },
 };
 
 /**

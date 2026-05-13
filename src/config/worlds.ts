@@ -50,4 +50,14 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
     scale: [1, 1, 1],
     description: 'A mysterious sunken pirate ship.',
   },
+  HAUNTED_HOUSE: {
+    id: 'haunted-house',
+    name: 'Haunted House',
+    spzUrl: 'https://storage.googleapis.com/forge-dev-public/hackathon-260227/haunted-house.spz',
+    radUrl: 'https://storage.googleapis.com/forge-dev-public/hackathon-260227/haunted-house-lod.rad',
+    position: [0, 1, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+    description: 'A spooky haunted mansion.',
+  },
 };

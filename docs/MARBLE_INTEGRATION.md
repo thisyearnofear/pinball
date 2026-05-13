@@ -321,9 +321,13 @@ If/when we move to Rapier 3D:
    - `camera-rig.ts` - Camera rig with flyTo() and preset positions
 2. ✅ `src/config/worlds.ts` - World definitions (Hobbiton, Spaceship, Cottage)
 3. ✅ `GameMount.tsx` - Integrated world rendering behind game canvas
-4. ✅ Reduced-motion fallback via `prefersReducedMotion()` check
-5. ✅ Graceful fallback to gradient background when SparkJS unavailable
-6. ✅ SparkJS loaded via CDN in `index.html`
+   - Ball drain → flyToPreset('drain')
+   - Ball start → flyToPreset('plunger')
+   - Game over → flyToPreset('overview')
+4. ✅ `StartMenu.tsx` - World selector for practice mode
+5. ✅ Reduced-motion fallback via `prefersReducedMotion()` check
+6. ✅ Graceful fallback to gradient background when SparkJS unavailable
+7. ✅ SparkJS loaded via CDN in `index.html`
 
 **Status:** Tables render inside Marble worlds on desktop. Mobile TBD.
 
