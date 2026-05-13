@@ -328,6 +328,8 @@ If/when we move to Rapier 3D:
 5. ✅ Reduced-motion fallback via `prefersReducedMotion()` check
 6. ✅ Graceful fallback to gradient background when SparkJS unavailable
 7. ✅ SparkJS loaded via CDN in `index.html`
+8. ✅ Per-world camera presets (custom plunger/overview/drain per world)
+9. ✅ World selection persisted in localStorage
 
 **Status:** Tables render inside Marble worlds on desktop. Mobile TBD.
 

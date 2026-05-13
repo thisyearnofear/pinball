@@ -7,6 +7,14 @@ export interface MarbleWorld {
   rotation: [number, number, number];
   scale: [number, number, number];
   description?: string;
+  camera?: CameraPresets;
+}
+
+export interface CameraPresets {
+  plunger: { position: [number, number, number]; target: [number, number, number] };
+  overview: { position: [number, number, number]; target: [number, number, number] };
+  drain: { position: [number, number, number]; target: [number, number, number] };
+  side?: { position: [number, number, number]; target: [number, number, number] };
 }
 
 export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
@@ -19,6 +27,11 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
     rotation: [0, 0, 0],
     scale: [1, 1, 1],
     description: 'A cozy, detailed Hobbiton environment.',
+    camera: {
+      plunger: { position: [0, 2, 8], target: [0, 0, 0] },
+      overview: { position: [0, 15, 15], target: [0, 0, 0] },
+      drain: { position: [0, 1, 5], target: [0, -2, 0] },
+    },
   },
   SPACESHIP: {
     id: 'spaceship',
@@ -29,6 +42,11 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
     rotation: [0, 0, 0],
     scale: [1, 1, 1],
     description: 'A futuristic cozy spaceship.',
+    camera: {
+      plunger: { position: [0, 8, 10], target: [0, 6.5, 0] },
+      overview: { position: [0, 25, 20], target: [0, 6.5, 0] },
+      drain: { position: [0, 6, 8], target: [0, 4, 0] },
+    },
   },
   COTTAGE: {
     id: 'cottage',
@@ -39,6 +57,11 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
     rotation: [0, 0, 0],
     scale: [1, 1, 1],
     description: 'A quaint, cozy cottage.',
+    camera: {
+      plunger: { position: [0, 3, 7], target: [0, 1, 0] },
+      overview: { position: [0, 12, 12], target: [0, 1, 0] },
+      drain: { position: [0, 2, 5], target: [0, 0, 0] },
+    },
   },
   PIRATE_SHIP: {
     id: 'pirate-ship',
@@ -49,6 +72,12 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
     rotation: [0, 0, 0],
     scale: [1, 1, 1],
     description: 'A mysterious sunken pirate ship.',
+    camera: {
+      plunger: { position: [0, 2, 10], target: [0, 0, 0] },
+      overview: { position: [0, 18, 18], target: [0, 0, 0] },
+      drain: { position: [0, 1, 6], target: [0, -3, 0] },
+      side: { position: [12, 4, 0], target: [0, 0, 0] },
+    },
   },
   HAUNTED_HOUSE: {
     id: 'haunted-house',
@@ -59,5 +88,10 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
     rotation: [0, 0, 0],
     scale: [1, 1, 1],
     description: 'A spooky haunted mansion.',
+    camera: {
+      plunger: { position: [0, 3, 8], target: [0, 1, 0] },
+      overview: { position: [0, 15, 15], target: [0, 1, 0] },
+      drain: { position: [0, 2, 5], target: [0, -1, 0] },
+    },
   },
 };

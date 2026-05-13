@@ -5,7 +5,7 @@
  * animated camera transitions between balls.
  */
 
-import { type MarbleWorld } from '@/config/worlds';
+import { type MarbleWorld, type CameraPresets } from '@/config/worlds';
 
 export type CameraPreset = 'plunger' | 'overview' | 'drain' | 'side';
 
@@ -28,7 +28,7 @@ interface FlyToOptions {
 }
 
 const DEFAULT_DURATION = 800;
-const PRESET_POSITIONS: Record<CameraPreset, CameraPosition> = {
+const DEFAULT_PRESETS: Record<CameraPreset, CameraPosition> = {
   plunger: {
     position: [0, 2, 8],
     target: [0, 0, 0],
@@ -68,13 +68,13 @@ export class CameraRig {
     onComplete?: () => void;
   } | null = null;
   private sparkCamera: unknown | null = null;
-  private world: MarbleWorld | null = null;
+  private worldPresets: CameraPresets | null = null;
 
   /**
    * Initialize camera rig with world context
    */
-  initialize(world: MarbleWorld): void {
-    this.world = world;
+  initialize(world?: MarbleWorld): void {
+    this.worldPresets = world?.camera || null;
     this.setPreset('overview');
   }
 
@@ -89,7 +89,21 @@ export class CameraRig {
    * Set to a preset camera position
    */
   setPreset(preset: CameraPreset, options?: FlyToOptions): void {
-    const pos = PRESET_POSITIONS[preset];
+    // Try world-specific preset first, fall back to defaults
+    let pos: CameraPosition | undefined;
+    if (this.worldPresets && preset in this.worldPresets) {
+      const worldPreset = this.worldPresets[preset as keyof CameraPresets];
+      pos = {
+        position: worldPreset.position,
+        target: worldPreset.target,
+        fov: 50,
+      };
+    }
+    
+    if (!pos) {
+      pos = DEFAULT_PRESETS[preset];
+    }
+    
     if (!pos) {
       console.warn('Unknown camera preset:', preset);
       return;
@@ -210,6 +224,6 @@ export class CameraRig {
   dispose(): void {
     this.animation = null;
     this.sparkCamera = null;
-    this.world = null;
+    this.worldPresets = null;
   }
 }

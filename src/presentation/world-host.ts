@@ -203,10 +203,14 @@ export class WorldHost {
     this.cameraRig?.flyTo(position, target, options);
   }
 
-  /**
-   * Start the render loop
-   */
+/**
+    * Start the render loop
+    */
   private startRenderLoop(): void {
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent
+    );
+    
     const loop = () => {
       this.cameraRig?.update();
       if (this.spark) {
@@ -214,7 +218,15 @@ export class WorldHost {
       }
       this.rafId = requestAnimationFrame(loop);
     };
+    
     this.rafId = requestAnimationFrame(loop);
+    
+    // On mobile, start with overview for better initial view
+    if (isMobile) {
+      setTimeout(() => {
+        this.cameraRig?.setPreset('overview', { duration: 0 });
+      }, 100);
+    }
   }
 
   /**
