@@ -462,3 +462,13 @@ function startRound(game: GameDef): void {
     game.underworld = false;
     game.multiplier = 1;
 }
+
+export function getBallPosition(): { x: number; y: number } | null {
+    if (balls.length === 0) return null;
+    const primaryBall = balls[0];
+    return { x: primaryBall.body.position.x, y: primaryBall.body.position.y };
+}
+
+export function getBallCount(): number {
+    return balls.length;
+}

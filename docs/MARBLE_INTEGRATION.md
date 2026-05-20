@@ -353,11 +353,14 @@ If/when we move to Rapier 3D:
 
 ### ✅ Milestone M3 — "Cinematic polish"  *DONE*
 - ✅ `camera-rig.ts` - Camera rig with flyTo(), preset positions (plunger/overview/drain/side)
+- ✅ **Ball-following camera** - Real-time ball tracking through the 3D world (exponential smoothing)
 - ✅ Camera wired into world-host.ts render loop
-- ✅ Ball drain detection → `flyToPreset('drain')` on ball loss
-- ✅ Ball start detection → `flyToPreset('plunger')` on new ball
+- ✅ Ball drain detection → `flyToPreset('drain')` on ball loss (pauses ball tracking during transition)
+- ✅ Ball start detection → `flyToPreset('plunger')` on new ball (pauses ball tracking during transition)
+- ✅ Game over → `flyToPreset('overview')` (pauses ball tracking during transition)
 - ✅ Share card with world gradient on game over (ShareCard component)
 - ✅ FPS monitor wired for runtime quality degradation (auto-degrades high→medium→low)
+- ✅ `MountedGame` exposes `getBallPosition()` and `getBallCount()` for external tracking
 - 🔳 DOF on drain (deferred - requires WebGL post-processing pipeline)
 
 ### Milestone M4 — "Player-Generated Tables" (Tier 3)  *post-jam*
@@ -400,6 +403,7 @@ If/when we move to Rapier 3D:
 - ~~No ambience audio~~ → `WorldAmbienceManager` with ducking under game FX.
 - ~~No share card~~ → `ShareCard` component with copy-to-clipboard on game over.
 - ~~Dead code: spark-renderer.ts~~ → Removed orphaned files.
+- ~~Ball-following camera~~ → Real-time ball tracking with exponential smoothing, pauses during cinematic transitions.
 
 ---
 

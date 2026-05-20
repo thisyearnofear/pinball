@@ -242,6 +242,27 @@ export class WorldHost {
     this.cameraRig?.flyTo(position, target, options);
   }
 
+  /**
+   * Enable/disable ball-following camera mode
+   */
+  setBallTracking(enabled: boolean): void {
+    this.cameraRig?.setBallTracking(enabled);
+  }
+
+  /**
+   * Update ball position for camera tracking
+   */
+  updateBallPosition(gameX: number, gameY: number): void {
+    this.cameraRig?.updateBallPosition(gameX, gameY);
+  }
+
+  /**
+   * Pause ball tracking (e.g., during cinematic transitions)
+   */
+  pauseBallTracking(paused: boolean): void {
+    this.cameraRig?.pauseBallTracking(paused);
+  }
+
 /**
     * Start the render loop
     */

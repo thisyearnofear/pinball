@@ -5,7 +5,7 @@ import type { Size } from "zcanvas";
 import type { GameDef, GameMessages } from "@/definitions/game";
 import { ActorTypes, FRAME_RATE, GameSounds } from "@/definitions/game";
 
-import { init, scaleCanvas, setFlipperState, bumpTable, update, panViewport, setPaused } from "@/model/game";
+import { init, scaleCanvas, setFlipperState, bumpTable, update, panViewport, setPaused, getBallPosition, getBallCount } from "@/model/game";
 import SpriteCache from "@/utils/sprite-cache";
 import { createInputController } from "@/utils/input-controller";
 import * as haptics from "@/utils/haptics";
@@ -33,12 +33,11 @@ export type MountGameOptions = {
 };
 
 export type MountedGame = {
-  /** (Re)initializes the engine with a new GameDef reference. */
   start: (game: GameDef) => Promise<void>;
-  /** Pause/unpause rendering + physics stepping. */
   setPaused: (paused: boolean) => void;
-  /** Remove listeners and DOM nodes created by mountGame. */
   destroy: () => void;
+  getBallPosition: () => { x: number; y: number } | null;
+  getBallCount: () => number;
 };
 
 /**
@@ -217,5 +216,7 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     start,
     setPaused: (paused: boolean) => setPaused(paused),
     destroy,
+    getBallPosition,
+    getBallCount,
   };
 }

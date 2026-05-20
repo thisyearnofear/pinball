@@ -24,6 +24,9 @@ export interface WorldHandle {
   duckAmbience(durationMs?: number): void;
   setAmbienceMuted(muted: boolean): void;
   getCurrentQuality(): QualityTier;
+  setBallTracking(enabled: boolean): void;
+  updateBallPosition(gameX: number, gameY: number): void;
+  pauseBallTracking(paused: boolean): void;
 }
 
 interface WorldHostConfig {
@@ -100,6 +103,9 @@ export async function mountWorld(
     duckAmbience: (durationMs) => ambience.duck(durationMs),
     setAmbienceMuted: (muted) => ambience.setMuted(muted),
     getCurrentQuality: () => currentQuality,
+    setBallTracking: (enabled) => host.setBallTracking(enabled),
+    updateBallPosition: (gameX, gameY) => host.updateBallPosition(gameX, gameY),
+    pauseBallTracking: (paused) => host.pauseBallTracking(paused),
   };
 }
 

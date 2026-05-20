@@ -1,8 +1,8 @@
 /**
  * Camera rig - manages camera positions and smooth transitions for cinematic effects.
  * 
- * Provides preset positions (plunger, overview, drain) and flyTo() for smooth
- * animated camera transitions between balls.
+ * Provides preset positions (plunger, overview, drain), flyTo() for smooth
+ * animated camera transitions, and ball-following mode for real-time tracking.
  */
 
 import { type MarbleWorld, type CameraPresets } from '@/config/worlds';
@@ -25,6 +25,18 @@ interface FlyToOptions {
   duration?: number;
   easing?: 'ease-in-out' | 'ease-out' | 'linear';
   onComplete?: () => void;
+}
+
+interface BallTrackingConfig {
+  enabled: boolean;
+  gameWidth: number;
+  gameHeight: number;
+  worldOffsetX: number;
+  worldOffsetY: number;
+  worldScale: number;
+  cameraHeight: number;
+  cameraDistance: number;
+  smoothness: number;
 }
 
 const DEFAULT_DURATION = 800;
@@ -51,6 +63,18 @@ const DEFAULT_PRESETS: Record<CameraPreset, CameraPosition> = {
   },
 };
 
+const DEFAULT_BALL_TRACKING: BallTrackingConfig = {
+  enabled: false,
+  gameWidth: 600,
+  gameHeight: 800,
+  worldOffsetX: 0,
+  worldOffsetY: 0,
+  worldScale: 0.02,
+  cameraHeight: 6,
+  cameraDistance: 8,
+  smoothness: 0.08,
+};
+
 export class CameraRig {
   private state: CameraState = {
     position: [0, 8, 12],
@@ -69,6 +93,11 @@ export class CameraRig {
   } | null = null;
   private sparkCamera: unknown | null = null;
   private worldPresets: CameraPresets | null = null;
+  
+  private ballTracking: BallTrackingConfig = { ...DEFAULT_BALL_TRACKING };
+  private ballWorldPos: [number, number, number] = [0, 0, 0];
+  private ballTrackingActive = false;
+  private ballTrackingPaused = false;
 
   /**
    * Initialize camera rig with world context
@@ -86,10 +115,48 @@ export class CameraRig {
   }
 
   /**
+   * Enable/disable ball-following camera mode
+   */
+  setBallTracking(enabled: boolean, config?: Partial<BallTrackingConfig>): void {
+    this.ballTracking = { ...this.ballTracking, ...config, enabled };
+    this.ballTrackingActive = enabled;
+    this.ballTrackingPaused = false;
+    
+    if (enabled) {
+      this.cancelAnimation();
+    }
+  }
+
+  /**
+   * Pause ball tracking (e.g., during cinematic transitions)
+   */
+  pauseBallTracking(paused: boolean): void {
+    this.ballTrackingPaused = paused;
+  }
+
+  /**
+   * Update the ball position from the game engine
+   * Called each frame with the ball's physics coordinates
+   */
+  updateBallPosition(gameX: number, gameY: number): void {
+    if (!this.ballTracking.enabled) return;
+    
+    const { gameWidth, gameHeight, worldOffsetX, worldOffsetY, worldScale } = this.ballTracking;
+    
+    // Map game coordinates (600x800, y-down) to world space
+    const worldX = ((gameX / gameWidth) - 0.5) * worldScale * 100 + worldOffsetX;
+    const worldZ = ((gameY / gameHeight) - 0.5) * worldScale * 100 + worldOffsetY;
+    
+    this.ballWorldPos = [worldX, 0, worldZ];
+  }
+
+  /**
    * Set to a preset camera position
    */
   setPreset(preset: CameraPreset, options?: FlyToOptions): void {
-    // Try world-specific preset first, fall back to defaults
+    // Pause ball tracking during cinematic transitions
+    this.ballTrackingPaused = true;
+    
     let pos: CameraPosition | undefined;
     if (this.worldPresets && preset in this.worldPresets) {
       const worldPreset = this.worldPresets[preset as keyof CameraPresets];
@@ -111,7 +178,13 @@ export class CameraRig {
     this.flyTo(pos.position, pos.target, {
       duration: options?.duration ?? DEFAULT_DURATION,
       easing: options?.easing ?? 'ease-in-out',
-      onComplete: options?.onComplete,
+      onComplete: () => {
+        // Resume ball tracking after transition completes
+        if (this.ballTracking.enabled) {
+          this.ballTrackingPaused = false;
+        }
+        options?.onComplete?.();
+      },
     });
   }
 
@@ -136,6 +209,13 @@ export class CameraRig {
   }
 
   /**
+   * Cancel any ongoing animation
+   */
+  private cancelAnimation(): void {
+    this.animation = null;
+  }
+
+  /**
    * Get current camera state (for external renderers)
    */
   getState(): CameraState {
@@ -146,6 +226,14 @@ export class CameraRig {
    * Update the camera (call each frame)
    */
   update(): void {
+    // Handle ball tracking mode
+    if (this.ballTrackingActive && !this.ballTrackingPaused && this.ballTracking.enabled) {
+      this.updateBallTracking();
+      this.applyToSparkCamera();
+      return;
+    }
+    
+    // Handle preset animation
     if (!this.animation || !this.sparkCamera) return;
 
     const now = performance.now();
@@ -162,6 +250,35 @@ export class CameraRig {
       this.animation.onComplete();
       this.animation = null;
     }
+  }
+
+  /**
+   * Update camera to follow the ball with smooth interpolation
+   */
+  private updateBallTracking(): void {
+    if (!this.sparkCamera) return;
+    
+    const { cameraHeight, cameraDistance, smoothness } = this.ballTracking;
+    const [bx, by, bz] = this.ballWorldPos;
+    
+    // Camera position: behind and above the ball
+    const targetPos: [number, number, number] = [
+      bx,
+      by + cameraHeight,
+      bz + cameraDistance,
+    ];
+    
+    // Camera target: the ball position
+    const targetLookAt: [number, number, number] = [bx, by, bz];
+    
+    // Smooth interpolation (exponential smoothing for fluid tracking)
+    this.state.position[0] = this.lerp(this.state.position[0], targetPos[0], smoothness);
+    this.state.position[1] = this.lerp(this.state.position[1], targetPos[1], smoothness);
+    this.state.position[2] = this.lerp(this.state.position[2], targetPos[2], smoothness);
+    
+    this.state.target[0] = this.lerp(this.state.target[0], targetLookAt[0], smoothness * 1.5);
+    this.state.target[1] = this.lerp(this.state.target[1], targetLookAt[1], smoothness * 1.5);
+    this.state.target[2] = this.lerp(this.state.target[2], targetLookAt[2], smoothness * 1.5);
   }
 
   /**
@@ -219,11 +336,19 @@ export class CameraRig {
   }
 
   /**
+   * Check if ball tracking is active
+   */
+  isBallTracking(): boolean {
+    return this.ballTrackingActive && this.ballTracking.enabled && !this.ballTrackingPaused;
+  }
+
+  /**
    * Dispose and clean up
    */
   dispose(): void {
     this.animation = null;
     this.sparkCamera = null;
     this.worldPresets = null;
+    this.ballTrackingActive = false;
   }
 }

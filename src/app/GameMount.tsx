@@ -118,6 +118,9 @@ export default function GameMount(props: Props) {
       });
 
       gameRef.current = initialGame;
+
+      // Enable ball-following camera when world is loaded
+      worldHandleRef.current?.setBallTracking(true);
     }
 
     run().catch((e) => {
@@ -190,6 +193,14 @@ export default function GameMount(props: Props) {
         multiplier: g.multiplier,
       });
 
+      // Update ball position for camera tracking
+      if (g.active && mountedRef.current) {
+        const ballPos = mountedRef.current.getBallPosition();
+        if (ballPos) {
+          worldHandleRef.current?.updateBallPosition(ballPos.x, ballPos.y);
+        }
+      }
+
       // Duck ambience on score changes (ball hits/bumpers)
       if (g.score > prevScoreRef.current && g.active) {
         const now = performance.now();
@@ -202,16 +213,25 @@ export default function GameMount(props: Props) {
 
       // Ball drain detection - fly camera on ball loss
       if (prevBallsRef.current > g.balls && g.balls > 0) {
-        worldHandleRef.current?.flyToPreset('drain', { duration: 600 });
+        worldHandleRef.current?.pauseBallTracking(true);
+        worldHandleRef.current?.flyToPreset('drain', { duration: 600, onComplete: () => {
+          worldHandleRef.current?.pauseBallTracking(false);
+        }});
       }
       // Ball start - fly camera to plunger for next ball
       if (prevBallsRef.current < g.balls || (!prevActiveRef.current && isActive)) {
-        worldHandleRef.current?.flyToPreset('plunger', { duration: 800 });
+        worldHandleRef.current?.pauseBallTracking(true);
+        worldHandleRef.current?.flyToPreset('plunger', { duration: 800, onComplete: () => {
+          worldHandleRef.current?.pauseBallTracking(false);
+        }});
       }
       // Game over - fly camera to overview for share screen
       if (g.balls === 0 && !gameOverRef.current && g.score > 0) {
         gameOverRef.current = true;
-        worldHandleRef.current?.flyToPreset('overview', { duration: 1200 });
+        worldHandleRef.current?.pauseBallTracking(true);
+        worldHandleRef.current?.flyToPreset('overview', { duration: 1200, onComplete: () => {
+          worldHandleRef.current?.pauseBallTracking(false);
+        }});
       }
       prevBallsRef.current = g.balls;
 
