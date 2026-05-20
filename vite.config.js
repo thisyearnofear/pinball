@@ -8,7 +8,6 @@ const dirSrc    = `${__dirname}/src`;
 const dirAssets = `${dirSrc}/assets`;
 const dest      = `${__dirname}/dist`;
 
-// https://vitejs.dev/config/
 export default defineConfig({
     base: "./",
     plugins: [
@@ -44,29 +43,18 @@ export default defineConfig({
         }
     },
     test: {
-        // Keep frontend tests scoped to the frontend only.
-        // Backend and contracts have their own packages and test runners.
         include: [ "tests/**/*.spec.ts" ],
         exclude: [ "backend/**", "contracts/**", "apps/**", "dist/**", "node_modules/**" ],
         environment: "jsdom",
     },
     define: {
         global: 'globalThis',
-        process: {
-            env: {},
-            browser: true,
-            version: ''
-        }
     },
     optimizeDeps: {
+        include: ['buffer', 'ethers'],
         esbuildOptions: {
             define: {
                 global: 'globalThis',
-                process: JSON.stringify({
-                    env: {},
-                    browser: true,
-                    version: ''
-                })
             }
         }
     }
