@@ -9,23 +9,21 @@
  */
 import { type MarbleWorld } from '@/config/worlds';
 import { WorldHost } from './world-host';
-import { detectQualityTier } from './quality';
+import { detectQualityTier, type QualityTier } from './quality';
 import { getCachedSplat, cacheSplat } from './splat-loader';
 import { type CameraPreset } from './camera-rig';
+import { WorldAmbienceManager } from './world-ambience';
 
 export interface WorldHandle {
-  /** Switch to a different world by ID */
   switchWorld(worldId: string): Promise<void>;
-  /** Dispose and clean up resources */
   dispose(): void;
-  /** Get current world ID */
   getWorldId(): string | null;
-  /** Fly camera to preset position (plunger, overview, drain, side) */
   flyToPreset(preset: CameraPreset, options?: { duration?: number; onComplete?: () => void }): void;
-  /** Fly camera to specific position */
   flyTo(position: [number, number, number], target: [number, number, number], options?: { duration?: number; onComplete?: () => void }): void;
-  /** Get load error if world failed to load */
   getLoadError(): Error | null;
+  duckAmbience(durationMs?: number): void;
+  setAmbienceMuted(muted: boolean): void;
+  getCurrentQuality(): QualityTier;
 }
 
 interface WorldHostConfig {
@@ -33,52 +31,51 @@ interface WorldHostConfig {
   world: MarbleWorld;
   qualityTier: 'low' | 'medium' | 'high';
   onProgress?: (progress: number) => void;
+  onQualityChange?: (tier: QualityTier) => void;
 }
 
 interface MountWorldOptions {
-  /** Called with progress (0-1) as world loads */
   onProgress?: (progress: number) => void;
+  onQualityChange?: (tier: QualityTier) => void;
 }
 
-/**
- * Mount a Marble world behind the game canvas.
- * 
- * @param container - The DOM container for the 3D scene
- * @param world - The MarbleWorld definition to load
- * @param options - Optional configuration (e.g., progress callback)
- * @returns Promise<WorldHandle> - Imperative handle for controlling the world
- */
 export async function mountWorld(
   container: HTMLDivElement,
   world: MarbleWorld,
   options?: MountWorldOptions
 ): Promise<WorldHandle> {
-  // Detect quality tier based on device capabilities
   const qualityTier = detectQualityTier();
-  
-  // Try to load from cache first (performance optimization)
   const cachedUrl = await getCachedSplat(world.id, world.spzUrl);
-  const splatUrl = cachedUrl || world.spzUrl;
   
-  // Create the world host
   const host = new WorldHost();
+  const ambience = new WorldAmbienceManager();
+  let currentQuality: QualityTier = qualityTier;
+  
   const config: WorldHostConfig = {
     container,
     world,
     qualityTier,
     onProgress: options?.onProgress,
+    onQualityChange: (tier) => {
+      currentQuality = tier;
+      options?.onQualityChange?.(tier);
+    },
   };
   
   try {
     await host.initialize(config);
     
-    // If loaded from network, cache for next time
     if (!cachedUrl) {
       cacheSplat(world.id, world.spzUrl).catch(console.warn);
+    }
+    
+    if (world.ambienceUrl) {
+      ambience.loadWorld(world.id, world.ambienceUrl).catch(console.warn);
     }
   } catch (initError) {
     console.error('World host initialization failed:', initError);
     host.dispose();
+    ambience.dispose();
     throw initError;
   }
   
@@ -87,19 +84,25 @@ export async function mountWorld(
       const newWorld = await host.loadWorldById(newWorldId);
       if (newWorld) {
         host.updateConfig({ world: newWorld });
+        if (newWorld.ambienceUrl) {
+          ambience.loadWorld(newWorld.id, newWorld.ambienceUrl).catch(console.warn);
+        }
       }
     },
-    dispose: () => host.dispose(),
+    dispose: () => {
+      host.dispose();
+      ambience.dispose();
+    },
     getWorldId: () => world.id,
     flyToPreset: (preset, options) => host.flyToPreset(preset, options),
     flyTo: (position, target, options) => host.flyTo(position, target, options),
     getLoadError: () => host.getLoadError(),
+    duckAmbience: (durationMs) => ambience.duck(durationMs),
+    setAmbienceMuted: (muted) => ambience.setMuted(muted),
+    getCurrentQuality: () => currentQuality,
   };
 }
 
-/**
- * Check if the browser supports WebGL2 for splat rendering
- */
 export function isSplatSupported(): boolean {
   try {
     const canvas = document.createElement('canvas');
@@ -110,9 +113,6 @@ export function isSplatSupported(): boolean {
   }
 }
 
-/**
- * Check if reduced motion is preferred
- */
 export function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }

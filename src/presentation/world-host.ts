@@ -6,7 +6,7 @@
  */
 
 import { type MarbleWorld } from '@/config/worlds';
-import { type QualityTier, getQualityConfig } from './quality';
+import { type QualityTier, getQualityConfig, FPSMonitor, QUALITY_TIERS } from './quality';
 import { getOptimalSplatUrl, loadSplat } from './splat-loader';
 import { CameraRig, type CameraPreset } from './camera-rig';
 import { PostProcessingManager, getPostProcessingConfig } from './post-processing';
@@ -44,6 +44,8 @@ export class WorldHost {
   private rafId: number | null = null;
   private postProcessing: PostProcessingManager | null = null;
   private loadError: Error | null = null;
+  private fpsMonitor: FPSMonitor | null = null;
+  private onQualityChange: ((tier: QualityTier) => void) | null = null;
 
   /**
    * Initialize the world host with a container and initial world
@@ -53,6 +55,7 @@ export class WorldHost {
     this.currentWorld = config.world;
     this.qualityTier = config.qualityTier;
     this.onProgress = config.onProgress ?? null;
+    this.onQualityChange = config.onQualityChange ?? null;
     
     const qualityConfig = getQualityConfig(this.qualityTier);
     
@@ -83,6 +86,9 @@ export class WorldHost {
       this.postProcessing = new PostProcessingManager();
       this.postProcessing.initialize(this.container!);
       this.postProcessing.setConfig(getPostProcessingConfig(this.qualityTier));
+      
+      // Initialize FPS monitor for adaptive quality
+      this.fpsMonitor = new FPSMonitor();
       
       this.startRenderLoop();
       this.initialized = true;
@@ -191,6 +197,9 @@ export class WorldHost {
       this.postProcessing = null;
     }
     
+    this.fpsMonitor = null;
+    this.onQualityChange = null;
+    
     if (this.disposeFn) {
       this.disposeFn();
       this.disposeFn = null;
@@ -242,16 +251,30 @@ export class WorldHost {
     );
     
     const loop = () => {
+      this.fpsMonitor?.tick();
       this.cameraRig?.update();
       if (this.spark) {
         this.spark.render();
       }
+      
+      // Check for quality degradation
+      if (this.fpsMonitor && this.spark) {
+        const newTier = this.fpsMonitor.getDegradeTier(this.qualityTier);
+        if (newTier) {
+          this.qualityTier = newTier;
+          this.spark.setQuality(this.qualityTier);
+          this.postProcessing?.setConfig(getPostProcessingConfig(this.qualityTier));
+          this.fpsMonitor.reset();
+          console.log('Quality degraded to:', this.qualityTier);
+          this.onQualityChange?.(this.qualityTier);
+        }
+      }
+      
       this.rafId = requestAnimationFrame(loop);
     };
     
     this.rafId = requestAnimationFrame(loop);
     
-    // On mobile, start with overview for better initial view
     if (isMobile) {
       setTimeout(() => {
         this.cameraRig?.setPreset('overview', { duration: 0 });
@@ -275,4 +298,5 @@ interface WorldHostConfig {
   world: MarbleWorld;
   qualityTier: QualityTier;
   onProgress?: (progress: number) => void;
+  onQualityChange?: (tier: QualityTier) => void;
 }

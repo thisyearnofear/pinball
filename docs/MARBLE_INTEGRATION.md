@@ -314,19 +314,21 @@ If/when we move to Rapier 3D:
 ### ✅ Milestone M1 — "Worlded Tables" (Tier 1)  *DONE*
 1. ✅ `src/presentation/` created with:
    - `index.ts` - Public API (`mountWorld`, `WorldHandle`, `isSplatSupported`, `prefersReducedMotion`)
-   - `world-host.ts` - Three.js + Spark lifecycle manager
-   - `spark-renderer.ts` - SparkJS renderer implementation
+   - `world-host.ts` - Three.js + Spark lifecycle manager with FPS-based quality degradation
    - `splat-loader.ts` - Splat caching + LOD support
-   - `quality.ts` - Adaptive quality system with FPS monitor
+   - `quality.ts` - Adaptive quality system with FPS monitor (runtime degradation wired)
    - `camera-rig.ts` - Camera rig with flyTo() and preset positions
-2. ✅ `src/config/worlds.ts` - World definitions (Hobbiton, Spaceship, Cottage)
+   - `post-processing.ts` - CSS vignette, bloom, color grading
+   - `world-ambience.ts` - Per-world ambient audio with ducking under game FX
+2. ✅ `src/config/worlds.ts` - 5 worlds with gradients, camera presets, ambience URLs
 3. ✅ `GameMount.tsx` - Integrated world rendering behind game canvas
    - Ball drain → flyToPreset('drain')
    - Ball start → flyToPreset('plunger')
    - Game over → flyToPreset('overview')
+   - Ambience ducking on score changes (ball hits/bumpers)
 4. ✅ `StartMenu.tsx` - World selector for practice mode
 5. ✅ Reduced-motion fallback via `prefersReducedMotion()` check
-6. ✅ Graceful fallback to gradient background when SparkJS unavailable
+6. ✅ Graceful fallback to world gradient when SparkJS unavailable
 7. ✅ SparkJS loaded via CDN in `index.html`
 8. ✅ Per-world camera presets (custom plunger/overview/drain per world)
 9. ✅ World selection persisted in localStorage
@@ -336,25 +338,27 @@ If/when we move to Rapier 3D:
 13. ✅ SparkJS lazy-loaded on demand (not in initial bundle)
 14. ✅ Accessibility: aria-label on world dropdown
 
-**Status:** Tables render inside Marble worlds on desktop. Mobile TBD.
+**Status:** Tables render inside Marble worlds on desktop and mobile.
 
 ### ✅ Milestone M2 — "Themed Tournaments" (Tier 2)  *DONE*
 1. ✅ `src/config/tournaments.ts` - Tournament metadata registry with `worldId` binding
-2. ✅ `src/config/worlds.ts` - Updated with Pirate Ship world (for Tournament 1)
+2. ✅ `src/config/worlds.ts` - 5 worlds (Pirate Ship, Spaceship, Hobbiton, Cottage, Haunted House)
 3. ✅ `GameScreen.tsx` - `worldId` prop wired to `GameMount`
-4. ✅ `src/app/ui/WorldPreview.tsx` - Lobby card preview component
-5. ✅ Loading progress - `onProgress` callback in mountWorld() options
-6. ⏳ Per-tournament ambience track (deferred)
+4. ✅ `TournamentLobby.tsx` - Full lobby with world preview cards, entry/play buttons
+5. ✅ `WorldPreview.tsx` - Gradient-based poster cards per world
+6. ✅ Loading progress - `onProgress` callback in mountWorld() options
+7. ✅ Per-tournament ambience track support (WorldAmbienceManager wired)
 
-**Status:** Tournament 1 loads Pirate Ship, Tournament 2 loads Spaceship.
+**Status:** Lobby shows themed tournament cards. Tournament 1 loads Pirate Ship, Tournament 2 loads Spaceship.
 
 ### ✅ Milestone M3 — "Cinematic polish"  *DONE*
 - ✅ `camera-rig.ts` - Camera rig with flyTo(), preset positions (plunger/overview/drain/side)
 - ✅ Camera wired into world-host.ts render loop
 - ✅ Ball drain detection → `flyToPreset('drain')` on ball loss
 - ✅ Ball start detection → `flyToPreset('plunger')` on new ball
-- 🔳 DOF on drain (deferred - requires post-processing pipeline)
-- 🔳 Share card uses world still (deferred - requires Marble keyframe export)
+- ✅ Share card with world gradient on game over (ShareCard component)
+- ✅ FPS monitor wired for runtime quality degradation (auto-degrades high→medium→low)
+- 🔳 DOF on drain (deferred - requires WebGL post-processing pipeline)
 
 ### Milestone M4 — "Player-Generated Tables" (Tier 3)  *post-jam*
 - Marble API key flow + prompt UI.
@@ -380,12 +384,22 @@ If/when we move to Rapier 3D:
 
 ## 7. Open questions
 
-- Do we self-host the showcase splats in `public/worlds/` or hot-link the
-  World Labs CDN URLs? (Lean: self-host the small ones, CDN the 16 M+ ones.)
 - Tier 3 UGC: do we gate Marble API costs behind MUSD (player burns MUSD to
   generate a world) or absorb them per tournament-creation fee?
 - Tier 4: do we keep the 2D engine as an "Arcade Mode" toggle, or fully
   delete (CONSOLIDATION says delete)?
+- Ambience audio: source royalty-free tracks per world or use procedural audio?
+
+### Resolved
+
+- ~~Do we self-host the showcase splats in `public/worlds/` or hot-link the
+  World Labs CDN URLs?~~ → Hot-linking from GCS works; self-hosting optional.
+- ~~FPS monitor not wired~~ → Runtime quality degradation now active in render loop.
+- ~~No lobby screen~~ → `TournamentLobby.tsx` ships with gradient-based world cards.
+- ~~No poster images~~ → Per-world gradients serve as visual posters.
+- ~~No ambience audio~~ → `WorldAmbienceManager` with ducking under game FX.
+- ~~No share card~~ → `ShareCard` component with copy-to-clipboard on game over.
+- ~~Dead code: spark-renderer.ts~~ → Removed orphaned files.
 
 ---
 

@@ -1,13 +1,16 @@
 export interface MarbleWorld {
   id: string;
   name: string;
-  spzUrl: string; // The .spz format is optimized for web rendering
-  radUrl?: string; // Optional for massive, world-scale scenes (LOD)
+  spzUrl: string;
+  radUrl?: string;
   position: [number, number, number];
   rotation: [number, number, number];
   scale: [number, number, number];
   description?: string;
   camera?: CameraPresets;
+  posterUrl?: string;
+  ambienceUrl?: string;
+  gradient: string;
 }
 
 export interface CameraPresets {
@@ -27,6 +30,7 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
     rotation: [0, 0, 0],
     scale: [1, 1, 1],
     description: 'A cozy, detailed Hobbiton environment.',
+    gradient: 'linear-gradient(135deg, #2d5016 0%, #4a7c23 30%, #8b6914 60%, #3d2b1f 100%)',
     camera: {
       plunger: { position: [0, 2, 8], target: [0, 0, 0] },
       overview: { position: [0, 15, 15], target: [0, 0, 0] },
@@ -42,6 +46,7 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
     rotation: [0, 0, 0],
     scale: [1, 1, 1],
     description: 'A futuristic cozy spaceship.',
+    gradient: 'linear-gradient(135deg, #0a0e27 0%, #1a1a4e 30%, #2d1b69 60%, #0d0d2b 100%)',
     camera: {
       plunger: { position: [0, 8, 10], target: [0, 6.5, 0] },
       overview: { position: [0, 25, 20], target: [0, 6.5, 0] },
@@ -57,6 +62,7 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
     rotation: [0, 0, 0],
     scale: [1, 1, 1],
     description: 'A quaint, cozy cottage.',
+    gradient: 'linear-gradient(135deg, #3d2b1f 0%, #8b6914 30%, #5c4033 60%, #2d1f0e 100%)',
     camera: {
       plunger: { position: [0, 3, 7], target: [0, 1, 0] },
       overview: { position: [0, 12, 12], target: [0, 1, 0] },
@@ -72,6 +78,7 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
     rotation: [0, 0, 0],
     scale: [1, 1, 1],
     description: 'A mysterious sunken pirate ship.',
+    gradient: 'linear-gradient(135deg, #0a1628 0%, #1a3a5c 30%, #0d2137 60%, #051020 100%)',
     camera: {
       plunger: { position: [0, 2, 10], target: [0, 0, 0] },
       overview: { position: [0, 18, 18], target: [0, 0, 0] },
@@ -88,6 +95,7 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
     rotation: [0, 0, 0],
     scale: [1, 1, 1],
     description: 'A spooky haunted mansion.',
+    gradient: 'linear-gradient(135deg, #1a0a2e 0%, #2d1b4e 30%, #4a1942 60%, #0d0515 100%)',
     camera: {
       plunger: { position: [0, 3, 8], target: [0, 1, 0] },
       overview: { position: [0, 15, 15], target: [0, 1, 0] },
@@ -95,3 +103,12 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
     },
   },
 };
+
+export function getWorldById(id: string): MarbleWorld | undefined {
+  return MARBLE_WORLDS[id.toUpperCase()] ||
+    Object.values(MARBLE_WORLDS).find(w => w.id === id);
+}
+
+export function getAllWorlds(): MarbleWorld[] {
+  return Object.values(MARBLE_WORLDS);
+}

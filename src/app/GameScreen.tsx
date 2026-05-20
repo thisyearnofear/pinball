@@ -13,13 +13,14 @@ import {
   getTournamentInfo,
   getWinners,
 } from "@/services/contracts/tournament-client";
-import { getTournamentMeta } from "@/config/tournaments";
+import { getTournamentMeta, getAllTournaments } from "@/config/tournaments";
 import { getFromStorage } from "@/utils/local-storage";
 import { STORED_WORLD_ID } from "@/definitions/settings";
 import Tables, { START_TABLE_INDEX } from "@/definitions/tables";
 
 import GameMount from "./GameMount";
 import { StartMenu } from "./ui/StartMenu";
+import { TournamentLobby } from "./ui/TournamentLobby";
 import { SettingsModal } from "./ui/SettingsModal";
 import { HowToPlayModal } from "./ui/HowToPlayModal";
 import { AboutModal } from "./ui/AboutModal";
@@ -53,6 +54,7 @@ export default function GameScreen() {
   const [walletPort, setWalletPort] = useState<WalletPort | null>(null);
   const [activeModal, setActiveModal] = useState<null | "settings" | "how" | "about" | "leaderboard">(null);
   const [showMenu, setShowMenu] = useState(true);
+  const [showLobby, setShowLobby] = useState(true);
   const [gameActive, setGameActive] = useState(false);
   const [tableIndex, setTableIndex] = useState<number>(START_TABLE_INDEX);
   const [playerName, setPlayerName] = useState<string>(() => {
@@ -197,6 +199,7 @@ export default function GameScreen() {
     setMode("practice");
     setStatus("Starting practice run…");
     setShowMenu(false);
+    setShowLobby(false);
     setSubmissionStep(null);
     setSubmissionError("");
     setShowCelebration(false);
@@ -212,6 +215,7 @@ export default function GameScreen() {
     }
     setStatus("Starting tournament run…");
     setShowMenu(false);
+    setShowLobby(false);
     setSubmissionStep(null);
     setSubmissionError("");
     setShowCelebration(false);
@@ -230,6 +234,39 @@ export default function GameScreen() {
 
   const paused = showMenu || activeModal !== null;
   const pausedEffective = paused || showTutorial || showCelebration || submissionStep !== null;
+
+  function onSelectTournament(id: number) {
+    setTournament(prev => ({ ...prev, tournamentId: id }));
+  }
+
+  function onEnterTournamentFromLobby(id: number) {
+    if (!walletPort) return;
+    setError("");
+    setStatus("Entering tournament…");
+    enterTournament(id, walletPort)
+      .then(() => {
+        setStatus("Entered tournament.");
+        refreshTournament();
+      })
+      .catch((e: any) => {
+        console.error(e);
+        setStatus("");
+        setError(e?.message ?? "Failed to enter tournament.");
+      });
+  }
+
+  function onStartTournamentFromLobby(id: number) {
+    setTournament(prev => ({ ...prev, tournamentId: id }));
+    setMode("tournament");
+    setStatus("Starting tournament run…");
+    setShowLobby(false);
+    setShowMenu(false);
+    setSubmissionStep(null);
+    setSubmissionError("");
+    setShowCelebration(false);
+    if (!hasSeenTutorial()) setShowTutorial(true);
+    setRunKey((k) => k + 1);
+  }
 
   useEffect(() => {
     const cb = (step: LegacySubmissionStep, errorMessage?: string) => {
@@ -266,7 +303,20 @@ export default function GameScreen() {
         {error ? <div style={{ color: "crimson" }}>{error}</div> : null}
       </div>
 
-      {showMenu ? (
+      {showLobby ? (
+        <TournamentLobby
+          tournaments={getAllTournaments()}
+          activeTournamentId={tournament.tournamentId}
+          entered={tournament.entered}
+          isConnected={isConnected}
+          onSelectTournament={onSelectTournament}
+          onEnterTournament={onEnterTournamentFromLobby}
+          onStartTournament={onStartTournamentFromLobby}
+          onPractice={startPractice}
+        />
+      ) : null}
+
+      {showMenu && !showLobby ? (
         <StartMenu
           isConnected={isConnected}
           playerName={playerName}
@@ -341,6 +391,8 @@ export default function GameScreen() {
         <CelebrationOverlay
           score={lastScore}
           isPractice={mode === "practice"}
+          worldId={mode === "practice" ? selectedWorldId : tournament.worldId || undefined}
+          tournamentName={mode === "tournament" ? getTournamentMeta(tournament.tournamentId ?? 0)?.name : undefined}
           onDismiss={() => setShowCelebration(false)}
           onPlayAgain={() => {
             setShowCelebration(false);
@@ -354,6 +406,11 @@ export default function GameScreen() {
           onViewLeaderboard={() => {
             setShowCelebration(false);
             setActiveModal("leaderboard");
+          }}
+          onBackToLobby={() => {
+            setShowCelebration(false);
+            setShowLobby(true);
+            setShowMenu(false);
           }}
         />
       ) : null}

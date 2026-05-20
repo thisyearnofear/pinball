@@ -1,42 +1,24 @@
-/**
- * WorldPreview - Shows a preview of a Marble world for tournament cards.
- * 
- * Displays a poster image or video still from the world.
- */
-
+import React from 'react';
 import { getTournamentWorld, type TournamentMeta } from '@/config/tournaments';
-import { MARBLE_WORLDS, type MarbleWorld } from '@/config/worlds';
+import { getWorldById } from '@/config/worlds';
 
 interface WorldPreviewProps {
-  /** Tournament ID to preview */
   tournamentId: number;
-  /** Optional size: small for cards, large for featured */
   size?: 'small' | 'large';
-  /** Click handler */
   onClick?: () => void;
-}
-
-/**
- * Get the poster URL for a world (uses the world's description as fallback text)
- */
-function getWorldPosterUrl(world: MarbleWorld | null): string | null {
-  if (!world) return null;
-  // TODO: Use actual Marble keyframe video still when available
-  // For now, return null to show text fallback
-  return null;
 }
 
 export function WorldPreview(props: WorldPreviewProps) {
   const world = getTournamentWorld(props.tournamentId);
-  const posterUrl = getWorldPosterUrl(world);
+  const gradient = world?.gradient || 'linear-gradient(135deg, #1a0a2e, #0f0f23)';
   const size = props.size || 'small';
   
   const containerStyle: React.CSSProperties = {
-    width: size === 'small' ? '100%' : '100%',
+    width: '100%',
     height: size === 'small' ? 120 : 200,
     borderRadius: 8,
     overflow: 'hidden',
-    background: 'linear-gradient(180deg, #1a0a2e 0%, #16213e 50%, #0f0f23 100%)',
+    background: gradient,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -53,21 +35,9 @@ export function WorldPreview(props: WorldPreviewProps) {
     color: '#fff',
     fontSize: size === 'small' ? 14 : 18,
     fontWeight: 600,
+    textShadow: '0 2px 8px rgba(0,0,0,0.5)',
   };
-  
-  if (posterUrl) {
-    return (
-      <div style={containerStyle} onClick={props.onClick}>
-        <img 
-          src={posterUrl} 
-          alt={world?.name || 'World preview'}
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-        />
-      </div>
-    );
-  }
-  
-  // Fallback: show world name
+
   return (
     <div style={containerStyle} onClick={props.onClick}>
       <div style={textStyle}>
@@ -77,9 +47,6 @@ export function WorldPreview(props: WorldPreviewProps) {
   );
 }
 
-/**
- * TournamentCard - A card showing tournament info with world preview
- */
 interface TournamentCardProps {
   tournamentId: number;
   name: string;

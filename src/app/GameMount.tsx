@@ -10,7 +10,7 @@ import { getPlayerInfo } from "@/services/contracts/tournament-client";
 import type { WalletPort } from "@/domains/wallet/wallet-port";
 import type { SubmissionStep } from "./ui/ScoreSubmissionOverlay";
 import { mountWorld, isSplatSupported, prefersReducedMotion, type WorldHandle } from "@/presentation";
-import { MARBLE_WORLDS } from "@/config/worlds";
+import { MARBLE_WORLDS, getWorldById } from "@/config/worlds";
 import { WorldLoadingOverlay, WorldLoadingIndicator } from "./ui/WorldLoadingOverlay";
 
 type Props = {
@@ -56,7 +56,9 @@ export default function GameMount(props: Props) {
   const prevActiveRef = useRef<boolean>(false);
   const activeRef = useRef<boolean>(false);
   const prevBallsRef = useRef<number>(BALLS_PER_GAME);
+  const prevScoreRef = useRef<number>(0);
   const gameOverRef = useRef<boolean>(false);
+  const lastDuckTimeRef = useRef<number>(0);
 
   const initialGame = useMemo<GameDef>(
     () => ({
@@ -86,9 +88,8 @@ export default function GameMount(props: Props) {
       const shouldRenderWorld = isSplatSupported() && !prefersReducedMotion();
       
       if (shouldRenderWorld && worldContainerRef.current) {
-        // Determine which world to load
         const worldKey = props.worldId || 'HOBBITON';
-        const world = MARBLE_WORLDS[worldKey.toUpperCase()] || MARBLE_WORLDS.HOBBITON;
+        const world = getWorldById(worldKey) || MARBLE_WORLDS.HOBBITON;
         
         try {
           worldHandleRef.current = await mountWorld(worldContainerRef.current, world, {
@@ -99,7 +100,6 @@ export default function GameMount(props: Props) {
           setWorldFallback(true);
         }
       } else {
-        // Use fallback (static background)
         setWorldFallback(true);
       }
 
@@ -189,6 +189,16 @@ export default function GameMount(props: Props) {
         balls: g.balls,
         multiplier: g.multiplier,
       });
+
+      // Duck ambience on score changes (ball hits/bumpers)
+      if (g.score > prevScoreRef.current && g.active) {
+        const now = performance.now();
+        if (now - lastDuckTimeRef.current > 150) {
+          worldHandleRef.current?.duckAmbience(300);
+          lastDuckTimeRef.current = now;
+        }
+      }
+      prevScoreRef.current = g.score;
 
       // Ball drain detection - fly camera on ball loss
       if (prevBallsRef.current > g.balls && g.balls > 0) {
@@ -297,16 +307,15 @@ export default function GameMount(props: Props) {
             width: "100%",
             height: "100%",
             zIndex: -1,
-            // Fallback gradient when world isn't loaded
-            background: worldFallback 
-              ? "linear-gradient(180deg, #1a0a2e 0%, #16213e 50%, #0f0f23 100%)"
+            background: worldFallback
+              ? (getWorldById(props.worldId || '')?.gradient || "linear-gradient(180deg, #1a0a2e 0%, #16213e 50%, #0f0f23 100%)")
               : undefined,
           }}
         />
         {/* World loading progress overlay */}
         {worldLoadingProgress !== null && worldLoadingProgress < 1 && (
           <WorldLoadingOverlay
-            world={MARBLE_WORLDS[props.worldId?.toUpperCase() || 'HOBBITON'] || MARBLE_WORLDS.HOBBITON}
+            world={getWorldById(props.worldId || '') || MARBLE_WORLDS.HOBBITON}
             progress={worldLoadingProgress}
             onDismiss={() => setWorldLoadingProgress(null)}
           />

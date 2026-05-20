@@ -43,6 +43,13 @@ export function getQualityConfig(tier: QualityTier): QualityConfig {
   return QUALITY_CONFIGS[tier];
 }
 
+export const QUALITY_TIERS: QualityTier[] = ['high', 'medium', 'low'];
+
+function degradeTier(tier: QualityTier): QualityTier {
+  if (tier === 'high') return 'medium';
+  return 'low';
+}
+
 /**
  * Detect the appropriate quality tier based on device capabilities
  */
@@ -81,7 +88,9 @@ export function detectQualityTier(): QualityTier {
 export class FPSMonitor {
   private frames: number[] = [];
   private lastTime: number = 0;
-  private readonly sampleSize = 60; // Measure over 60 frames
+  private readonly sampleSize = 60;
+  private degradeCheckInterval = 180;
+  private framesSinceLastCheck = 0;
   
   tick(): void {
     const now = performance.now();
@@ -93,10 +102,11 @@ export class FPSMonitor {
     }
     this.lastTime = now;
     
-    // Keep only the last N samples
     if (this.frames.length > this.sampleSize) {
       this.frames.shift();
     }
+    
+    this.framesSinceLastCheck++;
   }
   
   getAverageFPS(): number {
@@ -105,15 +115,23 @@ export class FPSMonitor {
   }
   
   shouldDegrade(currentTier: QualityTier): boolean {
+    if (currentTier === 'low') return false;
+    if (this.framesSinceLastCheck < this.degradeCheckInterval) return false;
+    
     const avgFPS = this.getAverageFPS();
     const targetFPS = QUALITY_CONFIGS[currentTier].maxFPS;
     
-    // Degrade if FPS drops below 80% of target for sustained period
-    return avgFPS < targetFPS * 0.8 && this.frames.length >= this.sampleSize;
+    return avgFPS < targetFPS * 0.8;
+  }
+  
+  getDegradeTier(currentTier: QualityTier): QualityTier | null {
+    if (!this.shouldDegrade(currentTier)) return null;
+    return degradeTier(currentTier);
   }
   
   reset(): void {
     this.frames = [];
     this.lastTime = 0;
+    this.framesSinceLastCheck = 0;
   }
 }
