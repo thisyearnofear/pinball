@@ -361,6 +361,12 @@ If/when we move to Rapier 3D:
 - ✅ Share card with world gradient on game over (ShareCard component)
 - ✅ FPS monitor wired for runtime quality degradation (auto-degrades high→medium→low)
 - ✅ `MountedGame` exposes `getBallPosition()` and `getBallCount()` for external tracking
+- ✅ **Score milestone world reactions** - World transforms at 10K/25K/50K/100K (lights, particles, weather, breathe)
+- ✅ **Ball impact particles** - 3D particle bursts at ball position on bumper hits
+- ✅ **Ball-casting light** - Dynamic point light follows ball, color shifts by velocity (warm→cool)
+- ✅ **WorldReactor** - Tracks milestones, multiball, impacts; triggers CSS-based world effects
+- ✅ **WorldParticles** - Particle system with bumper-specific colors, milestone celebrations
+- ✅ **BallLight** - CSS-based point light with radial gradient, velocity-based color interpolation
 - 🔳 DOF on drain (deferred - requires WebGL post-processing pipeline)
 
 ### Milestone M4 — "Player-Generated Tables" (Tier 3)  *post-jam*
@@ -404,6 +410,9 @@ If/when we move to Rapier 3D:
 - ~~No share card~~ → `ShareCard` component with copy-to-clipboard on game over.
 - ~~Dead code: spark-renderer.ts~~ → Removed orphaned files.
 - ~~Ball-following camera~~ → Real-time ball tracking with exponential smoothing, pauses during cinematic transitions.
+- ~~Score milestone reactions~~ → World transforms at 10K/25K/50K/100K with CSS effects (brightness, saturation, scale).
+- ~~Ball impact particles~~ → 3D particle bursts at ball position with bumper-specific colors.
+- ~~Ball-casting light~~ → Dynamic point light follows ball, color shifts by velocity (warm→cool).
 
 ---
 

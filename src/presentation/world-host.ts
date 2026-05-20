@@ -10,6 +10,9 @@ import { type QualityTier, getQualityConfig, FPSMonitor, QUALITY_TIERS } from '.
 import { getOptimalSplatUrl, loadSplat } from './splat-loader';
 import { CameraRig, type CameraPreset } from './camera-rig';
 import { PostProcessingManager, getPostProcessingConfig } from './post-processing';
+import { WorldReactor, type WorldReaction } from './world-reactor';
+import { WorldParticles } from './world-particles';
+import { BallLight } from './ball-light';
 
 // SparkJS types - loaded dynamically via window.__loadSpark
 interface SparkInstance {
@@ -46,6 +49,10 @@ export class WorldHost {
   private loadError: Error | null = null;
   private fpsMonitor: FPSMonitor | null = null;
   private onQualityChange: ((tier: QualityTier) => void) | null = null;
+  private worldReactor: WorldReactor | null = null;
+  private onWorldReaction: ((reaction: WorldReaction) => void) | null = null;
+  private particles: WorldParticles | null = null;
+  private ballLight: BallLight | null = null;
 
   /**
    * Initialize the world host with a container and initial world
@@ -90,6 +97,20 @@ export class WorldHost {
       // Initialize FPS monitor for adaptive quality
       this.fpsMonitor = new FPSMonitor();
       
+      // Initialize world reactor for score milestone reactions
+      this.worldReactor = new WorldReactor();
+      this.worldReactor.setOnReaction((reaction) => {
+        this.onWorldReaction?.(reaction);
+      });
+
+      // Initialize particle system
+      this.particles = new WorldParticles();
+      this.particles.initialize(this.container!);
+
+      // Initialize ball light
+      this.ballLight = new BallLight();
+      this.ballLight.initialize(this.container!);
+
       this.startRenderLoop();
       this.initialized = true;
       console.log('WorldHost initialized with quality tier:', this.qualityTier);
@@ -199,6 +220,18 @@ export class WorldHost {
     
     this.fpsMonitor = null;
     this.onQualityChange = null;
+    this.worldReactor = null;
+    this.onWorldReaction = null;
+
+    if (this.particles) {
+      this.particles.dispose();
+      this.particles = null;
+    }
+
+    if (this.ballLight) {
+      this.ballLight.dispose();
+      this.ballLight = null;
+    }
     
     if (this.disposeFn) {
       this.disposeFn();
@@ -261,6 +294,62 @@ export class WorldHost {
    */
   pauseBallTracking(paused: boolean): void {
     this.cameraRig?.pauseBallTracking(paused);
+  }
+
+  /**
+   * Update world reactor with game state
+   */
+  updateReactor(score: number, isMultiball: boolean): void {
+    this.worldReactor?.update(score, isMultiball);
+  }
+
+  /**
+   * Get current reaction intensity (0-1)
+   */
+  getReactionIntensity(): number {
+    return this.worldReactor?.getCurrentIntensity() ?? 0;
+  }
+
+  /**
+   * Trigger impact reaction
+   */
+  triggerImpact(intensity?: number): void {
+    this.worldReactor?.triggerImpact(intensity);
+  }
+
+  /**
+   * Reset reactor for new game
+   */
+  resetReactor(): void {
+    this.worldReactor?.reset();
+  }
+
+  /**
+   * Set reaction callback
+   */
+  setOnWorldReaction(callback: (reaction: WorldReaction) => void): void {
+    this.onWorldReaction = callback;
+  }
+
+  /**
+   * Update ball light position
+   */
+  updateBallLight(gameX: number, gameY: number, velocity: number): void {
+    this.ballLight?.updatePosition(gameX, gameY, velocity);
+  }
+
+  /**
+   * Spawn particles at world position
+   */
+  spawnParticles(worldX: number, worldY: number, worldZ: number, config?: Record<string, unknown>): void {
+    this.particles?.spawnBurst(worldX, worldY, worldZ, config);
+  }
+
+  /**
+   * Spawn bumper impact particles
+   */
+  spawnBumperParticles(worldX: number, worldY: number, worldZ: number, color: string): void {
+    this.particles?.spawnBumperImpact(worldX, worldY, worldZ, color);
   }
 
 /**

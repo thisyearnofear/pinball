@@ -13,6 +13,7 @@ import { detectQualityTier, type QualityTier } from './quality';
 import { getCachedSplat, cacheSplat } from './splat-loader';
 import { type CameraPreset } from './camera-rig';
 import { WorldAmbienceManager } from './world-ambience';
+import { type WorldReaction } from './world-reactor';
 
 export interface WorldHandle {
   switchWorld(worldId: string): Promise<void>;
@@ -27,6 +28,14 @@ export interface WorldHandle {
   setBallTracking(enabled: boolean): void;
   updateBallPosition(gameX: number, gameY: number): void;
   pauseBallTracking(paused: boolean): void;
+  updateReactor(score: number, isMultiball: boolean): void;
+  getReactionIntensity(): number;
+  triggerImpact(intensity?: number): void;
+  resetReactor(): void;
+  setOnWorldReaction(callback: (reaction: WorldReaction) => void): void;
+  updateBallLight(gameX: number, gameY: number, velocity: number): void;
+  spawnParticles(worldX: number, worldY: number, worldZ: number, config?: Record<string, unknown>): void;
+  spawnBumperParticles(worldX: number, worldY: number, worldZ: number, color: string): void;
 }
 
 interface WorldHostConfig {
@@ -106,6 +115,14 @@ export async function mountWorld(
     setBallTracking: (enabled) => host.setBallTracking(enabled),
     updateBallPosition: (gameX, gameY) => host.updateBallPosition(gameX, gameY),
     pauseBallTracking: (paused) => host.pauseBallTracking(paused),
+    updateReactor: (score, isMultiball) => host.updateReactor(score, isMultiball),
+    getReactionIntensity: () => host.getReactionIntensity(),
+    triggerImpact: (intensity) => host.triggerImpact(intensity),
+    resetReactor: () => host.resetReactor(),
+    setOnWorldReaction: (callback) => host.setOnWorldReaction(callback),
+    updateBallLight: (gameX, gameY, velocity) => host.updateBallLight(gameX, gameY, velocity),
+    spawnParticles: (worldX, worldY, worldZ, config) => host.spawnParticles(worldX, worldY, worldZ, config),
+    spawnBumperParticles: (worldX, worldY, worldZ, color) => host.spawnBumperParticles(worldX, worldY, worldZ, color),
   };
 }
 

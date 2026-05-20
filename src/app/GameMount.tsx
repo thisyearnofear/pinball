@@ -12,6 +12,43 @@ import type { SubmissionStep } from "./ui/ScoreSubmissionOverlay";
 import { mountWorld, isSplatSupported, prefersReducedMotion, type WorldHandle } from "@/presentation";
 import { MARBLE_WORLDS, getWorldById } from "@/config/worlds";
 import { WorldLoadingOverlay, WorldLoadingIndicator } from "./ui/WorldLoadingOverlay";
+import { type WorldReaction } from "@/presentation/world-reactor";
+
+function applyWorldReaction(reaction: WorldReaction): void {
+  const { type, intensity, data } = reaction;
+  
+  switch (type) {
+    case 'milestone':
+      if (data?.effect === 'lights_flicker') {
+        document.body.style.filter = `brightness(${1 + intensity * 0.3})`;
+        setTimeout(() => { document.body.style.filter = ''; }, reaction.duration);
+      } else if (data?.effect === 'particles_appear') {
+        document.body.style.boxShadow = `inset 0 0 ${intensity * 50}px rgba(255, 255, 255, ${intensity * 0.2})`;
+        setTimeout(() => { document.body.style.boxShadow = ''; }, reaction.duration);
+      }
+      break;
+    case 'weather':
+      document.body.style.filter = `saturate(${1 + intensity * 0.5}) hue-rotate(${intensity * 20}deg)`;
+      setTimeout(() => { document.body.style.filter = ''; }, reaction.duration);
+      break;
+    case 'breathe':
+      document.body.style.transform = `scale(${1 + intensity * 0.02})`;
+      document.body.style.transition = `transform ${reaction.duration}ms ease-in-out`;
+      setTimeout(() => {
+        document.body.style.transform = '';
+        document.body.style.transition = '';
+      }, reaction.duration);
+      break;
+    case 'multiball':
+      document.body.style.filter = `brightness(${1 + intensity * 0.2}) saturate(${1 + intensity * 0.3})`;
+      setTimeout(() => { document.body.style.filter = ''; }, reaction.duration);
+      break;
+    case 'impact':
+      document.body.style.filter = `brightness(${1 + intensity * 0.15})`;
+      setTimeout(() => { document.body.style.filter = ''; }, reaction.duration);
+      break;
+  }
+}
 
 type Props = {
   runKey: number;
@@ -59,6 +96,7 @@ export default function GameMount(props: Props) {
   const prevScoreRef = useRef<number>(0);
   const gameOverRef = useRef<boolean>(false);
   const lastDuckTimeRef = useRef<number>(0);
+  const worldContainerStyleRef = useRef<HTMLDivElement | null>(null);
 
   const initialGame = useMemo<GameDef>(
     () => ({
@@ -94,6 +132,11 @@ export default function GameMount(props: Props) {
         try {
           worldHandleRef.current = await mountWorld(worldContainerRef.current, world, {
             onProgress: (progress) => setWorldLoadingProgress(progress),
+          });
+
+          // Set up world reaction handler
+          worldHandleRef.current.setOnWorldReaction((reaction) => {
+            applyWorldReaction(reaction);
           });
         } catch (e) {
           console.warn('Failed to mount world, using fallback:', e);
@@ -157,6 +200,9 @@ export default function GameMount(props: Props) {
     gameOverRef.current = false;
     gameRef.current = g;
 
+    // Reset world reactor for new game
+    worldHandleRef.current?.resetReactor();
+
     mountedRef.current.start(g).catch((e) => {
       console.error(e);
       props.onError?.(e?.message ?? "Failed to start game");
@@ -193,11 +239,17 @@ export default function GameMount(props: Props) {
         multiplier: g.multiplier,
       });
 
+      // Update world reactor with game state
+      if (g.active) {
+        worldHandleRef.current?.updateReactor(g.score, multiballRef.current);
+      }
+
       // Update ball position for camera tracking
       if (g.active && mountedRef.current) {
         const ballPos = mountedRef.current.getBallPosition();
         if (ballPos) {
           worldHandleRef.current?.updateBallPosition(ballPos.x, ballPos.y);
+          worldHandleRef.current?.updateBallLight(ballPos.x, ballPos.y, 10);
         }
       }
 
@@ -206,6 +258,7 @@ export default function GameMount(props: Props) {
         const now = performance.now();
         if (now - lastDuckTimeRef.current > 150) {
           worldHandleRef.current?.duckAmbience(300);
+          worldHandleRef.current?.triggerImpact(0.4);
           lastDuckTimeRef.current = now;
         }
       }
