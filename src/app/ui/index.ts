@@ -25,3 +25,8 @@ export { PlayerAvatar } from './PlayerAvatar';
 export { PlayerCard } from './PlayerCard';
 export { OnboardingIntro } from './OnboardingIntro';
 export { ActivityTicker } from './ActivityTicker';
+export { CRTOverlay } from './CRTOverlay';
+export { NeonTitle } from './NeonTitle';
+export { PinballHUD } from './PinballHUD';
+export { CabinetFrame } from './CabinetFrame';
+export { ArcadeLobby } from './ArcadeLobby';

@@ -28,9 +28,9 @@ import {
   ScorePopupProvider, ScreenFxProvider,
   CelebrationParticles, PlayerCard,
   OnboardingIntro, ActivityTicker,
+  CRTOverlay, ArcadeLobby, PinballHUD,
 } from "@/app/ui";
 import GameMount from "./GameMount";
-import { TournamentLobby } from "./ui/TournamentLobby";
 import { SettingsModal } from "./ui/SettingsModal";
 import { HowToPlayModal } from "./ui/HowToPlayModal";
 import { AboutModal } from "./ui/AboutModal";
@@ -415,28 +415,24 @@ export default function GameScreen() {
           {/* Main Content */}
           <main style={{ padding: isSmall ? spacing.md : spacing.lg }}>
             {view === 'lobby' && (
-              <>
-                {address && <PlayerCard address={address} stats={stats} />}
-                <TournamentLobby
-                  tournaments={getAllTournaments()}
-                  activeTournamentId={tournament.tournamentId}
-                  entered={tournament.entered}
-                  isConnected={isConnected}
-                  loading={isLoadingTournament}
-                  onSelectTournament={(id) => setTournament(prev => ({ ...prev, tournamentId: id }))}
-                  onEnterTournament={onEnterTournament}
-                  onStartTournament={(id) => {
-                    setTournament(prev => ({ ...prev, tournamentId: id }));
-                    setMode("tournament");
-                    setShowCelebration(false);
-                    if (!hasSeenTutorial()) setShowTutorial(true);
-                    setRunKey((k) => k + 1);
-                    setView('game');
-                  }}
-                  onPractice={startPractice}
-                />
-                <ActivityTicker active={!isLoadingTournament} />
-              </>
+              <ArcadeLobby
+                tournaments={getAllTournaments()}
+                activeTournamentId={tournament.tournamentId}
+                entered={tournament.entered}
+                isConnected={isConnected}
+                loading={isLoadingTournament}
+                onSelectTournament={(id) => setTournament(prev => ({ ...prev, tournamentId: id }))}
+                onEnterTournament={onEnterTournament}
+                onStartTournament={(id) => {
+                  setTournament(prev => ({ ...prev, tournamentId: id }));
+                  setMode("tournament");
+                  setShowCelebration(false);
+                  if (!hasSeenTutorial()) setShowTutorial(true);
+                  setRunKey((k) => k + 1);
+                  setView('game');
+                }}
+                onPractice={startPractice}
+              />
             )}
 
             {view === 'paused' && (
@@ -454,29 +450,31 @@ export default function GameScreen() {
 
             {view === 'game' && (
               <ErrorBoundary>
-                <GameMount
-                  runKey={runKey}
-                  mode={mode}
-                  tournamentId={tournament.tournamentId}
-                  worldId={mode === "practice" ? selectedWorldId : tournament.worldId}
-                  playerAddress={address ?? null}
-                  walletPort={walletPort}
-                  playerName={playerName}
-                  tableIndex={tableIndex}
-                  paused={pausedEffective}
-                  onActiveChange={(active) => {
-                    setGameActive(active);
-                  }}
-                  onRunEnd={handleRunEnd}
-                  onSubmissionStep={(step, err) => {
-                    setSubmissionStep(step);
-                    setSubmissionError(err ?? "");
-                  }}
-                  onSubmissionAvailable={setSubmission}
-                  onSubmitted={() => refreshTournament()}
-                  onStatus={() => {}}
-                  onError={(e) => toast.addToast(e, 'error')}
-                />
+                <CRTOverlay intensity={0.25}>
+                  <GameMount
+                    runKey={runKey}
+                    mode={mode}
+                    tournamentId={tournament.tournamentId}
+                    worldId={mode === "practice" ? selectedWorldId : tournament.worldId}
+                    playerAddress={address ?? null}
+                    walletPort={walletPort}
+                    playerName={playerName}
+                    tableIndex={tableIndex}
+                    paused={pausedEffective}
+                    onActiveChange={(active) => {
+                      setGameActive(active);
+                    }}
+                    onRunEnd={handleRunEnd}
+                    onSubmissionStep={(step, err) => {
+                      setSubmissionStep(step);
+                      setSubmissionError(err ?? "");
+                    }}
+                    onSubmissionAvailable={setSubmission}
+                    onSubmitted={() => refreshTournament()}
+                    onStatus={() => {}}
+                    onError={(e) => toast.addToast(e, 'error')}
+                  />
+                </CRTOverlay>
               </ErrorBoundary>
             )}
           </main>
