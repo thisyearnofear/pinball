@@ -92,7 +92,9 @@ export function getAppConfig(): AppConfig {
   const cfg: AppConfig = {
     chain: {
       chainId,
-      rpcUrlPublic: requireEnv("VITE_RPC_URL_PUBLIC", env.VITE_RPC_URL_PUBLIC),
+      rpcUrlPublic: (typeof env.VITE_RPC_URL_PUBLIC === "string" && env.VITE_RPC_URL_PUBLIC.trim().length > 0)
+        ? env.VITE_RPC_URL_PUBLIC.trim()
+        : "https://arb1.arbitrum.io/rpc",
       chainName: optionalEnv(env.VITE_CHAIN_NAME),
       blockExplorerUrl: optionalEnv(env.VITE_BLOCK_EXPLORER_URL),
       nativeCurrency: (() => {
@@ -109,7 +111,10 @@ export function getAppConfig(): AppConfig {
     },
     contracts: {
       tournamentManager: {
-        address: requireEnv("VITE_TOURNAMENT_MANAGER_ADDRESS", env.VITE_TOURNAMENT_MANAGER_ADDRESS),
+        address: (typeof env.VITE_TOURNAMENT_MANAGER_ADDRESS === "string"
+          ? env.VITE_TOURNAMENT_MANAGER_ADDRESS
+          : ""
+        ).trim(),
       },
       musd: {
         // Allow empty for now (until Mezo integration lands), but keep the key present.
@@ -123,7 +128,9 @@ export function getAppConfig(): AppConfig {
       prefix: optionalEnv(env.VITE_SCORE_PREFIX) ?? "PINBALL_SCORE:v2",
     },
     backend: {
-      baseUrl: requireEnv("VITE_BACKEND_URL", env.VITE_BACKEND_URL),
+      baseUrl: (typeof env.VITE_BACKEND_URL === "string" && env.VITE_BACKEND_URL.trim().length > 0)
+        ? env.VITE_BACKEND_URL.trim()
+        : "",
     },
     missions: {
       activeMissionId: (() => {

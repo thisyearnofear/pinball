@@ -11,6 +11,15 @@ import {
 import type { WalletPort } from '@/domains/wallet/wallet-port';
 import { getLegacyWalletPort } from '@/domains/wallet/legacy-web3service-wallet-port';
 
+function isConfigured(): boolean {
+  try {
+    const { tournamentManager } = getContractsConfig();
+    return tournamentManager.address.length > 0 && tournamentManager.address.startsWith('0x');
+  } catch {
+    return false;
+  }
+}
+
 async function getContract(wallet?: WalletPort): Promise<ethers.Contract> {
   const { tournamentManager } = getContractsConfig();
   const w = wallet ?? getLegacyWalletPort();
@@ -25,7 +34,7 @@ function getPublicContract(): ethers.Contract {
 }
 
 export async function getActiveTournamentId(): Promise<number> {
-  // Use public RPC for read operations (works reliably in all environments)
+  if (!isConfigured()) return 0;
   try {
     const c = getPublicContract();
     return await _getActiveTournamentId(c);
@@ -46,6 +55,7 @@ export async function getPlayerInfo(tournamentId: number, address: string): Prom
   bestScore: bigint;
   rewardClaimed: boolean;
 }> {
+  if (!isConfigured()) return { entered: false, bestScore: 0n, rewardClaimed: false };
   const c = getPublicContract();
   const p = await c.playerInfo(tournamentId, address);
   return {
@@ -313,7 +323,7 @@ export async function fetchLeaderboard(
   offset = 0,
   limit = 100
 ): Promise<{ address: string; score: number }[]> {
-  // Always use public RPC for reliability
+  if (!isConfigured()) return [];
   const c = getPublicContract();
   return await _fetchLeaderboard(c, tournamentId, offset, limit);
 }
@@ -365,11 +375,13 @@ async function _fetchLeaderboard(
 }
 
 export async function getEntryFee(): Promise<bigint> {
+  if (!isConfigured()) return 0n;
   const c = getPublicContract();
   return await c.entryFee();
 }
 
 export async function getTournamentInfo(tournamentId: number, retries = 3): Promise<{ startTime: number; endTime: number; topN: number; finalized: boolean; totalPot: bigint; }> {
+  if (!isConfigured()) return { startTime: 0, endTime: 0, topN: 0, finalized: false, totalPot: 0n };
   const c = getPublicContract();
   return await _getTournamentInfo(c, tournamentId, retries);
 }
@@ -406,6 +418,7 @@ async function _getTournamentInfo(contract: ethers.Contract, tournamentId: numbe
 }
 
 export async function getWinners(tournamentId: number, wallet?: WalletPort): Promise<string[]> {
+  if (!isConfigured()) return [];
   try {
     const c = getPublicContract();
     const w: string[] = await c.getWinners(tournamentId);

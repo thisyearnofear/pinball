@@ -31,6 +31,16 @@
   </noscript>
   <div id="app"></div>
   
+  <!-- Import map for SparkJS dependencies -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
   <!-- SparkJS for Gaussian Splat world rendering - loaded dynamically on demand -->
   <script>
     window.__sparkLoadPromise = null;
