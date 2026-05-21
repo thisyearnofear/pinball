@@ -14,7 +14,7 @@ export function injectGlobalStyles(): void {
   const style = document.createElement('style');
   style.id = 'pinball-global-styles';
   style.textContent = `
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&family=Press+Start+2P&display=swap');
 
     :root {
       /* Colors */
@@ -62,6 +62,8 @@ export function injectGlobalStyles(): void {
       /* Typography */
       --font-family: ${typography.fontFamily};
       --font-family-mono: ${typography.fontFamilyMono};
+      --font-family-display: ${typography.fontFamilyDisplay};
+      --font-family-arcade: ${typography.fontFamilyArcade};
       --text-xs: ${typography.size.xs}px;
       --text-sm: ${typography.size.sm}px;
       --text-md: ${typography.size.md}px;

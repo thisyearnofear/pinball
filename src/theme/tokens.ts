@@ -61,6 +61,8 @@ export const radius = {
 export const typography = {
   fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
   fontFamilyMono: "'JetBrains Mono', 'Fira Code', monospace",
+  fontFamilyDisplay: "'Orbitron', system-ui, sans-serif",
+  fontFamilyArcade: "'Press Start 2P', monospace",
   size: {
     xs: 11,
     sm: 12,

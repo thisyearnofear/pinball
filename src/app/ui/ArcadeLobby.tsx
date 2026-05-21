@@ -44,7 +44,7 @@ export function ArcadeLobby(props: Props) {
   }
 
   return (
-    <CRTOverlay intensity={0.3}>
+    <CRTOverlay intensity={0.15}>
       <div
         style={{
           maxWidth: 900,
@@ -59,10 +59,12 @@ export function ArcadeLobby(props: Props) {
             style={{
               textAlign: "center",
               margin: `${spacing.sm}px 0 0`,
-              fontSize: typography.size.md,
+              fontSize: typography.size.sm,
               color: colors.text.muted,
-              letterSpacing: "0.1em",
+              letterSpacing: "0.15em",
               textTransform: "uppercase",
+              fontFamily: typography.fontFamilyArcade,
+              lineHeight: 1.6,
             }}
           >
             Insert coin to play
@@ -153,10 +155,12 @@ function ArcadeCard(props: CardProps) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
-            fontSize: typography.size.lg,
+            fontSize: typography.size.md,
             fontWeight: typography.weight.semibold,
             color: props.isActive ? colors.text.primary : colors.text.secondary,
             marginBottom: spacing.xs,
+            fontFamily: typography.fontFamilyDisplay,
+            letterSpacing: "0.05em",
           }}
         >
           {props.tournament.name}

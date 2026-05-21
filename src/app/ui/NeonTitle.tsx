@@ -23,6 +23,9 @@ export function NeonTitle({ text, size = "md", color = "#6366f1", glowColor }: P
       style={{
         textAlign: "center",
         position: "relative",
+        fontFamily: typography.fontFamilyDisplay,
+        textTransform: "uppercase",
+        letterSpacing: "0.1em",
       }}
     >
       {/* Glow layers */}

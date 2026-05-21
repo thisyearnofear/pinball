@@ -319,6 +319,9 @@ export default function GameScreen() {
                 background: worldAccent.gradient,
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
+                fontFamily: typography.fontFamilyDisplay,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
               }}>
                 Mezo Pinball
               </span>
