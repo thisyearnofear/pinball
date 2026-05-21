@@ -43,10 +43,14 @@ export default defineConfig({
     build: {
         rollupOptions: {
             output: {
-                manualChunks: {
-                    vendor_ethers: ['ethers'],
-                    vendor_physics: ['matter-js'],
-                    vendor_farcaster: ['@farcaster/miniapp-sdk']
+                manualChunks(id) {
+                    if (id.includes('node_modules')) {
+                        if (id.includes('ethers')) return 'vendor_ethers';
+                        if (id.includes('matter-js')) return 'vendor_physics';
+                        if (id.includes('@farcaster')) return 'vendor_farcaster';
+                        if (id.includes('@rainbow-me') || id.includes('wagmi') || id.includes('viem')) return 'vendor_wallet';
+                        if (id.includes('metamask-sdk')) return 'vendor_metamask';
+                    }
                 }
             }
         }

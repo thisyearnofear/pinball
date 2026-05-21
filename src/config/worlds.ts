@@ -1,3 +1,11 @@
+export interface WorldPalette {
+  primary: string;
+  hover: string;
+  gradient: string;
+  glow: string;
+  muted: string;
+}
+
 export interface MarbleWorld {
   id: string;
   name: string;
@@ -11,6 +19,7 @@ export interface MarbleWorld {
   posterUrl?: string;
   ambienceUrl?: string;
   gradient: string;
+  palette: WorldPalette;
 }
 
 export interface CameraPresets {
@@ -31,6 +40,13 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
     scale: [1, 1, 1],
     description: 'A cozy, detailed Hobbiton environment.',
     gradient: 'linear-gradient(135deg, #2d5016 0%, #4a7c23 30%, #8b6914 60%, #3d2b1f 100%)',
+    palette: {
+      primary: '#4a7c23',
+      hover: '#6b9e35',
+      gradient: 'linear-gradient(135deg, #4a7c23 0%, #8b6914 100%)',
+      glow: '0 0 20px rgba(74, 124, 35, 0.4)',
+      muted: 'rgba(74, 124, 35, 0.3)',
+    },
     camera: {
       plunger: { position: [0, 2, 8], target: [0, 0, 0] },
       overview: { position: [0, 15, 15], target: [0, 0, 0] },
@@ -47,6 +63,13 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
     scale: [1, 1, 1],
     description: 'A futuristic cozy spaceship.',
     gradient: 'linear-gradient(135deg, #0a0e27 0%, #1a1a4e 30%, #2d1b69 60%, #0d0d2b 100%)',
+    palette: {
+      primary: '#6366f1',
+      hover: '#818cf8',
+      gradient: 'linear-gradient(135deg, #6366f1 0%, #06b6d4 100%)',
+      glow: '0 0 20px rgba(99, 102, 241, 0.4)',
+      muted: 'rgba(99, 102, 241, 0.3)',
+    },
     camera: {
       plunger: { position: [0, 8, 10], target: [0, 6.5, 0] },
       overview: { position: [0, 25, 20], target: [0, 6.5, 0] },
@@ -63,6 +86,13 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
     scale: [1, 1, 1],
     description: 'A quaint, cozy cottage.',
     gradient: 'linear-gradient(135deg, #3d2b1f 0%, #8b6914 30%, #5c4033 60%, #2d1f0e 100%)',
+    palette: {
+      primary: '#d97706',
+      hover: '#f59e0b',
+      gradient: 'linear-gradient(135deg, #d97706 0%, #92400e 100%)',
+      glow: '0 0 20px rgba(217, 119, 6, 0.4)',
+      muted: 'rgba(217, 119, 6, 0.3)',
+    },
     camera: {
       plunger: { position: [0, 3, 7], target: [0, 1, 0] },
       overview: { position: [0, 12, 12], target: [0, 1, 0] },
@@ -79,6 +109,13 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
     scale: [1, 1, 1],
     description: 'A mysterious sunken pirate ship.',
     gradient: 'linear-gradient(135deg, #0a1628 0%, #1a3a5c 30%, #0d2137 60%, #051020 100%)',
+    palette: {
+      primary: '#0891b2',
+      hover: '#06b6d4',
+      gradient: 'linear-gradient(135deg, #0891b2 0%, #1e40af 100%)',
+      glow: '0 0 20px rgba(8, 145, 178, 0.4)',
+      muted: 'rgba(8, 145, 178, 0.3)',
+    },
     camera: {
       plunger: { position: [0, 2, 10], target: [0, 0, 0] },
       overview: { position: [0, 18, 18], target: [0, 0, 0] },
@@ -96,6 +133,13 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
     scale: [1, 1, 1],
     description: 'A spooky haunted mansion.',
     gradient: 'linear-gradient(135deg, #1a0a2e 0%, #2d1b4e 30%, #4a1942 60%, #0d0515 100%)',
+    palette: {
+      primary: '#7c3aed',
+      hover: '#8b5cf6',
+      gradient: 'linear-gradient(135deg, #7c3aed 0%, #dc2626 100%)',
+      glow: '0 0 20px rgba(124, 58, 237, 0.4)',
+      muted: 'rgba(124, 58, 237, 0.3)',
+    },
     camera: {
       plunger: { position: [0, 3, 8], target: [0, 1, 0] },
       overview: { position: [0, 15, 15], target: [0, 1, 0] },

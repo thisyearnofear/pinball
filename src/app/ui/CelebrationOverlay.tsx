@@ -1,8 +1,10 @@
 import React from "react";
 import { Modal } from "./Modal";
-import { ShareCard } from "./ShareCard";
+import { Button, Card } from "./index";
 
-export function CelebrationOverlay(props: {
+import { colors, spacing, typography, radius } from "@/theme/tokens";
+
+type Props = {
   score: number;
   isPractice: boolean;
   worldId?: string;
@@ -12,42 +14,59 @@ export function CelebrationOverlay(props: {
   onPlayTournament: () => void;
   onViewLeaderboard: () => void;
   onBackToLobby?: () => void;
-}) {
-  const [showShare, setShowShare] = React.useState(true);
+};
 
-  if (showShare && props.worldId) {
-    return (
-      <ShareCard
-        score={props.score}
-        worldId={props.worldId}
-        tournamentName={props.tournamentName}
-        onDismiss={() => setShowShare(false)}
-      />
-    );
-  }
-
+export function CelebrationOverlay(props: Props) {
   return (
-    <Modal
-      title="Game complete"
-      onClose={props.onDismiss}
-      footer={
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button onClick={props.onPlayAgain}>Play again</button>
-          <button onClick={props.onPlayTournament}>Play tournament</button>
-          <button onClick={props.onViewLeaderboard}>View leaderboard</button>
-          {props.onBackToLobby && (
-            <button onClick={props.onBackToLobby}>Back to lobby</button>
-          )}
+    <Modal title="Game complete" onClose={props.onDismiss}>
+      <div style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: typography.size["4xl"], fontWeight: typography.weight.bold, color: colors.text.primary }}>
+            {props.score.toLocaleString()}
+          </div>
+          <div style={{ fontSize: typography.size.md, color: colors.text.secondary, marginTop: spacing.xs }}>
+            {props.isPractice ? "Practice run complete." : "Tournament run complete."}
+          </div>
         </div>
-      }
-    >
-      <div style={{ lineHeight: 1.6 }}>
-        <div style={{ fontSize: 28, fontWeight: 800 }}>{props.score} pts</div>
-        <div style={{ marginTop: 6, opacity: 0.9 }}>
-          {props.isPractice ? "Practice run complete." : "Tournament run complete."}
+
+        {props.worldId && (
+          <Card padding={spacing.lg}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: typography.size.sm, color: colors.text.muted }}>World</div>
+                <div style={{ fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: colors.text.primary }}>
+                  {props.tournamentName || "Practice"}
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: typography.size.sm, color: colors.text.muted }}>Score</div>
+                <div style={{ fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: colors.accent.primary }}>
+                  {props.score.toLocaleString()}
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: spacing.sm }}>
+          <Button fullWidth onClick={props.onPlayAgain}>
+            Play Again
+          </Button>
+          {!props.isPractice && (
+            <Button fullWidth variant="secondary" onClick={props.onPlayTournament}>
+              Play Tournament
+            </Button>
+          )}
+          <Button fullWidth variant="ghost" onClick={props.onViewLeaderboard}>
+            View Leaderboard
+          </Button>
+          {props.onBackToLobby && (
+            <Button fullWidth variant="ghost" onClick={props.onBackToLobby}>
+              Back to Lobby
+            </Button>
+          )}
         </div>
       </div>
     </Modal>
   );
 }
-

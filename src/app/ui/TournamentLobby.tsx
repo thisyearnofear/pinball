@@ -2,102 +2,108 @@ import React from 'react';
 import { getAllTournaments, type TournamentMeta } from '@/config/tournaments';
 import { getTournamentWorld } from '@/config/tournaments';
 
+import { colors, spacing, typography, radius, shadows, transitions } from '@/theme/tokens';
+import { useIsSmallScreen } from '@/hooks/use-media-query';
+import { Button, Skeleton } from '@/app/ui';
+
 type Props = {
   tournaments: TournamentMeta[];
   activeTournamentId: number | null;
   entered: boolean;
   isConnected: boolean;
+  loading?: boolean;
   onSelectTournament: (id: number) => void;
   onEnterTournament: (id: number) => void;
   onStartTournament: (id: number) => void;
   onPractice: () => void;
 };
 
+const gridColumns = (isSmall: boolean) =>
+  isSmall ? '1fr' : 'repeat(auto-fill, minmax(260px, 1fr))';
+
 export function TournamentLobby(props: Props) {
   const tournaments = props.tournaments.length > 0 ? props.tournaments : getAllTournaments();
+  const isSmall = useIsSmallScreen();
 
-  return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      background: 'rgba(0,0,0,0.85)',
-      backdropFilter: 'blur(8px)',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 24,
-      zIndex: 900,
-      overflow: 'auto',
-    }}>
-      <div style={{
-        width: 'min(900px, 100%)',
-        maxWidth: '100%',
-      }}>
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <h1 style={{
-            margin: 0,
-            fontSize: 32,
-            fontWeight: 700,
-            background: 'linear-gradient(135deg, #6366f1, #8b5cf6, #a78bfa)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-          }}>
-            Mezo Pinball Arcade
-          </h1>
-          <p style={{
-            margin: '8px 0 0',
-            fontSize: 14,
-            color: 'rgba(255,255,255,0.6)',
-          }}>
-            Choose a world. Enter the tournament. Win MUSD.
-          </p>
+  if (props.loading) {
+    return (
+      <div style={{ maxWidth: 900, margin: '0 auto' }}>
+        <div style={{ textAlign: 'center', marginBottom: spacing['3xl'] }}>
+          <Skeleton width="60%" height={32} style={{ margin: '0 auto' }} />
+          <Skeleton width="40%" height={16} style={{ margin: `${spacing.sm}px auto 0` }} />
         </div>
-
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-          gap: 16,
-          marginBottom: 24,
+          gridTemplateColumns: gridColumns(isSmall),
+          gap: spacing.lg,
+          marginBottom: spacing['2xl'],
         }}>
-          {tournaments.map(t => (
-            <TournamentCard
-              key={t.id}
-              tournament={t}
-              isActive={props.activeTournamentId === t.id}
-              entered={props.activeTournamentId === t.id && props.entered}
-              isConnected={props.isConnected}
-              onSelect={() => props.onSelectTournament(t.id)}
-              onEnter={() => props.onEnterTournament(t.id)}
-              onStart={() => props.onStartTournament(t.id)}
-            />
+          {Array.from({ length: isSmall ? 2 : 3 }).map((_, i) => (
+            <div key={i} style={{
+              background: colors.background.surface,
+              borderRadius: radius.xl,
+              border: `1px solid ${colors.border.subtle}`,
+              overflow: 'hidden',
+            }}>
+              <Skeleton height={140} width="100%" style={{ borderRadius: 0 }} />
+              <div style={{ padding: spacing.lg }}>
+                <Skeleton width="70%" height={18} />
+                <Skeleton width="100%" height={14} style={{ marginTop: spacing.xs }} />
+                <Skeleton width="50%" height={12} style={{ marginTop: spacing.md }} />
+              </div>
+            </div>
           ))}
         </div>
+      </div>
+    );
+  }
 
-        <div style={{ textAlign: 'center' }}>
-          <button
-            onClick={props.onPractice}
-            style={{
-              padding: '12px 32px',
-              borderRadius: 8,
-              background: 'rgba(255,255,255,0.08)',
-              border: '1px solid rgba(255,255,255,0.15)',
-              color: '#fff',
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
-            }}
-          >
-            Practice Mode
-          </button>
-        </div>
+  return (
+    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+      <div style={{ textAlign: 'center', marginBottom: spacing['3xl'] }}>
+        <h1 style={{
+          margin: 0,
+          fontSize: isSmall ? typography.size['2xl'] : typography.size['3xl'],
+          fontWeight: typography.weight.bold,
+          background: colors.accent.gradient,
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+        }}>
+          Choose Your World
+        </h1>
+        <p style={{
+          margin: `${spacing.sm}px 0 0`,
+          fontSize: isSmall ? typography.size.sm : typography.size.md,
+          color: colors.text.secondary,
+        }}>
+          Each tournament is a unique Marble world. Compete for MUSD prizes.
+        </p>
+      </div>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: gridColumns(isSmall),
+        gap: isSmall ? spacing.md : spacing.lg,
+        marginBottom: spacing['2xl'],
+      }}>
+        {tournaments.map(t => (
+          <TournamentCard
+            key={t.id}
+            tournament={t}
+            isActive={props.activeTournamentId === t.id}
+            entered={props.activeTournamentId === t.id && props.entered}
+            isConnected={props.isConnected}
+            onSelect={() => props.onSelectTournament(t.id)}
+            onEnter={() => props.onEnterTournament(t.id)}
+            onStart={() => props.onStartTournament(t.id)}
+          />
+        ))}
+      </div>
+
+      <div style={{ textAlign: 'center' }}>
+        <Button variant="secondary" size="lg" onClick={props.onPractice}>
+          Practice Mode
+        </Button>
       </div>
     </div>
   );
@@ -116,36 +122,29 @@ type CardProps = {
 function TournamentCard(props: CardProps) {
   const world = getTournamentWorld(props.tournament.id);
   const gradient = world?.gradient || 'linear-gradient(135deg, #1a0a2e, #0f0f23)';
+  const isSmall = useIsSmallScreen();
+  const [hovered, setHovered] = React.useState(false);
 
   return (
     <div
       onClick={props.onSelect}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
-        background: 'rgba(255,255,255,0.03)',
-        borderRadius: 16,
+        background: colors.background.surface,
+        borderRadius: radius.xl,
         border: props.isActive
-          ? '2px solid #6366f1'
-          : '1px solid rgba(255,255,255,0.08)',
+          ? '2px solid var(--world-primary, #6366f1)'
+          : `1px solid ${colors.border.subtle}`,
         overflow: 'hidden',
         cursor: 'pointer',
-        transition: 'all 0.2s ease',
-        transform: props.isActive ? 'scale(1.02)' : 'scale(1)',
-      }}
-      onMouseEnter={e => {
-        if (!props.isActive) {
-          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)';
-          e.currentTarget.style.transform = 'scale(1.01)';
-        }
-      }}
-      onMouseLeave={e => {
-        if (!props.isActive) {
-          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
-          e.currentTarget.style.transform = 'scale(1)';
-        }
+        transition: `all ${transitions.normal}`,
+        transform: props.isActive ? 'scale(1.02)' : hovered ? 'scale(1.01)' : 'scale(1)',
+        boxShadow: props.isActive ? 'var(--world-glow, 0 0 20px rgba(99, 102, 241, 0.3))' : 'none',
       }}
     >
       <div style={{
-        height: 140,
+        height: isSmall ? 100 : 140,
         background: gradient,
         display: 'flex',
         alignItems: 'center',
@@ -155,20 +154,20 @@ function TournamentCard(props: CardProps) {
         {props.isActive && (
           <div style={{
             position: 'absolute',
-            top: 8,
-            right: 8,
-            padding: '4px 10px',
-            borderRadius: 20,
-            background: '#6366f1',
-            fontSize: 11,
-            fontWeight: 600,
-            color: '#fff',
+            top: spacing.sm,
+            right: spacing.sm,
+            padding: `${spacing.xs}px ${spacing.sm}px`,
+            borderRadius: radius.full,
+            background: colors.accent.primary,
+            fontSize: typography.size.xs,
+            fontWeight: typography.weight.semibold,
+            color: colors.text.primary,
           }}>
             Active
           </div>
         )}
         <div style={{
-          fontSize: 48,
+          fontSize: isSmall ? 36 : 48,
           opacity: 0.3,
           filter: 'grayscale(0.5)',
         }}>
@@ -176,19 +175,19 @@ function TournamentCard(props: CardProps) {
         </div>
       </div>
 
-      <div style={{ padding: 16 }}>
+      <div style={{ padding: spacing.lg }}>
         <div style={{
-          fontSize: 16,
-          fontWeight: 600,
-          color: '#fff',
-          marginBottom: 4,
+          fontSize: typography.size.lg,
+          fontWeight: typography.weight.semibold,
+          color: colors.text.primary,
+          marginBottom: spacing.xs,
         }}>
           {props.tournament.name}
         </div>
         <div style={{
-          fontSize: 12,
-          color: 'rgba(255,255,255,0.5)',
-          marginBottom: 12,
+          fontSize: typography.size.sm,
+          color: colors.text.muted,
+          marginBottom: spacing.md,
         }}>
           {props.tournament.description}
         </div>
@@ -196,66 +195,36 @@ function TournamentCard(props: CardProps) {
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
-          fontSize: 11,
-          color: 'rgba(255,255,255,0.4)',
-          marginBottom: 12,
+          fontSize: typography.size.xs,
+          color: colors.text.muted,
+          marginBottom: spacing.md,
         }}>
           <span>Entry: {props.tournament.entryFee || '10 MUSD'}</span>
           <span>Prize: {props.tournament.prizePool || '50 MUSD'}</span>
         </div>
 
         {props.isActive && props.entered ? (
-          <button
-            onClick={e => {
-              e.stopPropagation();
-              props.onStart();
-            }}
-            style={{
-              width: '100%',
-              padding: '10px 16px',
-              borderRadius: 8,
-              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-              border: 'none',
-              color: '#fff',
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
+          <Button fullWidth onClick={(e) => { e.stopPropagation(); props.onStart(); }}>
             Play Now
-          </button>
+          </Button>
         ) : props.isActive && !props.entered ? (
-          <button
-            onClick={e => {
-              e.stopPropagation();
-              props.onEnter();
-            }}
+          <Button
+            fullWidth
+            variant="secondary"
             disabled={!props.isConnected}
-            style={{
-              width: '100%',
-              padding: '10px 16px',
-              borderRadius: 8,
-              background: props.isConnected
-                ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
-                : 'rgba(255,255,255,0.1)',
-              border: 'none',
-              color: props.isConnected ? '#fff' : 'rgba(255,255,255,0.4)',
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: props.isConnected ? 'pointer' : 'not-allowed',
-            }}
+            onClick={(e) => { e.stopPropagation(); props.onEnter(); }}
           >
             {props.isConnected ? 'Enter Tournament' : 'Connect Wallet'}
-          </button>
+          </Button>
         ) : (
           <div style={{
             width: '100%',
-            padding: '10px 16px',
-            borderRadius: 8,
-            background: 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            color: 'rgba(255,255,255,0.5)',
-            fontSize: 13,
+            padding: `${spacing.sm}px ${spacing.lg}px`,
+            borderRadius: radius.md,
+            background: 'rgba(255, 255, 255, 0.03)',
+            border: `1px solid ${colors.border.subtle}`,
+            color: colors.text.muted,
+            fontSize: typography.size.sm,
             textAlign: 'center',
           }}>
             Select to play
