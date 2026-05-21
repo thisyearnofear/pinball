@@ -19,6 +19,7 @@ import { STORED_WORLD_ID } from "@/definitions/settings";
 import Tables, { START_TABLE_INDEX } from "@/definitions/tables";
 
 import { colors, spacing, typography, radius } from "@/theme/tokens";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useIsSmallScreen } from "@/hooks/use-media-query";
 import { useWorldTheme, getWorldAccent } from "@/hooks/use-world-theme";
 import { usePlayerStats } from "@/hooks/use-player-stats";
@@ -577,6 +578,5 @@ export default function GameScreen() {
 }
 
 function ConnectButtonWrapper() {
-  const { ConnectButton } = require("@rainbow-me/rainbowkit");
   return <ConnectButton />;
 }
