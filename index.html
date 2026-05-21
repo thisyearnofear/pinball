@@ -33,7 +33,6 @@
   
   <!-- SparkJS for Gaussian Splat world rendering - loaded dynamically on demand -->
   <script>
-    // Placeholder until Spark is loaded on demand
     window.__sparkLoadPromise = null;
     window.__loadSpark = function() {
       if (window.Spark) return Promise.resolve(window.Spark);
@@ -43,7 +42,7 @@
         const script = document.createElement('script');
         script.type = 'module';
         script.textContent = `
-          import * as Spark from 'https://cdn.jsdelivr.net/npm/@sparkjs/engine@2.0.0-preview/dist/spark.esm.js';
+          import * as Spark from 'https://sparkjs.dev/releases/spark/2.0.0/spark.module.js';
           window.Spark = Spark;
           window.__sparkResolve?.();
         `;
