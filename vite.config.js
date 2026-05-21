@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import path from "path";
 import react from "@vitejs/plugin-react";
 import { viteStaticCopy } from "vite-plugin-static-copy";
+import { nodePolyfills } from "vite-plugin-node-polyfills";
 
 const dirLib    = `${__dirname}/node_modules`;
 const dirSrc    = `${__dirname}/src`;
@@ -12,6 +13,14 @@ export default defineConfig({
     base: "./",
     plugins: [
         react(),
+        nodePolyfills({
+            include: ["buffer", "process"],
+            globals: {
+                Buffer: true,
+                global: true,
+                process: true,
+            },
+        }),
         viteStaticCopy({
             targets: [
                 {
@@ -47,15 +56,4 @@ export default defineConfig({
         exclude: [ "backend/**", "contracts/**", "apps/**", "dist/**", "node_modules/**" ],
         environment: "jsdom",
     },
-    define: {
-        global: 'globalThis',
-    },
-    optimizeDeps: {
-        include: ['buffer', 'ethers'],
-        esbuildOptions: {
-            define: {
-                global: 'globalThis',
-            }
-        }
-    }
 });
