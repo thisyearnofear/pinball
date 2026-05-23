@@ -1,114 +1,111 @@
 /**
- * Nonce tracker for score signature requests
- * Prevents replay attacks by ensuring each signature is unique per player per tournament
- *
- * For production: migrate this to Redis or a database
+ * Nonce tracker for score signature requests.
+ * Backed by Redis when REDIS_URL is set; falls back to in-memory otherwise.
+ * Prevents replay attacks by ensuring each signature is unique per player per tournament.
  */
 
-interface NonceEntry {
+import { getRedis } from "./redis-client.js";
+
+interface InMemoryEntry {
   nonce: bigint;
   timestamp: number;
 }
 
 export class NonceTracker {
-  // Map structure: tournamentId => (playerAddress => NonceEntry)
-  private store: Map<number, Map<string, NonceEntry>> = new Map();
+  private memStore: Map<number, Map<string, InMemoryEntry>> = new Map();
 
-  /**
-   * Get next nonce for a player in a tournament
-   * Returns the nonce they should use for their next submission
-   */
-  getNextNonce(tournamentId: number, playerAddress: string): bigint {
-    const tournamentMap = this.store.get(tournamentId);
-    if (!tournamentMap) {
-      // First submission for this tournament
-      return 1n;
-    }
-
-    const entry = tournamentMap.get(playerAddress.toLowerCase());
-    if (!entry) {
-      // First submission for this player in this tournament
-      return 1n;
-    }
-
-    // Return the next nonce (current + 1)
-    return entry.nonce + 1n;
+  async getNextNonce(tournamentId: number, playerAddress: string): Promise<bigint> {
+    const redis = getRedis();
+    if (redis) return this.getNextNonceRedis(redis, tournamentId, playerAddress);
+    return this.getNextNonceMemory(tournamentId, playerAddress);
   }
 
-  /**
-   * Record a used nonce for a player in a tournament
-   * Called after signature is verified on-chain
-   */
-  recordNonce(tournamentId: number, playerAddress: string, nonce: bigint): void {
-    const normalizedAddress = playerAddress.toLowerCase();
-    let tournamentMap = this.store.get(tournamentId);
-
-    if (!tournamentMap) {
-      tournamentMap = new Map();
-      this.store.set(tournamentId, tournamentMap);
+  async recordNonce(tournamentId: number, playerAddress: string, nonce: bigint): Promise<void> {
+    const redis = getRedis();
+    if (redis) {
+      const key = `nonce:${tournamentId}:${playerAddress.toLowerCase()}`;
+      await redis.set(key, nonce.toString());
+    } else {
+      this.recordNonceMemory(tournamentId, playerAddress, nonce);
     }
-
-    tournamentMap.set(normalizedAddress, {
-      nonce,
-      timestamp: Date.now()
-    });
   }
 
-  /**
-   * Verify that a nonce is the next expected one
-   * This is a convenience method for validation
-   */
-  isValidNext(tournamentId: number, playerAddress: string, nonce: bigint): boolean {
-    const expected = this.getNextNonce(tournamentId, playerAddress);
+  async isValidNext(tournamentId: number, playerAddress: string, nonce: bigint): Promise<boolean> {
+    const expected = await this.getNextNonce(tournamentId, playerAddress);
     return nonce === expected;
   }
 
-  /**
-   * Get current nonce for a player (useful for diagnostics)
-   */
-  getCurrentNonce(tournamentId: number, playerAddress: string): bigint | null {
-    const tournamentMap = this.store.get(tournamentId);
-    if (!tournamentMap) return null;
-
-    const entry = tournamentMap.get(playerAddress.toLowerCase());
-    return entry?.nonce ?? null;
+  async getCurrentNonce(tournamentId: number, playerAddress: string): Promise<bigint | null> {
+    const redis = getRedis();
+    if (redis) {
+      const key = `nonce:${tournamentId}:${playerAddress.toLowerCase()}`;
+      const val = await redis.get(key);
+      return val ? BigInt(val) : null;
+    }
+    return this.getCurrentNonceMemory(tournamentId, playerAddress);
   }
 
-  /**
-   * Reset nonces for a tournament (admin function)
-   */
-  resetTournament(tournamentId: number): void {
-    this.store.delete(tournamentId);
-  }
-
-  /**
-   * Reset nonce for a specific player (admin function)
-   */
-  resetPlayer(tournamentId: number, playerAddress: string): void {
-    const tournamentMap = this.store.get(tournamentId);
-    if (tournamentMap) {
-      tournamentMap.delete(playerAddress.toLowerCase());
+  async resetTournament(tournamentId: number): Promise<void> {
+    const redis = getRedis();
+    if (redis) {
+      const keys = await redis.keys(`nonce:${tournamentId}:*`);
+      if (keys.length) await redis.del(...keys);
+    } else {
+      this.memStore.delete(tournamentId);
     }
   }
 
-  /**
-   * Get stats for monitoring
-   */
-  getStats(): {
-    totalTournaments: number;
-    totalPlayers: number;
-  } {
+  async resetPlayer(tournamentId: number, playerAddress: string): Promise<void> {
+    const redis = getRedis();
+    if (redis) {
+      await redis.del(`nonce:${tournamentId}:${playerAddress.toLowerCase()}`);
+    } else {
+      this.memStore.get(tournamentId)?.delete(playerAddress.toLowerCase());
+    }
+  }
+
+  getStats(): { totalTournaments: number; totalPlayers: number; storage: string } {
     let totalPlayers = 0;
-    for (const tournamentMap of this.store.values()) {
-      totalPlayers += tournamentMap.size;
-    }
-
+    for (const m of this.memStore.values()) totalPlayers += m.size;
     return {
-      totalTournaments: this.store.size,
-      totalPlayers
+      totalTournaments: this.memStore.size,
+      totalPlayers,
+      storage: getRedis() ? "redis" : "in-memory",
     };
+  }
+
+  // --- Redis path ---
+
+  private async getNextNonceRedis(redis: NonNullable<ReturnType<typeof getRedis>>, tid: number, addr: string): Promise<bigint> {
+    const key = `nonce:${tid}:${addr.toLowerCase()}`;
+    const val = await redis.get(key);
+    return val ? BigInt(val) + 1n : 1n;
+  }
+
+  // --- In-memory path ---
+
+  private getNextNonceMemory(tid: number, addr: string): bigint {
+    const tMap = this.memStore.get(tid);
+    if (!tMap) return 1n;
+    const entry = tMap.get(addr.toLowerCase());
+    return entry ? entry.nonce + 1n : 1n;
+  }
+
+  private recordNonceMemory(tid: number, addr: string, nonce: bigint): void {
+    const normalized = addr.toLowerCase();
+    let tMap = this.memStore.get(tid);
+    if (!tMap) {
+      tMap = new Map();
+      this.memStore.set(tid, tMap);
+    }
+    tMap.set(normalized, { nonce, timestamp: Date.now() });
+  }
+
+  private getCurrentNonceMemory(tid: number, addr: string): bigint | null {
+    const tMap = this.memStore.get(tid);
+    if (!tMap) return null;
+    return tMap.get(addr.toLowerCase())?.nonce ?? null;
   }
 }
 
-// Create singleton instance
 export const nonceTracker = new NonceTracker();

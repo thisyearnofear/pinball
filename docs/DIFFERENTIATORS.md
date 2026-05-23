@@ -1,5 +1,15 @@
 # Differentiators
 
+## Production-Quality Frontend Architecture
+
+- **Next.js 16.2** with Turbopack (400% faster dev startup), static export to `out/`
+- **Game isolation**: canvas/physics run client-side only via `dynamic({ ssr: false })` — zero SSR cost
+- **Sentry error tracking**: instrumentation.ts + global-error.tsx boundary + source maps — crash reports captured automatically
+- **CSS modules** with design tokens: 8 components migrated from inline styles (Button, Modal, AppHeader, PinballHUD, ArcadeLobby, WorldLoadingOverlay, ScoreSubmissionOverlay, SettingsModal) — all powered by centralized CSS custom properties from `src/theme/tokens.ts`
+- **Clean wallet adapter**: WalletPort interface with explicit injection — contract clients require `wallet: WalletPort`, no hidden globals, no legacy fallback
+- **Test coverage**: 65 frontend + 54 backend + 10 contract tests, all passing
+- **Dead code purge**: 6 obsolete files removed, `@mezo-org/passport` dependency dropped, legacy `web3-service.ts` wallet adapter deleted
+
 ## Sponsored Missions (MUSD)
 
 **Goal:** make the pinball feel “Mezo-native” by turning achievements into an onchain MUSD economy.

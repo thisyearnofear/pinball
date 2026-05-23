@@ -1,0 +1,105 @@
+.ledNumber {
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  letter-spacing: 0.1em;
+  font-variant-numeric: tabular-nums;
+}
+
+.ledLarge {
+  font-size: 2rem;
+}
+
+.ledSmall {
+  font-size: 1.2rem;
+}
+
+.ballIndicator {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-subtle);
+  transition: all 0.2s ease;
+}
+
+.ballActive {
+  /* Dynamic color set via inline style for glow */
+}
+
+.compactContainer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-xs) var(--space-sm);
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.compactSpacer {
+  flex: 1;
+}
+
+.ballRow {
+  display: flex;
+  gap: 4px;
+}
+
+.fullContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-lg);
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: var(--radius-lg);
+  border: 2px solid var(--border-emphasis);
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5), inset 0 0 30px rgba(0, 0, 0, 0.3);
+}
+
+.scoreSection {
+  text-align: center;
+}
+
+.scoreLabel {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  margin-bottom: var(--space-xs);
+}
+
+.ballRowCentered {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-sm);
+}
+
+.statsRow {
+  display: flex;
+  justify-content: space-around;
+  margin-top: var(--space-xs);
+}
+
+.statCell {
+  text-align: center;
+}
+
+.statLabel {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.tiltWarning {
+  text-align: center;
+  font-size: var(--text-lg);
+  font-weight: var(--font-bold);
+  color: #ff0000;
+  text-shadow: 0 0 8px #ff0000, 0 0 16px #ff0000;
+  animation: tiltFlash 0.5s ease-in-out infinite;
+  letter-spacing: 0.2em;
+}
+
+@keyframes tiltFlash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}

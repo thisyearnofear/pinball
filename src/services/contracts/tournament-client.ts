@@ -9,7 +9,6 @@ import {
   waitForTxPublic,
 } from './contract-utils';
 import type { WalletPort } from '@/domains/wallet/wallet-port';
-import { getLegacyWalletPort } from '@/domains/wallet/legacy-web3service-wallet-port';
 
 function isConfigured(): boolean {
   try {
@@ -20,10 +19,9 @@ function isConfigured(): boolean {
   }
 }
 
-async function getContract(wallet?: WalletPort): Promise<ethers.Contract> {
+async function getContract(wallet: WalletPort): Promise<ethers.Contract> {
   const { tournamentManager } = getContractsConfig();
-  const w = wallet ?? getLegacyWalletPort();
-  return await getWriteContract(tournamentManager.address, TOURNAMENT_MANAGER_ABI, w);
+  return await getWriteContract(tournamentManager.address, TOURNAMENT_MANAGER_ABI, wallet);
 }
 
 // Public read-only contract that doesn't require wallet connection
@@ -77,8 +75,8 @@ async function _getActiveTournamentId(contract: ethers.Contract): Promise<number
   return Number(lastId);
 }
 
-export async function enterTournament(tournamentId: number, wallet?: WalletPort): Promise<string> {
-  const w = wallet ?? getLegacyWalletPort();
+export async function enterTournament(tournamentId: number, wallet: WalletPort): Promise<string> {
+  const w = wallet;
   const c = await getContract(w);
 
   try {
@@ -285,9 +283,9 @@ export async function submitScoreWithSignature(
   name: string,
   metadata: string,
   signature: string,
-  wallet?: WalletPort
+  wallet: WalletPort
 ): Promise<string> {
-  const w = wallet ?? getLegacyWalletPort();
+  const w = wallet;
   const address = await w.getAddress();
 
   const c = await getContract(w);

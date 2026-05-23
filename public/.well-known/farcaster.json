@@ -6,7 +6,7 @@
   },
   "frame": {
     "version": "1",
-    "name": "ArbiPinball",
+    "name": "Mezo Pinball Arcade",
     "iconUrl": "https://arbipinball.netlify.app/assets/sprites/logo.png",
     "homeUrl": "https://arbipinball.netlify.app",
     "imageUrl": "https://arbipinball.netlify.app/assets/sprites/logo.png",
@@ -17,7 +17,7 @@
   "miniApp": {
     "addToFavorites": {
       "enabled": true,
-      "title": "Add ArbiPinball to Favorites",
+      "title": "Add Mezo Pinball Arcade to Favorites",
       "description": "Get notified about new tournaments and updates!",
       "icon": "https://arbipinball.netlify.app/assets/sprites/logo.png"
     },

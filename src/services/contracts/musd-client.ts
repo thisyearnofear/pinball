@@ -1,7 +1,6 @@
 import { ethers } from "ethers";
 import { getContractsConfig } from "../../config/contracts";
 import type { WalletPort } from "@/domains/wallet/wallet-port";
-import { getLegacyWalletPort } from "@/domains/wallet/legacy-web3service-wallet-port";
 
 const ERC20_ABI = [
   "function decimals() view returns (uint8)",
@@ -29,9 +28,8 @@ export function getMUSDContractRead(): ethers.Contract {
   return new ethers.Contract(getMUSDAddress(), ERC20_ABI, provider);
 }
 
-export async function getMUSDContractWrite(wallet?: WalletPort): Promise<ethers.Contract> {
-  const w = wallet ?? getLegacyWalletPort();
-  const signer = await w.getSigner();
+export async function getMUSDContractWrite(wallet: WalletPort): Promise<ethers.Contract> {
+  const signer = await wallet.getSigner();
   return new ethers.Contract(getMUSDAddress(), ERC20_ABI, signer);
 }
 
@@ -47,7 +45,7 @@ export async function getMUSDAllowance(owner: string, spender: string): Promise<
   return allowance;
 }
 
-export async function approveMUSD(spender: string, amount: bigint, wallet?: WalletPort): Promise<string> {
+export async function approveMUSD(spender: string, amount: bigint, wallet: WalletPort): Promise<string> {
   const c = await getMUSDContractWrite(wallet);
   const tx = await c.approve(spender, amount);
   const receipt = await tx.wait();

@@ -1,32 +1,35 @@
 # Mezo Pinball Arcade
 
-Mezo Pinball Arcade is a Web3 pinball game built for the Mezo ecosystem, featuring on-chain tournaments where players compete for **MUSD** prizes. It combines retro pinball gameplay with blockchain tournament rails, allowing users to connect a wallet (Mezo Passport) and win Bitcoin-backed stablecoin rewards based on their scores.
+Mezo Pinball Arcade is a Web3 pinball game built for the Mezo ecosystem, featuring on-chain tournaments where players compete for **MUSD** prizes. It combines retro pinball gameplay with blockchain tournament rails, allowing users to connect a wallet and win Bitcoin-backed stablecoin rewards based on their scores.
 
-The game is built with **React** (Mezo Passport-first), uses Matter.js for physics simulation, and leverages Web3 technologies for tournament management.
+Built with **Next.js 16.2** (Turbopack, static export), Matter.js for physics, and Wagmi/RainbowKit for wallet connectivity.
 
 ## Architecture
 
-This is a monorepo containing three main components:
+Monorepo with three components:
 
-- **Frontend**: React application (primary UI shell)
-- **Backend**: Node.js server that handles score signing for tournament submissions
-- **Contracts**: Solidity smart contracts for tournament management on Mezo (MUSD-based)
+- **Frontend**: Next.js 16.2 App Router → static export to `out/`. Game runs client-side only via `dynamic({ ssr: false })`.
+- **Backend**: Node.js Express server for score signing, with Redis-backed rate limiting.
+- **Contracts**: Solidity (Hardhat) — TournamentManager + MissionPool, with EIP-191 signed finalization.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full domain-driven design, dependency rules, and test coverage breakdown.
 
 ## Features
 
-- **Pinball Gameplay**: Retro-style vertically scrolling pinball with physics-driven gameplay
-- **Generative 3D Worlds**: Tables are hosted inside photoreal Marble worlds rendered in real time by Spark (Gaussian Splats on Three.js). Each tournament binds to a themed world. See [docs/MARBLE_INTEGRATION.md](docs/MARBLE_INTEGRATION.md).
-- **On-Chain Tournaments**: Enter tournaments by paying MUSD, compete for prizes distributed to top players
-- **Wallet Integration**: Connect MetaMask, Coinbase Wallet, or other Web3 wallets
-- **Farcaster Integration**: Optional (legacy); primary target is Mezo hackathon requirements
+- **Pinball Gameplay**: Retro-style vertically scrolling pinball with physics-driven gameplay (Matter.js + zCanvas)
+- **Generative 3D Worlds**: Tables hosted inside photoreal Marble worlds rendered by Spark (Gaussian Splats on Three.js). See [docs/MARBLE_INTEGRATION.md](docs/MARBLE_INTEGRATION.md).
+- **On-Chain Tournaments**: Enter by paying MUSD, compete for prizes distributed to top players via `finalizeWithSignedWinners()`
+- **Wallet Integration**: Wagmi + RainbowKit with an explicit WalletPort adapter (no hidden globals)
+- **Sentry Error Tracking**: Frontend crash reporting with global error boundary and instrumentation
+- **Arcade Cabinet UX**: CRT overlay, neon marquee, and atmospheric lobby with tournament card selection
 - **Leaderboard**: View tournament rankings and scores
-- **Cross-Platform**: Play on desktop or mobile devices, with reduced-motion / low-end fallback to the legacy 2D background
+- **Cross-Platform**: Responsive design with reduced-motion / low-end device fallback
 
 ## Frontend Setup
 
 ### Prerequisites
 - Node.js 18+
-- pnpm (recommended; npm can error due to an npm/arborist issue in some environments)
+- pnpm
 
 ### Installation
 
@@ -36,25 +39,27 @@ pnpm install
 
 ### Development
 
-Start the local development server:
-
 ```bash
-pnpm run dev
+pnpm dev
 ```
+
+Runs Next.js with Turbopack on `http://localhost:3000`.
 
 ### Production Build
 
-Build for production (output goes to `./dist`):
-
 ```bash
-pnpm run build
+pnpm build
 ```
 
-### Preview Production Build
+Statically exports to `out/` — deploy to Netlify, Cloudflare Pages, or any CDN.
+
+### Testing
 
 ```bash
-pnpm run serve
-```
+pnpm test              # Frontend unit tests (65 tests, Vitest + jsdom)
+pnpm run test:backend   # Backend API tests
+pnpm run test:contracts # Contract tests (Hardhat)
+pnpm run test:all       # All three suites
 
 ## Backend Setup
 
@@ -99,10 +104,11 @@ npm start
 
 ## Contracts Setup
 
-Smart contracts handle tournament logic on Arbitrum.
+Smart contracts handle tournament logic on Arbitrum. Uses Hardhat (not Foundry).
 
 ### Prerequisites
-- Foundry (modern Ethereum development toolbox)
+- Node.js 18+
+- Hardhat
 
 ### Installation
 
@@ -113,8 +119,6 @@ npm install
 
 ### Generate Test Keys
 
-Generate a new keypair for testing:
-
 ```bash
 node scripts/generate-key.js
 ```
@@ -124,6 +128,8 @@ node scripts/generate-key.js
 ```bash
 npm test
 ```
+
+New in this release: `finalizeWithSignedWinners()` replaces O(n^2) on-chain sorting with an EIP-191-signed winner list from the trusted backend signer. See `contracts/test/TournamentManager.test.ts` for the full test suite (10 tests, all passing).
 
 ## Active Tournament
 
@@ -146,15 +152,13 @@ Current tournament details on Arbitrum One (Chain ID: 42161):
 
 ### Frontend
 
-Deploy the built `./dist` folder to any static hosting service (Netlify, Vercel, Cloudflare Pages, etc.).
+Statically exports to `out/`. Deploy to Netlify (configured via `netlify.toml`), Cloudflare Pages, Vercel, or any CDN.
 
 ### Backend
 
-Deploy to a VPS or serverless platform. See `backend/README.md` for systemd service configuration and nginx reverse proxy setup.
+Deploy to a VPS or serverless platform. Requires Redis for rate limiting (optional — falls back to in-memory). See `backend/README.md` for systemd service, nginx reverse proxy setup, and `/admin/metrics` endpoint.
 
 ### Contracts
-
-Deploy contracts to Mezo testnet/mainnet:
 
 ```bash
 cd contracts
@@ -163,11 +167,12 @@ npm run deploy:mezotestnet
 
 ## Gameplay
 
-1. **Connect Wallet**: Users connect their Web3 wallet to participate in tournaments
-2. **Enter Tournament**: Pay ETH entry fee to join an active tournament
-3. **Play Pinball**: Play through the pinball tables, achieving high scores
-4. **Submit Score**: Scores are signed by the backend and submitted on-chain
-5. **Claim Rewards**: Top players can claim their ETH rewards after tournament ends
+1. **Connect Wallet**: Connect via RainbowKit to participate
+2. **Enter Tournament**: Pay MUSD entry fee to join an active tournament
+3. **Play Pinball**: Achieve high scores across themed worlds
+4. **Submit Score**: Scores are EIP-191 signed by the backend and submitted on-chain
+5. **Finalization**: Backend calls `finalizeWithSignedWinners()` to settle the tournament
+6. **Claim Rewards**: Top players claim MUSD rewards from the TournamentManager contract
 
 ## Adding Custom Tables
 

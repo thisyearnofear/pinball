@@ -1,0 +1,100 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-lg);
+  background: var(--bg-surface);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.headerMobile {
+  padding: var(--space-sm) var(--space-md);
+}
+
+.headerDesktop {
+  padding: var(--space-sm) var(--space-lg);
+}
+
+.brandGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.brandGroupMobile {
+  gap: var(--space-sm);
+}
+
+.brandName {
+  font-size: var(--text-lg);
+  font-weight: var(--font-bold);
+  font-family: var(--font-family-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.brandNameMobile {
+  font-size: var(--text-md);
+}
+
+.tournamentTag {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+}
+
+.liveBadge {
+  font-size: var(--text-xs);
+  color: var(--status-success);
+  font-weight: var(--font-medium);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.mobileMenuToggle {
+  min-width: 44px;
+  min-height: 44px;
+  font-size: var(--text-xl);
+}
+
+.mobileMenuBtn {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* Mobile dropdown menu */
+.mobileDropdown {
+  position: absolute;
+  top: 100%;
+  right: var(--space-md);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-sm);
+  min-width: 180px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 60;
+  animation: fadeIn 150ms ease;
+}
+
+.dropdownItem {
+  justify-content: flex-start;
+  padding: var(--space-sm) var(--space-md);
+  min-height: 44px;
+}
+
+.dropdownDivider {
+  border-top: 1px solid var(--border-subtle);
+  margin: var(--space-xs) 0;
+}
+
+.dropdownConnectWrap {
+  padding: var(--space-xs) var(--space-md);
+}

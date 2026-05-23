@@ -1,11 +1,10 @@
 # Architecture (Core Principles)
 
-This repository is evolving towards a **React-only (Mezo Passport-first)** frontend while **reusing** the existing TypeScript game engine, backend score signer, and Solidity contracts.
+Production-credible architecture with clean layering and strict domain boundaries. The frontend is a **Next.js 16.2 static export** with client-side-only game rendering — zero SSR cost, zero server runtime.
 
-The goal is to make the system **scalable, maintainable, and modular**, aligned with our Core Principles:
-
+Core Principles:
 - **ENHANCEMENT FIRST**: extract and reuse existing engine/contract logic before creating anything new.
-- **CONSOLIDATION**: delete legacy shells once parity is reached (no long-lived deprecations).
+- **CONSOLIDATION**: delete dead code once parity is reached (no long-lived deprecations).
 - **PREVENT BLOAT**: audit + consolidate before adding features.
 - **DRY**: single source of truth for shared logic (config, ABIs, tx helpers).
 - **CLEAN**: explicit dependencies and separation of concerns.
@@ -15,45 +14,55 @@ The goal is to make the system **scalable, maintainable, and modular**, aligned 
 
 ## System overview
 
-### Frontend
-- **Target:** `apps/web-react/` becomes the only UI shell.
-- **Temporary:** root Vue shell exists only while we migrate the UI; it should be deleted once parity is achieved.
+### Frontend (Next.js 16.2 · Turbopack · Static Export)
+- **`app/`** — Next.js App Router shell: root layout, providers, Sentry boundaries, dynamic game import.
+- **`src/game/`** — All game logic, UI components, hooks. Renamed from `src/app/` to avoid conflicting with Next.js's `app/` convention.
+- **`src/services/`** — Contract clients, high-scores service, audio, haptics, toast.
+- **`src/domains/`** — Wallet port abstraction (EIP-1193 adapter), cleanly injected into all contract clients.
+- **`src/config/`** — Tournaments, worlds, contracts, wagmi config.
+- **`src/theme/`** — Design tokens + global CSS variable injection.
+- **`src/hooks/`** — Shared React hooks (media queries, world theme, wallet).
+
+Build produces static `out/index.html` for Netlify/any CDN. Game runs entirely client-side via `dynamic(() => import(...), { ssr: false })` — no server-side rendering of pinball physics or canvas.
+- **Observability**: `@sentry/nextjs` v10 with instrumentation.ts, global-error.tsx boundary, and source map upload (gated behind `SENTRY_ORG`/`SENTRY_PROJECT` env vars).
+- **Dev speed**: Turbopack (400% faster startup claim).
+- **Styling**: 4 core CSS modules (Button, Modal, AppHeader, PinballHUD) + 4 newly migrated (ArcadeLobby, WorldLoadingOverlay, ScoreSubmissionOverlay, SettingsModal) + design tokens via CSS custom properties. Remaining inline styles are mostly dynamic (glow colors, particle positions).
 
 ### Backend
-- `backend/` provides a score signing API and (optionally) mission award broadcasting.
+- `backend/` — Node.js Express server for score signing API.
+- Redis-backed rate limiter + nonce tracker with in-memory fallback (`REDIS_URL` env var).
+- `/admin/metrics` endpoint for operational visibility.
 
 ### Contracts
-- `contracts/` contains Mezo-focused Solidity contracts and deployment scripts.
+- `contracts/` — Solidity (Hardhat) for TournamentManager + MissionPool on Arbitrum.
+- `finalizeWithSignedWinners()` replaces O(n^2) on-chain sort with O(topN) via EIP-191 signed winner list from the trusted backend signer.
 
 ## Domain-driven boundaries (DDD)
 
 We treat the codebase as a set of domains with strict dependency rules.
 
 ### Domains
+- **UI shell** (`app/`): Next.js App Router — root layout, providers, Sentry boundaries, dynamic game import.
 - **Game domain** (pure gameplay): physics + rendering + rules
   - Examples: `src/model/**`, `src/definitions/**`, `src/renderers/**`, `src/utils/**`
   - Must not depend on wallet/tournament/presentation concerns.
-
 - **Presentation domain** (3D world stage): Marble splat scene + Spark renderer that hosts the game canvas
   - Examples: `src/presentation/**`, `src/config/worlds.ts`
   - Must not depend on game internals, tournament, wallet, or UI framework.
   - See [MARBLE_INTEGRATION.md](./MARBLE_INTEGRATION.md) for the full plan.
-
+- **UI components** (`src/game/ui/`): Presentational React components with CSS modules + design tokens
+  - Examples: `Button`, `Modal`, `AppHeader`, `PinballHUD`, `ArcadeLobby`, `SettingsModal`
 - **Tournament domain** (chain/business rules): contract reads/writes, tx helpers, score submission primitives
   - Examples: `src/services/contracts/**`
-  - Must not depend on Vue/React components.
-
-- **Wallet domain**: connection + chain switching adapters
-  - Examples: `src/services/web3-service.ts` (temporary adapter)
   - Must not depend on UI components.
-
-- **UI shell(s)**: views + UX flows
-  - Vue: `src/components/**` (temporary)
-  - React: `apps/web-react/src/**` (target) — composes `mountWorld()` (presentation) + `mountGame()` (game)
+- **Wallet domain**: connection + chain switching adapters
+  - Examples: `src/domains/wallet/` (WalletPort interface + EIP-1193 adapter)
+  - Must not depend on UI components.
+  - All contract clients require an explicit `wallet: WalletPort` parameter (no hidden globals).
 
 ### Allowed dependencies
 
-**UI → (wallet, tournament, game, presentation)**
+**UI (app/) → game → (wallet, tournament, presentation)**
 
 **presentation → (config only — splat asset URLs, world tuning)**
 
@@ -71,16 +80,18 @@ Disallowed:
 
 ## Single source of truth
 
-- **Config**: `src/config/app-config.ts` / `src/config/contracts.ts`
+- **Wagmi config**: `src/config/wagmi-config.ts` (shared by `app/providers.tsx` and `src/game/App.tsx`)
+- **Tournament config**: `src/config/tournaments.ts`
+- **Contracts config**: `src/config/contracts.ts`
 - **ABIs**: `src/services/contracts/abi.ts`
 - **Tx/RPC utilities**: `src/services/contracts/contract-utils.ts`
 - **World catalogue**: `src/config/worlds.ts` (Marble splat URLs + per-world tuning)
+- **Design tokens**: `src/theme/tokens.ts` → CSS custom properties via `injectGlobalStyles()`
 
-## Migration plan (high level)
+## Test coverage
 
-1. Extract a framework-agnostic `mountGame()` module (game domain boundary).
-2. Update React shell to mount the game directly (remove iframe).
-3. Consolidate tournament/wallet glue so React uses the same domain modules as Vue.
-4. Delete Vue shell when parity is reached.
-5. Add the **presentation** domain (`src/presentation/`) and host the existing game canvas inside Marble worlds via the optional `stage` hook on `mountGame()`. See [MARBLE_INTEGRATION.md](./MARBLE_INTEGRATION.md).
+- **65 frontend tests** (Vitest + jsdom): model/game, actors, trigger groups, math utils
+- **54 backend tests**: API endpoints, rate limiter, nonce tracker
+- **10 contract tests**: `finalizeWithSignedWinners` signature validation, winner claims, legacy compat
+- All passing. Run: `pnpm run test:all`
 

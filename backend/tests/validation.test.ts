@@ -175,29 +175,29 @@ describe('Input Validation - Phase 1', () => {
 });
 
 describe('Rate Limiting', () => {
-  test('should allow requests within limit', () => {
+  test('should allow requests within limit', async () => {
     const limiter = new AddressRateLimiter(3, 60000);
     const address = '0x' + 'a'.repeat(40);
 
-    const result1 = limiter.isAllowed(address);
+    const result1 = await limiter.isAllowed(address);
     expect(result1.allowed).toBe(true);
     expect(result1.remaining).toBe(2);
 
-    const result2 = limiter.isAllowed(address);
+    const result2 = await limiter.isAllowed(address);
     expect(result2.allowed).toBe(true);
     expect(result2.remaining).toBe(1);
 
-    const result3 = limiter.isAllowed(address);
+    const result3 = await limiter.isAllowed(address);
     expect(result3.allowed).toBe(true);
     expect(result3.remaining).toBe(0);
   });
 
-  test('should reject requests exceeding limit', () => {
+  test('should reject requests exceeding limit', async () => {
     const limiter = new AddressRateLimiter(1, 60000);
     const address = '0x' + 'a'.repeat(40);
 
-    limiter.isAllowed(address); // First request
-    const result2 = limiter.isAllowed(address); // Second request
+    await limiter.isAllowed(address); // First request
+    const result2 = await limiter.isAllowed(address); // Second request
 
     expect(result2.allowed).toBe(false);
     expect(result2.remaining).toBe(0);
@@ -207,66 +207,66 @@ describe('Rate Limiting', () => {
     const limiter = new AddressRateLimiter(1, 100); // 100ms window
     const address = '0x' + 'a'.repeat(40);
 
-    const result1 = limiter.isAllowed(address);
+    const result1 = await limiter.isAllowed(address);
     expect(result1.allowed).toBe(true);
 
-    const result2 = limiter.isAllowed(address);
+    const result2 = await limiter.isAllowed(address);
     expect(result2.allowed).toBe(false);
 
     // Wait for window to expire
     await new Promise(resolve => setTimeout(resolve, 150));
 
-    const result3 = limiter.isAllowed(address);
+    const result3 = await limiter.isAllowed(address);
     expect(result3.allowed).toBe(true);
   });
 
-  test('should track different addresses separately', () => {
+  test('should track different addresses separately', async () => {
     const limiter = new AddressRateLimiter(1, 60000);
     const address1 = '0x' + 'a'.repeat(40);
     const address2 = '0x' + 'b'.repeat(40);
 
-    limiter.isAllowed(address1); // Address1: 1 request
-    const result2a = limiter.isAllowed(address1); // Address1: limit exceeded
+    await limiter.isAllowed(address1); // Address1: 1 request
+    const result2a = await limiter.isAllowed(address1); // Address1: limit exceeded
     expect(result2a.allowed).toBe(false);
 
-    const result1b = limiter.isAllowed(address2); // Address2: 1 request
+    const result1b = await limiter.isAllowed(address2); // Address2: 1 request
     expect(result1b.allowed).toBe(true);
   });
 
-  test('should provide status information', () => {
+  test('should provide status information', async () => {
     const limiter = new AddressRateLimiter(3, 60000);
     const address = '0x' + 'a'.repeat(40);
 
-    let status = limiter.getStatus(address);
+    let status = await limiter.getStatus(address);
     expect(status).toBeNull();
 
-    limiter.isAllowed(address);
-    status = limiter.getStatus(address);
+    await limiter.isAllowed(address);
+    status = await limiter.getStatus(address);
     expect(status?.count).toBe(1);
     expect(status?.remaining).toBe(2);
   });
 
-  test('should reset address rate limit', () => {
+  test('should reset address rate limit', async () => {
     const limiter = new AddressRateLimiter(1, 60000);
     const address = '0x' + 'a'.repeat(40);
 
-    limiter.isAllowed(address);
-    const result1 = limiter.isAllowed(address);
+    await limiter.isAllowed(address);
+    const result1 = await limiter.isAllowed(address);
     expect(result1.allowed).toBe(false);
 
-    limiter.reset(address);
+    await limiter.reset(address);
 
-    const result2 = limiter.isAllowed(address);
+    const result2 = await limiter.isAllowed(address);
     expect(result2.allowed).toBe(true);
   });
 
-  test('should provide stats for monitoring', () => {
+  test('should provide stats for monitoring', async () => {
     const limiter = new AddressRateLimiter(3, 60000);
     const address1 = '0x' + 'a'.repeat(40);
     const address2 = '0x' + 'b'.repeat(40);
 
-    limiter.isAllowed(address1);
-    limiter.isAllowed(address2);
+    await limiter.isAllowed(address1);
+    await limiter.isAllowed(address2);
 
     const stats = limiter.getStats();
     expect(stats.totalTrackedAddresses).toBe(2);

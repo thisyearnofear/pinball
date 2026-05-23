@@ -36,7 +36,7 @@ export async function scoresRoutes(app: FastifyInstance) {
     const missionId = parsed.data.missionId;
 
     // Check per-address rate limit
-    const rateLimitResult = scoreSignatureRateLimiter.isAllowed(address);
+    const rateLimitResult = await scoreSignatureRateLimiter.isAllowed(address);
     if (!rateLimitResult.allowed) {
       app.log.warn({
         event: 'RATE_LIMIT_EXCEEDED',
@@ -88,7 +88,7 @@ export async function scoresRoutes(app: FastifyInstance) {
 
     try {
       // Get next nonce for this player
-      const nonce = nonceStr ? BigInt(nonceStr) : nonceTracker.getNextNonce(tid, addr);
+      const nonce = nonceStr ? BigInt(nonceStr) : await nonceTracker.getNextNonce(tid, addr);
 
       const signature = await signScore(
         env.SCORE_SIGNER_PK,
@@ -189,7 +189,7 @@ export async function scoresRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'INVALID_ADDRESS' });
     }
 
-    const status = scoreSignatureRateLimiter.getStatus(address);
+    const status = await scoreSignatureRateLimiter.getStatus(address);
     return {
       address,
       status: status || { remaining: 3, resetAt: Date.now() }
@@ -205,7 +205,7 @@ export async function scoresRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'INVALID_ADDRESS' });
     }
 
-    scoreSignatureRateLimiter.reset(address);
+    await scoreSignatureRateLimiter.reset(address);
     app.log.info({ event: 'RATE_LIMIT_RESET', address });
 
     return { ok: true, message: `Rate limit reset for ${address}` };
@@ -227,8 +227,8 @@ export async function scoresRoutes(app: FastifyInstance) {
         return reply.code(400).send({ error: 'INVALID_ADDRESS' });
       }
 
-      const currentNonce = nonceTracker.getCurrentNonce(tid, address);
-      const nextNonce = nonceTracker.getNextNonce(tid, address);
+      const currentNonce = await nonceTracker.getCurrentNonce(tid, address);
+      const nextNonce = await nonceTracker.getNextNonce(tid, address);
 
       return {
         tournamentId: tid,
@@ -255,7 +255,7 @@ export async function scoresRoutes(app: FastifyInstance) {
         return reply.code(400).send({ error: 'INVALID_ADDRESS' });
       }
 
-      nonceTracker.resetPlayer(tid, address);
+      await nonceTracker.resetPlayer(tid, address);
       app.log.info({ event: 'NONCE_RESET', tournamentId: tid, address });
 
       return { ok: true, message: `Nonce reset for player ${address} in tournament ${tid}` };
@@ -274,7 +274,7 @@ export async function scoresRoutes(app: FastifyInstance) {
         return reply.code(400).send({ error: 'INVALID_TOURNAMENT_ID' });
       }
 
-      nonceTracker.resetTournament(tid);
+      await nonceTracker.resetTournament(tid);
       app.log.info({ event: 'TOURNAMENT_NONCE_RESET', tournamentId: tid });
 
       return { ok: true, message: `All nonces reset for tournament ${tid}` };

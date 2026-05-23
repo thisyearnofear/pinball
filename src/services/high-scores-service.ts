@@ -7,7 +7,6 @@
 // Contract-backed high score service (no REST, no mocks)
 // Keeps the same public API (startGame, stopGame, getHighScores)
 
-import { web3Service } from './web3-service';
 import { getActiveTournamentId, fetchLeaderboard, submitScoreWithSignature, getNextPlayerNonce, getPlayerInfo } from './contracts/tournament-client';
 import { requestScoreSignature } from './backend-scores-client';
 import { getContractsConfig } from '../config/contracts';
@@ -15,7 +14,6 @@ import { getAppConfig } from '../config/app-config';
 import { showToast } from './toast';
 import { getFromStorage, setInStorage } from '../utils/local-storage';
 import type { WalletPort } from '@/domains/wallet/wallet-port';
-import { getLegacyWalletPort } from '@/domains/wallet/legacy-web3service-wallet-port';
 
 // Submission state tracking for UI feedback
 export type SubmissionStep = 'validating' | 'signing' | 'ready' | 'error';
@@ -40,19 +38,10 @@ export type HighScoreDef = {
 };
 
 export const isSupported = (): boolean => {
-    // Supported only when wallet is connected and contracts are configured
+    // Supported only when contracts are configured (wallet state is managed by wagmi)
     try {
-        if (!web3Service.isConnected()) {
-            return false;
-        }
-
-        // Additional check: verify configuration is available
-        try {
-            getContractsConfig();
-            return true;
-        } catch {
-            return false;
-        }
+        getContractsConfig();
+        return true;
     } catch {
         return false;
     }
@@ -79,13 +68,13 @@ export const startGame = async (): Promise<string | null> => {
 export const stopGame = async (
     gameId: string,
     score: number,
-    playerName?: string,
-    metaData?: string,
-    walletPort?: WalletPort
+    playerName: string,
+    metaData: string,
+    walletPort: WalletPort
 ): Promise<HighScoreDef[]> => {
     try {
         const tournamentId = Number(gameId);
-        const wallet = walletPort ?? getLegacyWalletPort();
+        const wallet = walletPort;
 
         notifySubmissionState('validating');
 

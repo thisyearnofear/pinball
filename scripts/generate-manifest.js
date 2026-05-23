@@ -11,7 +11,7 @@ const { join } = require('path');
 // Configuration
 const DOMAIN = 'arbipinball.netlify.app';
 const APP_CONFIG = {
-  name: 'ArbiPinball',
+  name: 'Mezo Pinball Arcade',
   iconUrl: `https://${DOMAIN}/assets/logo.png`,
   homeUrl: `https://${DOMAIN}`,
   imageUrl: `https://${DOMAIN}/assets/logo.png`,

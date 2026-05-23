@@ -41,13 +41,16 @@ export default defineConfig({
         },
     },
     build: {
+        chunkSizeWarningLimit: 800,
         rollupOptions: {
             output: {
                 manualChunks(id) {
                     if (id.includes('node_modules')) {
-                        if (id.includes('ethers')) return 'vendor_ethers';
-                        if (id.includes('matter-js')) return 'vendor_physics';
-                        if (id.includes('@farcaster')) return 'vendor_farcaster';
+                        // ethers + viem are tightly coupled (wagmi depends on both)
+                        if (id.includes('ethers') || id.includes('viem') || id.includes('ox')) return 'vendor_crypto';
+                        // Matter.js physics engine (isolated, no cross-deps)
+                        if (id.includes('matter-js') || id.includes('matter-attractors')) return 'vendor_physics';
+                        // Everything else stays in the default chunk to avoid circular splits
                     }
                 }
             }

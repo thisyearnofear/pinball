@@ -1,0 +1,132 @@
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: var(--space-2xl) var(--space-lg);
+}
+
+.loadingContainer {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: var(--space-2xl);
+}
+
+.loadingTitle {
+  margin: 0 auto var(--space-2xl);
+}
+
+.loadingGrid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.loadingCard {
+  height: 80px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+}
+
+.marquee {
+  margin-bottom: var(--space-3xl);
+}
+
+.marqueeSubtitle {
+  text-align: center;
+  margin: var(--space-sm) 0 0;
+  font-family: var(--font-family-arcade);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  line-height: 1.6;
+}
+
+.tournamentList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  margin-bottom: var(--space-2xl);
+}
+
+.practiceWrap {
+  text-align: center;
+}
+
+/* ArcadeCard */
+.card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.cardActive {
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.15) 0%, rgba(0, 0, 0, 0.3) 100%);
+  border: 2px solid var(--world-primary, #6366f1);
+}
+
+.thumbnail {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-2xl);
+  opacity: 0.6;
+}
+
+.info {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  font-size: var(--text-md);
+  font-weight: var(--font-semibold);
+  margin-bottom: var(--space-xs);
+  font-family: var(--font-family-display);
+  letter-spacing: 0.05em;
+}
+
+.nameActive {
+  color: var(--text-primary);
+}
+
+.nameInactive {
+  color: var(--text-secondary);
+}
+
+.meta {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.actions {
+  flex-shrink: 0;
+}
+
+.selectHint {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.activeDot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 8px #22c55e;
+}

@@ -3,6 +3,8 @@ node_modules
 /dist
 /backend/dist
 /apps/web-react/dist/
+/.next
+/out
 .pnpm-store/
 *.tsbuildinfo
 build.sh
@@ -40,4 +42,7 @@ pnpm-debug.log*
 # Local Netlify folder
 .netlify
 .blackboxcli/
+
+# Command Code
+.commandcode/
 

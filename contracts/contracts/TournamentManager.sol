@@ -195,6 +195,11 @@ contract TournamentManager {
         }
     }
 
+    /**
+     * Legacy finalize — O(n^2) selection sort.
+     * Kept for backward compatibility with small tournaments.
+     * For tournaments with many participants, use finalizeWithSignedWinners().
+     */
     function finalize(uint256 id) external {
         Tournament storage t = tournaments[id];
         require(t.id == id, "NO_TOURNAMENT");
@@ -223,6 +228,52 @@ contract TournamentManager {
         address[] storage w = winners[id];
         for (uint16 k = 0; k < topN && k < n; k++) {
             w.push(arr[k]);
+        }
+
+        t.finalized = true;
+        emit Finalized(id, winners[id]);
+    }
+
+    /**
+     * Gas-efficient finalize: owner submits pre-sorted winners signed by scoreSigner.
+     *
+     * The off-chain backend sorts the leaderboard and signs:
+     *   keccak256(abi.encodePacked("PINBALL_FINALIZE:v1", id, chainId, topN, ...winnerAddresses))
+     *
+     * This replaces the O(n^2) on-chain sort with O(topN) storage writes,
+     * scaling to thousands of participants without hitting gas limits.
+     */
+    function finalizeWithSignedWinners(
+        uint256 id,
+        address[] calldata winnerAddrs,
+        bytes calldata signature
+    ) external {
+        Tournament storage t = tournaments[id];
+        require(t.id == id, "NO_TOURNAMENT");
+        require(block.timestamp > t.endTime, "NOT_ENDED");
+        require(!t.finalized, "ALREADY_FINAL");
+        require(winnerAddrs.length == t.topN, "WINNER_COUNT_MISMATCH");
+
+        // Verify the winners list was signed by the trusted score signer
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19Ethereum Signed Message:\n32",
+                keccak256(
+                    abi.encodePacked(
+                        "PINBALL_FINALIZE:v1",
+                        id,
+                        block.chainid,
+                        t.topN,
+                        winnerAddrs
+                    )
+                )
+            )
+        );
+        require(_recoverSigner(digest, signature) == scoreSigner, "BAD_FINALIZE_SIG");
+
+        address[] storage w = winners[id];
+        for (uint256 i = 0; i < winnerAddrs.length; i++) {
+            w.push(winnerAddrs[i]);
         }
 
         t.finalized = true;

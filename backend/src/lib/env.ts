@@ -21,6 +21,9 @@ const EnvSchema = z.object({
   MISSION_SCORE_THRESHOLD: z.coerce.number().int().nonnegative().default(250000),
   // Optional: require multiball flag in metadata to award mission (enables "Jackpot Multiball").
   MISSION_REQUIRE_MULTIBALL: z.coerce.boolean().default(false),
+  // Optional Redis URL. When set, rate limiter and nonce tracker use Redis.
+  // Falls back to in-memory stores when unset (fine for local dev).
+  REDIS_URL: z.string().optional(),
 });
 
 export const env = EnvSchema.parse(process.env);

@@ -49,7 +49,15 @@ export function useWorldTheme(worldId: string | null): MarbleWorld | null {
   return world;
 }
 
-export function getWorldAccent(worldId: string | null) {
+export type WorldAccent = {
+  primary: string;
+  primaryHover: string;
+  gradient: string;
+  glow: string;
+  muted: string;
+};
+
+export function getWorldAccent(worldId: string | null): WorldAccent {
   const world = worldId ? getWorldById(worldId) : null;
   if (!world) return {
     primary: colors.accent.primary,
