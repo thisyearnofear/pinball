@@ -18,7 +18,7 @@ export function ShareCard(props: ShareCardProps) {
   const gradient = world?.gradient || 'linear-gradient(135deg, #1a0a2e, #0f0f23)';
 
   function handleCopy() {
-    const text = `Mezo Pinball Arcade\n` +
+    const text = `Pinball Arcade\n` +
       `${props.tournamentName ? `Tournament: ${props.tournamentName}\n` : ''}` +
       `Score: ${props.score.toLocaleString()}\n` +
       `World: ${world?.name || props.worldId}\n` +

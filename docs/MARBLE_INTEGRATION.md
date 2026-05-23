@@ -1,6 +1,6 @@
 # Marble × Pinball Integration
 
-> **Vision:** Mezo Pinball Arcade is no longer "another web pinball game." Each
+> **Vision:** Pinball Arcade is no longer "another web pinball game." Each
 > table lives **inside a generative photoreal 3D world** authored by World Labs'
 > Marble. Tournaments are themed worlds. Players will eventually be able to
 > generate their own table-worlds from a text prompt and stake them on-chain.

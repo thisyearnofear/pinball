@@ -1,13 +1,4 @@
-import { ethers } from "hardhat";
-
-/**
- * Deploy TournamentManager for Mezo.
- *
- * Deployment is intentionally simple: we pass only immutable, env-driven values:
- * - scoreSigner: backend signer address (EOA)
- * - musd: MUSD ERC20 address on the target chain
- * - entryFee: token units (18 decimals expected for MUSD on Mezo)
- */
+const hre = require("hardhat");
 
 function requireEnv(name: string, value: string | undefined): string {
   if (!value || value.trim().length === 0) {
@@ -17,26 +8,39 @@ function requireEnv(name: string, value: string | undefined): string {
 }
 
 async function main() {
+  const [deployer] = await hre.ethers.getSigners();
+
   const scoreSigner = requireEnv("SCORE_SIGNER_ADDR", process.env.SCORE_SIGNER_ADDR);
   const musd = requireEnv("MUSD_ADDRESS", process.env.MUSD_ADDRESS);
-
-  // Default: 1 MUSD entry fee (18 decimals). Override as needed.
   const entryFee = process.env.ENTRY_FEE ? BigInt(process.env.ENTRY_FEE) : 1n * 10n ** 18n;
 
-  const TournamentManager = await ethers.getContractFactory("TournamentManager");
-  const tm = await TournamentManager.deploy(scoreSigner, musd, entryFee);
-  await tm.waitForDeployment();
+  console.log("Deploying from:", deployer.address);
 
-  const addr = await tm.getAddress();
-  console.log("TournamentManager deployed:", addr);
-  console.log("scoreSigner:", scoreSigner);
-  console.log("musd:", musd);
-  console.log("entryFee:", entryFee.toString());
+  // Use raw tx to avoid ethers v6 resolveName issue with Hardhat provider
+  const tmArtifact = await hre.artifacts.readArtifact("TournamentManager");
+  const tmTx = await deployer.sendTransaction({
+    data: tmArtifact.bytecode + hre.ethers.AbiCoder.defaultAbiCoder().encode(
+      ["address", "address", "uint256"],
+      [scoreSigner, musd, entryFee]
+    ).slice(2),
+  });
+  const tmReceipt = await tmTx.wait();
+  const tmAddr = tmReceipt.contractAddress;
+  console.log("TournamentManager deployed:", tmAddr);
+  console.log("  scoreSigner:", scoreSigner);
+  console.log("  musd:", musd);
+  console.log("  entryFee:", entryFee.toString());
 
-  const MissionPool = await ethers.getContractFactory("MissionPool");
-  const mp = await MissionPool.deploy(musd, scoreSigner);
-  await mp.waitForDeployment();
-  console.log("MissionPool deployed:", await mp.getAddress());
+  const mpArtifact = await hre.artifacts.readArtifact("MissionPool");
+  const mpTx = await deployer.sendTransaction({
+    data: mpArtifact.bytecode + hre.ethers.AbiCoder.defaultAbiCoder().encode(
+      ["address", "address"],
+      [musd, scoreSigner]
+    ).slice(2),
+  });
+  const mpReceipt = await mpTx.wait();
+  const mpAddr = mpReceipt.contractAddress;
+  console.log("MissionPool deployed:", mpAddr);
 }
 
 main().catch((err) => {

@@ -2,7 +2,8 @@
  * Tournament metadata - off-chain configuration for tournaments.
  *
  * Maps tournament IDs to their world theme and other metadata.
- * This allows themed tournaments without contract changes.
+ * Entry fees and prize pools shown here are defaults; the contract
+ * is the single source of truth for live values.
  */
 
 import { MARBLE_WORLDS, type MarbleWorld, getWorldById } from './worlds';
@@ -33,33 +34,33 @@ export const TOURNAMENT_META: Record<number, TournamentMeta> = {
     id: 1,
     name: 'Pirate Ship',
     worldId: 'pirate-ship',
-    description: 'Dive into the sunken pirate ship!',
-    entryFee: '10 MUSD',
-    prizePool: '50 MUSD',
+    description: 'Brave the depths of the sunken galleon.',
+    entryFee: '1 MUSD',
+    prizePool: 'Pot grows with each entry',
   },
   2: {
     id: 2,
     name: 'Spaceship',
     worldId: 'spaceship',
-    description: 'Explore the cozy spaceship.',
-    entryFee: '10 MUSD',
-    prizePool: '50 MUSD',
+    description: 'Zero-gravity pinball aboard a cozy spaceship.',
+    entryFee: '1 MUSD',
+    prizePool: 'Pot grows with each entry',
   },
   3: {
     id: 3,
     name: 'Hobbiton',
     worldId: 'hobbiton',
-    description: 'Adventure in the Shire.',
-    entryFee: '10 MUSD',
-    prizePool: '50 MUSD',
+    description: 'Pinball in the Shire. Second breakfast included.',
+    entryFee: '1 MUSD',
+    prizePool: 'Pot grows with each entry',
   },
   4: {
     id: 4,
     name: 'Haunted House',
     worldId: 'haunted-house',
-    description: 'Spooky adventures await.',
-    entryFee: '10 MUSD',
-    prizePool: '50 MUSD',
+    description: 'Spooky bumpers, spectral jackpots.',
+    entryFee: '1 MUSD',
+    prizePool: 'Pot grows with each entry',
   },
 };
 

@@ -1,8 +1,18 @@
-# Mezo Pinball Arcade
+# Pinball Arcade
 
-Mezo Pinball Arcade is a Web3 pinball game built for the Mezo ecosystem, featuring on-chain tournaments where players compete for **MUSD** prizes. It combines retro pinball gameplay with blockchain tournament rails, allowing users to connect a wallet and win Bitcoin-backed stablecoin rewards based on their scores.
+Pinball Arcade is a Web3 pinball game built for the Mezo ecosystem, featuring on-chain tournaments where players compete for **MUSD** prizes. It combines retro pinball gameplay with blockchain tournament rails, allowing users to connect a wallet and win Bitcoin-backed stablecoin rewards based on their scores.
 
-Built with **Next.js 16.2** (Turbopack, static export), Matter.js for physics, and Wagmi/RainbowKit for wallet connectivity.
+Built with **Next.js 16.2** (Turbopack, static export), Matter.js for physics, and Wagmi/RainbowKit for wallet connectivity. All tournament entry fees and prizes are denominated in **MUSD** (Bitcoin-backed stablecoin on Mezo).
+
+## Live contracts (Mezo Testnet)
+
+| Contract | Address | 
+|---|---|
+| TournamentManager | `0x39067C81a3ccc3184000b88b7466A4A77B59cfa0` |
+| MissionPool | `0xC3fbd6315F00aB3fcc2d1855A75d6B0c3af235B3` |
+| MUSD | `0x118917a40FAF1CD7a13dB0Ef56C86De7973Ac503` |
+
+See [docs/MEZO_SETUP.md](docs/MEZO_SETUP.md) for full deployment and configuration guide.
 
 ## Architecture
 
@@ -133,20 +143,13 @@ New in this release: `finalizeWithSignedWinners()` replaces O(n^2) on-chain sort
 
 ## Active Tournament
 
-Current tournament details on Arbitrum One (Chain ID: 42161):
+Mezo Testnet (Chain ID: 31611):
 
-- **Tournament ID**: 1
-- **Contract Address**: `0xD6E3E1c800F26cE18C8D5bc3115aA35f59A99952`
-- **Duration**: 7 days (Nov 16, 2024 - Nov 23, 2024)
-- **Start Time**: 1763226400 (Unix timestamp)
-- **End Time**: 1763831200 (Unix timestamp)
-- **Winners**: Top 3 players eligible for prizes
-- **Prize Distribution**: 
-  - 1st Place: 50%
-  - 2nd Place: 30%
-  - 3rd Place: 20%
-- **Entry Fee**: Set via contract (see `.env` or contract call `entryFeeWei()`)
-- **Transaction Hash**: `0x28116391229168d5306a11461d9c9de67a5f3c957763a8bc6f1a77c4226e0cf6`
+- **TournamentManager**: `0x39067C81a3ccc3184000b88b7466A4A77B59cfa0`
+- **MUSD**: `0x118917a40FAF1CD7a13dB0Ef56C86De7973Ac503`
+- **Entry Fee**: 1 MUSD (configurable by owner)
+- **Winners**: Top N players eligible for prizes (configurable per tournament)
+- **Explorer**: https://explorer.test.mezo.org/
 
 ## Deployment
 

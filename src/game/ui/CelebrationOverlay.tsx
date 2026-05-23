@@ -48,6 +48,12 @@ export function CelebrationOverlay(props: Props) {
           </Card>
         )}
 
+        {!props.isPractice && (
+          <div style={{ textAlign: "center", fontSize: typography.size.sm, color: colors.text.muted, padding: `${spacing.xs}px 0` }}>
+            Mezo Testnet · MUSD prizes via TournamentManager
+          </div>
+        )}
+
         <div style={{ display: "flex", flexDirection: "column", gap: spacing.sm }}>
           <Button fullWidth onClick={props.onPlayAgain}>
             Play Again

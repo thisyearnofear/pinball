@@ -21,8 +21,7 @@ export function createInputController(cb: Callbacks) {
     const { type, keyCode } = event;
     switch (keyCode) {
       default:
-        // @ts-expect-error Property 'env' does not exist on type 'ImportMeta'
-        if (import.meta.env.MODE !== "production") {
+        if (process.env.NODE_ENV !== "production") {
           if (type === "keyup") {
             return;
           }

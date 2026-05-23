@@ -34,12 +34,42 @@
 .marqueeSubtitle {
   text-align: center;
   margin: var(--space-sm) 0 0;
-  font-family: var(--font-family-arcade);
   font-size: var(--text-sm);
   color: var(--text-muted);
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
+  letter-spacing: 0.08em;
   line-height: 1.6;
+}
+
+.connectPrompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-lg);
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+
+.connectIcon {
+  font-size: 28px;
+}
+
+.connectText {
+  font-size: var(--text-md);
+  color: var(--text-primary);
+  font-weight: var(--font-medium);
+}
+
+.connectChain {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-family: var(--font-family-mono);
+  padding: var(--space-xs) var(--space-sm);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-sm);
 }
 
 .tournamentList {

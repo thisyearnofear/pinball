@@ -65,42 +65,26 @@ export type AppConfig = {
 
 let cached: AppConfig | null = null;
 
-function requireEnv(key: string, value: unknown): string {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`Missing required config: ${key}`);
-  }
-  return value.trim();
-}
-
-function optionalEnv(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const v = value.trim();
-  return v.length ? v : undefined;
-}
-
 export function getAppConfig(): AppConfig {
   if (cached) return cached;
 
-  // @ts-expect-error Vite provides import.meta.env
-  const env = import.meta.env as Record<string, unknown>;
-
-  const chainId = Number(env.VITE_CHAIN_ID);
+  const chainId = Number(process.env.NEXT_PUBLIC_CHAIN_ID);
   if (!Number.isFinite(chainId) || chainId <= 0) {
-    throw new Error("Invalid VITE_CHAIN_ID (must be a positive number)");
+    throw new Error("Invalid NEXT_PUBLIC_CHAIN_ID (must be a positive number)");
   }
 
   const cfg: AppConfig = {
     chain: {
       chainId,
-      rpcUrlPublic: (typeof env.VITE_RPC_URL_PUBLIC === "string" && env.VITE_RPC_URL_PUBLIC.trim().length > 0)
-        ? env.VITE_RPC_URL_PUBLIC.trim()
-        : "https://arb1.arbitrum.io/rpc",
-      chainName: optionalEnv(env.VITE_CHAIN_NAME),
-      blockExplorerUrl: optionalEnv(env.VITE_BLOCK_EXPLORER_URL),
+      rpcUrlPublic: (typeof process.env.NEXT_PUBLIC_RPC_URL_PUBLIC === "string" && process.env.NEXT_PUBLIC_RPC_URL_PUBLIC.trim().length > 0)
+        ? process.env.NEXT_PUBLIC_RPC_URL_PUBLIC.trim()
+        : "https://rpc.test.mezo.org",
+      chainName: process.env.NEXT_PUBLIC_CHAIN_NAME,
+      blockExplorerUrl: process.env.NEXT_PUBLIC_BLOCK_EXPLORER_URL,
       nativeCurrency: (() => {
-        const name = optionalEnv(env.VITE_NATIVE_CURRENCY_NAME);
-        const symbol = optionalEnv(env.VITE_NATIVE_CURRENCY_SYMBOL);
-        const decimalsRaw = optionalEnv(env.VITE_NATIVE_CURRENCY_DECIMALS);
+        const name = process.env.NEXT_PUBLIC_NATIVE_CURRENCY_NAME;
+        const symbol = process.env.NEXT_PUBLIC_NATIVE_CURRENCY_SYMBOL;
+        const decimalsRaw = process.env.NEXT_PUBLIC_NATIVE_CURRENCY_DECIMALS;
         const decimals = decimalsRaw ? Number(decimalsRaw) : undefined;
 
         if (!name || !symbol || decimals === undefined) return undefined;
@@ -111,30 +95,29 @@ export function getAppConfig(): AppConfig {
     },
     contracts: {
       tournamentManager: {
-        address: (typeof env.VITE_TOURNAMENT_MANAGER_ADDRESS === "string"
-          ? env.VITE_TOURNAMENT_MANAGER_ADDRESS
+        address: (typeof process.env.NEXT_PUBLIC_TOURNAMENT_MANAGER_ADDRESS === "string"
+          ? process.env.NEXT_PUBLIC_TOURNAMENT_MANAGER_ADDRESS
           : ""
         ).trim(),
       },
       musd: {
-        // Allow empty for now (until Mezo integration lands), but keep the key present.
-        address: (typeof env.VITE_MUSD_ADDRESS === "string" ? env.VITE_MUSD_ADDRESS : "").trim(),
+        address: (typeof process.env.NEXT_PUBLIC_MUSD_ADDRESS === "string" ? process.env.NEXT_PUBLIC_MUSD_ADDRESS : "").trim(),
       },
       missionPool: {
-        address: (typeof env.VITE_MISSION_POOL_ADDRESS === "string" ? env.VITE_MISSION_POOL_ADDRESS : "").trim(),
+        address: (typeof process.env.NEXT_PUBLIC_MISSION_POOL_ADDRESS === "string" ? process.env.NEXT_PUBLIC_MISSION_POOL_ADDRESS : "").trim(),
       },
     },
     score: {
-      prefix: optionalEnv(env.VITE_SCORE_PREFIX) ?? "PINBALL_SCORE:v2",
+      prefix: process.env.NEXT_PUBLIC_SCORE_PREFIX ?? "PINBALL_SCORE:v2",
     },
     backend: {
-      baseUrl: (typeof env.VITE_BACKEND_URL === "string" && env.VITE_BACKEND_URL.trim().length > 0)
-        ? env.VITE_BACKEND_URL.trim()
+      baseUrl: (typeof process.env.NEXT_PUBLIC_BACKEND_URL === "string" && process.env.NEXT_PUBLIC_BACKEND_URL.trim().length > 0)
+        ? process.env.NEXT_PUBLIC_BACKEND_URL.trim()
         : "",
     },
     missions: {
       activeMissionId: (() => {
-        const v = optionalEnv(env.VITE_ACTIVE_MISSION_ID);
+        const v = process.env.NEXT_PUBLIC_ACTIVE_MISSION_ID;
         if (!v) return undefined;
         const n = Number(v);
         if (!Number.isFinite(n) || n <= 0) return undefined;

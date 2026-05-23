@@ -34,8 +34,21 @@ export function AboutModal(props: { onClose: () => void }) {
     <Modal title="About" onClose={props.onClose}>
       <div style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}>
         <p style={{ margin: 0, fontSize: typography.size.md, color: colors.text.secondary, lineHeight: typography.lineHeight.relaxed }}>
-          Mezo Pinball Arcade is a demo pinball game with onchain tournament scoring (MUSD) and Mezo Passport wallet integration.
+          Pinball Arcade — retro pinball with onchain tournaments on Mezo. Compete for MUSD prizes (Bitcoin-backed stablecoin). 
+          Scores are cryptographically signed and verified onchain via EIP-191. Built for the Mezo Hackathon.
         </p>
+
+        <div>
+          <h3 style={{ margin: `0 0 ${spacing.md}px`, fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text.primary }}>
+            Contracts (Mezo Testnet)
+          </h3>
+          <div style={{ fontSize: typography.size.sm, color: colors.text.secondary, fontFamily: typography.fontFamilyMono, lineHeight: typography.lineHeight.relaxed }}>
+            TournamentManager: 0x3906...cfa0<br />
+            MissionPool: 0xC3fb...35B3<br />
+            MUSD: 0x1189...c503<br />
+            Chain: 31611
+          </div>
+        </div>
 
         <div>
           <h3 style={{ margin: `0 0 ${spacing.md}px`, fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text.primary }}>

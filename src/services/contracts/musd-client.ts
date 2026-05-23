@@ -18,7 +18,7 @@ function getPublicProvider(): ethers.Provider {
 function getMUSDAddress(): string {
   const { musd } = getContractsConfig();
   if (!musd.address) {
-    throw new Error("MUSD address not configured. Set VITE_MUSD_ADDRESS");
+    throw new Error("MUSD address not configured. Set NEXT_PUBLIC_MUSD_ADDRESS");
   }
   return musd.address;
 }

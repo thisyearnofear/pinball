@@ -1,76 +1,88 @@
 # Mezo Setup (Testnet → Mainnet)
 
-This project targets the **Mezo Hackathon** requirements:
-- integrate **MUSD** + **Mezo Passport**
-- deploy a working demo on **Mezo Testnet**
+Hackathon deployment guide for **Pinball Arcade**.
 
-## Network constants
+## Live deployment (Mezo Testnet)
 
-### Mezo Testnet
+| Contract | Address | 
+|---|---|
+| TournamentManager | `0x39067C81a3ccc3184000b88b7466A4A77B59cfa0` |
+| MissionPool | `0xC3fbd6315F00aB3fcc2d1855A75d6B0c3af235B3` |
+| MUSD (ERC20) | `0x118917a40FAF1CD7a13dB0Ef56C86De7973Ac503` |
+
 - Chain ID: `31611`
 - RPC: `https://rpc.test.mezo.org`
 - Explorer: https://explorer.test.mezo.org/
+- Entry fee: 1 MUSD (configurable via `setEntryFee()`)
+- Score signer: set via `setScoreSigner()` — same key as backend
 
 ### Mezo Mainnet
 - Chain ID: `31612`
 - Explorer: https://explorer.mezo.org/
-- Public RPC (Validation Cloud): `https://mainnet.mezo.public.validationcloud.io/`
-
-## Token addresses
-
-MUSD (ERC20):
-- Testnet: `0x118917a40FAF1CD7a13dB0Ef56C86De7973Ac503`
-- Mainnet: `0xdD468A1DDc392dcdbEf6db6e34E89AA338F9F186`
+- RPC: `https://mainnet.mezo.public.validationcloud.io/`
+- MUSD: `0xdD468A1DDc392dcdbEf6db6e34E89AA338F9F186`
 
 ## Environment variables
 
-### Frontend (root `.env`)
-Required:
-- `VITE_CHAIN_ID`
-- `VITE_RPC_URL_PUBLIC` (set to official testnet RPC for now; swap to Spectrum when ready)
-- `VITE_TOURNAMENT_MANAGER_ADDRESS`
-- `VITE_MUSD_ADDRESS`
-- `VITE_BACKEND_URL`
+### Frontend (`/ .env`)
+```
+NEXT_PUBLIC_CHAIN_ID=31611
+NEXT_PUBLIC_RPC_URL_PUBLIC=https://rpc.test.mezo.org
+NEXT_PUBLIC_TOURNAMENT_MANAGER_ADDRESS=0x39067C81a3ccc3184000b88b7466A4A77B59cfa0
+NEXT_PUBLIC_MUSD_ADDRESS=0x118917a40FAF1CD7a13dB0Ef56C86De7973Ac503
+NEXT_PUBLIC_MISSION_POOL_ADDRESS=0xC3fbd6315F00aB3fcc2d1855A75d6B0c3af235B3
+NEXT_PUBLIC_BACKEND_URL=https://your-backend.ondigitalocean.app
+```
 
-Optional (differentiators):
-- `VITE_MISSION_POOL_ADDRESS`
-- `VITE_ACTIVE_MISSION_ID` (optional: triggers in-game mission/jackpot awarding on score submit)
-
-### Mezo Passport (React)
-Mezo Passport is a React/RainbowKit-based integration. A React shell lives at:
-`apps/web-react/`
-
-It will become the primary UI shell as the Vue shell is migrated out.
+Optional:
+- `NEXT_PUBLIC_CHAIN_NAME` / `NEXT_PUBLIC_BLOCK_EXPLORER_URL` — wallet UX
+- `NEXT_PUBLIC_ACTIVE_MISSION_ID` — triggers Sponsored Missions on score submit
 
 ### Backend (`backend/.env`)
-Required:
-- `CHAIN_ID` (must match deployed chain)
-- `SCORE_SIGNER_PK` (private key used for score signing)
-
-Optional:
-- `SCORE_PREFIX` (defaults to `PINBALL_SCORE:v2`)
-- `MISSION_POOL_ADDRESS` (optional: enable Sponsored Missions payouts)
-- `MISSION_SCORE_THRESHOLD` (optional)
-- `MISSION_REQUIRE_MULTIBALL` (optional: enables Jackpot Multiball behavior)
+```
+CHAIN_ID=31611
+SCORE_SIGNER_PK=<deployer-private-key>
+RPC_URL=https://rpc.test.mezo.org
+TOURNAMENT_MANAGER_ADDRESS=0x39067C81a3ccc3184000b88b7466A4A77B59cfa0
+MISSION_POOL_ADDRESS=0xC3fbd6315F00aB3fcc2d1855A75d6B0c3af235B3
+```
 
 ### Contracts (`contracts/.env`)
-Required for deploy:
-- `PRIVATE_KEY`
-- `SCORE_SIGNER_ADDR`
-- `MUSD_ADDRESS`
+```
+PRIVATE_KEY=<deployer-private-key>
+SCORE_SIGNER_ADDR=<deployer-address>
+MUSD_ADDRESS=0x118917a40FAF1CD7a13dB0Ef56C86De7973Ac503
+ENTRY_FEE=1000000000000000000
+```
 
-Optional:
-- `ENTRY_FEE` (default is 1 MUSD in 18-decimal base units)
+## Deploying
+
+```bash
+cd contracts
+pnpm install
+cp .env.example .env    # fill in PRIVATE_KEY and SCORE_SIGNER_ADDR
+pnpm run deploy:mezotestnet
+```
+
+Then update the frontend `.env` with the new addresses and rebuild.
+
+## Creating a tournament
+
+Use the contract owner wallet to call:
+
+```solidity
+createTournament(
+  startTime,    // unix timestamp
+  endTime,      // unix timestamp
+  topN,         // number of winners (e.g. 3)
+  prizeBps      // prize distribution in basis points (e.g. [5000, 3000, 2000])
+)
+```
 
 ## RPC provider bonuses
 
 ### Spectrum Nodes (Testnet)
-When you have the Spectrum HTTPS RPC URL, set:
-- `VITE_RPC_URL_PUBLIC=<SPECTRUM_URL>`
-- `MEZO_TESTNET_RPC_URL=<SPECTRUM_URL>` (contracts deploy)
-
-Document it in your submission as “primary testnet RPC provider”.
+`NEXT_PUBLIC_RPC_URL_PUBLIC=<SPECTRUM_URL>`
 
 ### Validation Cloud (Mainnet)
-For mainnet testing/launch, you can use the public endpoint:
-- `https://mainnet.mezo.public.validationcloud.io/`
+`https://mainnet.mezo.public.validationcloud.io/`

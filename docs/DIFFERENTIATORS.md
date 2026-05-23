@@ -46,7 +46,7 @@ Replace `awardWinner` authorization with an EIP-191 signature scheme so awards c
 
 ### How it works
 - Create a mission in `MissionPool` that represents the “jackpot”.
-- Set the mission as active in the frontend (`VITE_ACTIVE_MISSION_ID`).
+- Set the mission as active in the frontend (`NEXT_PUBLIC_ACTIVE_MISSION_ID`).
 - Enable a backend guard so the award only triggers if the player actually hit multiball:
   - `MISSION_REQUIRE_MULTIBALL=true`
 

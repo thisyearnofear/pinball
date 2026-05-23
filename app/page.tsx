@@ -28,7 +28,7 @@ const GameScreen = dynamic(() => import("@/game/GameScreen"), {
             marginBottom: 8,
           }}
         >
-          Mezo Pinball
+          Pinball Arcade
         </div>
         <div style={{ fontSize: 13 }}>Loading...</div>
       </div>

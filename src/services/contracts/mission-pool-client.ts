@@ -8,7 +8,7 @@ import type { WalletPort } from "@/domains/wallet/wallet-port";
 function getMissionPoolAddress(): string {
   const { missionPool } = getContractsConfig();
   if (!missionPool.address) {
-    throw new Error("MissionPool not configured. Set VITE_MISSION_POOL_ADDRESS");
+    throw new Error("MissionPool not configured. Set NEXT_PUBLIC_MISSION_POOL_ADDRESS");
   }
   return missionPool.address;
 }

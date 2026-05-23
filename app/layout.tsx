@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "Mezo Pinball Arcade",
+  title: "Pinball Arcade",
   description:
     "Retro-style pinball game with on-chain tournaments for MUSD prizes on the Mezo ecosystem.",
   openGraph: {

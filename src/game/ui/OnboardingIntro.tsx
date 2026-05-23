@@ -11,18 +11,18 @@ type Props = {
 const slides = [
   {
     icon: "🎯",
-    title: "Welcome to Mezo Pinball",
-    body: "A retro pinball arcade with onchain tournaments. Compete for MUSD prizes across unique Marble worlds.",
+    title: "Pinball Arcade",
+    body: "Compete in onchain pinball tournaments on Mezo. Pay entry fees in MUSD — Bitcoin-backed stablecoin — and win real rewards.",
+  },
+  {
+    icon: "₿",
+    title: "Built on Mezo",
+    body: "Self-service banking on Bitcoin rails. Borrow MUSD against BTC collateral at 1% fixed rates, then spend or earn yield in DeFi.",
   },
   {
     icon: "💰",
-    title: "Win Real Rewards",
-    body: "Enter tournaments, set high scores, and earn MUSD. Every run is recorded onchain — your scores are permanent.",
-  },
-  {
-    icon: "🚀",
-    title: "Ready to Play?",
-    body: "Start with practice mode to learn the controls, then jump into tournaments to compete for the top spot.",
+    title: "Win MUSD Prizes",
+    body: "Enter a tournament, set high scores, and earn MUSD. Every score is cryptographically signed and recorded onchain — permanent and auditable.",
   },
 ];
 

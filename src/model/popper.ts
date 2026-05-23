@@ -27,8 +27,7 @@ import type { ActorArgs, IRendererClass } from "@/model/actor";
 import type { IPhysicsEngine } from "@/model/physics/engine";
 import RectRenderer from "@/renderers/rect-renderer";
 
-// @ts-expect-error Property 'env' does not exist on type 'ImportMeta', Vite takes care of it
-const DEBUG = import.meta.env.MODE !== "production";
+const DEBUG = process.env.NODE_ENV !== "production";
 
 export default class Popper extends Rect {
     public once: boolean;

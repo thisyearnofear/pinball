@@ -34,15 +34,25 @@ export function ArcadeLobby(props: Props) {
     );
   }
 
+  const hasActive = tournaments.some(t => props.activeTournamentId === t.id);
+
   return (
     <CRTOverlay intensity={0.15}>
       <div className={styles.container}>
         <div className={styles.marquee}>
-          <NeonTitle text="MEZO PINBALL" size="lg" color="#6366f1" />
+          <NeonTitle text="PINBALL ARCADE" size="lg" color="#6366f1" />
           <p className={styles.marqueeSubtitle}>
-            Insert coin to play
+            Onchain pinball on Mezo — compete for MUSD prizes
           </p>
         </div>
+
+        {!props.isConnected && (
+          <div className={styles.connectPrompt}>
+            <div className={styles.connectIcon}>🔌</div>
+            <div className={styles.connectText}>Connect your wallet to enter tournaments and win MUSD</div>
+            <div className={styles.connectChain}>Mezo Testnet · Chain 31611</div>
+          </div>
+        )}
 
         <div className={styles.tournamentList}>
           {tournaments.map((t) => (
@@ -84,6 +94,41 @@ function ArcadeCard(props: CardProps) {
   const gradient = world?.gradient || "linear-gradient(135deg, #1a0a2e, #0f0f23)";
   const cardClass = `${styles.card} ${props.isActive ? styles.cardActive : ""}`;
 
+  function buttonLabel() {
+    if (!props.isConnected) return "Connect Wallet";
+    if (props.isActive && props.entered) return "Play Now";
+    if (props.isActive && !props.entered) return "Enter";
+    return "Select";
+  }
+
+  function buttonVariant() {
+    if (props.isActive && props.entered) return "primary" as const;
+    if (props.isActive && !props.entered) return "secondary" as const;
+    return "ghost" as const;
+  }
+
+  function isDisabled() {
+    if (!props.isConnected) return false;
+    if (props.isActive && !props.entered) return false;
+    if (props.isActive && props.entered) return false;
+    return true;
+  }
+
+  function handleAction(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!props.isConnected) {
+      props.onSelect();
+      return;
+    }
+    if (props.isActive && props.entered) {
+      props.onStart();
+    } else if (props.isActive && !props.entered) {
+      props.onEnter();
+    } else {
+      props.onSelect();
+    }
+  }
+
   return (
     <div onClick={props.onSelect} className={cardClass}>
       <div className={styles.thumbnail} style={{ background: gradient }}>
@@ -95,20 +140,14 @@ function ArcadeCard(props: CardProps) {
           {props.tournament.name}
         </div>
         <div className={styles.meta}>
-          Entry: {props.tournament.entryFee || "10 MUSD"} · Prize: {props.tournament.prizePool || "50 MUSD"}
+          Entry: {props.tournament.entryFee || "1 MUSD"} · Prize: {props.tournament.prizePool || "50 MUSD"}
         </div>
       </div>
 
       <div className={styles.actions}>
-        {props.isActive && props.entered ? (
-          <Button onClick={(e) => { e.stopPropagation(); props.onStart(); }}>Play</Button>
-        ) : props.isActive && !props.entered ? (
-          <Button variant="secondary" disabled={!props.isConnected} onClick={(e) => { e.stopPropagation(); props.onEnter(); }}>
-            {props.isConnected ? "Enter" : "Connect"}
-          </Button>
-        ) : (
-          <div className={styles.selectHint}>Select</div>
-        )}
+        <Button variant={buttonVariant()} disabled={isDisabled()} onClick={handleAction}>
+          {buttonLabel()}
+        </Button>
       </div>
 
       {props.isActive && <div className={styles.activeDot} />}

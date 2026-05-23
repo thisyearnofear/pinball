@@ -14,7 +14,7 @@ type Props = {
   tournamentName: string | null;
   worldAccent: WorldAccent;
   onOpenMenu: () => void;
-  onOpenModal: (modal: "leaderboard" | "settings") => void;
+  onOpenModal: (modal: "leaderboard" | "settings" | "how" | "about") => void;
 };
 
 export function AppHeader({ view, gameActive, tournamentName, worldAccent, onOpenMenu, onOpenModal }: Props) {
@@ -24,8 +24,8 @@ export function AppHeader({ view, gameActive, tournamentName, worldAccent, onOpe
   const mobileMenuItems = useMemo(() => [
     { label: "Leaderboard", action: () => { onOpenModal("leaderboard"); setShowMobileMenu(false); } },
     { label: "Settings", action: () => { onOpenModal("settings"); setShowMobileMenu(false); } },
-    { label: "How to play", action: () => { setShowMobileMenu(false); } },
-    { label: "About", action: () => { setShowMobileMenu(false); } },
+    { label: "How to play", action: () => { onOpenModal("how"); setShowMobileMenu(false); } },
+    { label: "About", action: () => { onOpenModal("about"); setShowMobileMenu(false); } },
   ], [onOpenModal]);
 
   const headerStyle: React.CSSProperties = {
@@ -50,7 +50,7 @@ export function AppHeader({ view, gameActive, tournamentName, worldAccent, onOpe
       >
         <div className={`${styles.brandGroup} ${isSmall ? styles.brandGroupMobile : ''}`}>
           <span className={`${styles.brandName} ${isSmall ? styles.brandNameMobile : ''}`} style={brandStyle}>
-            Mezo Pinball
+            Pinball Arcade
           </span>
           {!isSmall && tournamentName && (
             <span className={styles.tournamentTag} style={tournamentStyle}>

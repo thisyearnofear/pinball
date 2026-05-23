@@ -62,8 +62,7 @@ export const createEngine = async (
 
     const { width, height } = table;
 
-    // @ts-expect-error Property 'env' does not exist on type 'ImportMeta', Vite takes care of it
-    if ( import.meta.env.MODE !== "production" ) {
+    if ( process.env.NODE_ENV !== "production" ) {
         // render = renderBodies( engine, width, height );
     }
 

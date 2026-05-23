@@ -5,7 +5,7 @@ const API_BASE = (() => {
   try {
     return getAppConfig().backend.baseUrl;
   } catch (e) {
-    // We do not silently fallback; consumers must set VITE_BACKEND_URL
+    // We do not silently fallback; consumers must set NEXT_PUBLIC_BACKEND_URL
     console.warn('Backend URL not configured: backend client disabled');
     return '';
   }
