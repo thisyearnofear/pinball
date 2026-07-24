@@ -5,7 +5,7 @@ import type { Size } from "zcanvas";
 import type { GameDef, GameMessages } from "@/definitions/game";
 import { ActorTypes, FRAME_RATE, GameSounds } from "@/definitions/game";
 
-import { init, scaleCanvas, setFlipperState, bumpTable, update, panViewport, setPaused, getBallPosition, getBallCount } from "@/model/game";
+import { init, scaleCanvas, setFlipperState, bumpTable, update, panViewport, setPaused, getBallPosition, getBallCount, nudgeBallToward, isKamikazeMode } from "@/model/game";
 import SpriteCache from "@/utils/sprite-cache";
 import { createInputController } from "@/utils/input-controller";
 import * as haptics from "@/utils/haptics";
@@ -116,6 +116,16 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
       gameRef.paused = !gameRef.paused;
       setPaused(gameRef.paused);
     },
+    onNudge: (x: number, y: number) => {
+      // Convert screen coordinates to canvas coordinates
+      const rect = canvasContainer.getBoundingClientRect();
+      const scaleX = (gameRef.table !== undefined ? 600 : 600); // table width fallback
+      const canvasX = ((x - rect.left) / rect.width) * scaleX;
+      const canvasY = ((y - rect.top) / rect.height) * 800; // approx table height
+      nudgeBallToward(canvasX, canvasY);
+      haptics.bump();
+    },
+    isKamikaze: () => isKamikazeMode(),
   });
 
   function resize() {
@@ -125,7 +135,8 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     scaleCanvas(clientWidth, canvasHeight);
   }
 
-  // Optional touch controls: two invisible halves for flippers.
+  // Optional touch controls: two invisible halves for flippers (normal mode)
+  // or single full-screen tap zone for Kamikaze Ball.
   const touchLeft = document.createElement("div");
   const touchRight = document.createElement("div");
   if (opts.touchscreen) {
@@ -141,12 +152,29 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
 
     const bindTouch = (el: HTMLElement, isLeft: boolean) => {
       el.addEventListener("touchstart", (e) => {
+        if (isKamikazeMode()) {
+          // Kamikaze Ball: tap to nudge
+          const t = e.touches[0];
+          if (t) {
+            const rect = canvasContainer.getBoundingClientRect();
+            const scaleX = 600;
+            const canvasX = ((t.clientX - rect.left) / rect.width) * scaleX;
+            const canvasY = ((t.clientY - rect.top) / rect.height) * 800;
+            nudgeBallToward(canvasX, canvasY);
+            haptics.bump();
+          }
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
         inputController.handleTouchStart(isLeft, e);
         e.preventDefault();
         e.stopPropagation();
       });
       const end = (e: TouchEvent) => {
-        inputController.handleTouchEnd(isLeft, e);
+        if (!isKamikazeMode()) {
+          inputController.handleTouchEnd(isLeft, e);
+        }
         e.preventDefault();
         e.stopPropagation();
       };

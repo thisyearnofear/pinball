@@ -2,8 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import { preloadAssets } from "@/services/asset-preloader";
 import { mountGame, type MountedGame } from "@/domains/game/mount-game";
-import type { GameDef, GameMessages } from "@/definitions/game";
-import { BALLS_PER_GAME } from "@/definitions/game";
+import { type GameDef, GameMessages, BALLS_PER_GAME } from "@/definitions/game";
 import { START_TABLE_INDEX } from "@/definitions/tables";
 import { stopGame } from "@/services/high-scores-service";
 import { getPlayerInfo } from "@/services/contracts/tournament-client";
@@ -13,6 +12,7 @@ import { mountWorld, isSplatSupported, prefersReducedMotion, type WorldHandle } 
 import { MARBLE_WORLDS, getWorldById } from "@/config/worlds";
 import { WorldLoadingOverlay, WorldLoadingIndicator } from "./ui/WorldLoadingOverlay";
 import { type WorldReaction } from "@/presentation/world-reactor";
+import { isKamikazeMode } from "@/model/game";
 
 function applyWorldReaction(reaction: WorldReaction): void {
   const { type, intensity, data } = reaction;
@@ -86,6 +86,8 @@ export default function GameMount(props: Props) {
     balls: BALLS_PER_GAME,
     multiplier: 1,
   });
+  const [kamikazeActive, setKamikazeActive] = useState(false);
+  const [kamikazeMessage, setKamikazeMessage] = useState<string | null>(null);
   const [worldFallback, setWorldFallback] = useState(false);
   const [worldLoadingProgress, setWorldLoadingProgress] = useState<number | null>(null);
   const multiballRef = useRef(false);
@@ -153,6 +155,21 @@ export default function GameMount(props: Props) {
         onMessage: (msg: GameMessages | null) => {
           if (!msg) return;
           setMessage(String(msg));
+
+          // Kamikaze Ball messages
+          const kamikazeMessages: Record<number, string> = {
+            [GameMessages.KAMIKAZE_START]: "KAMIKAZE BALL — DRAIN IT!",
+            [GameMessages.DRAINED]: "REKT! The machine is disappointed.",
+            [GameMessages.SAVED]: "SAVED! The machine won't let you lose.",
+            [GameMessages.POWERUP_PLAYER]: "MUNITION ACTIVATED!",
+            [GameMessages.POWERUP_MACHINE]: "COUNTERMEASURE DEPLOYED!",
+          };
+          const kamMsg = kamikazeMessages[msg];
+          if (kamMsg) {
+            setKamikazeMessage(kamMsg);
+            window.setTimeout(() => setKamikazeMessage(null), 2500);
+          }
+
           if (String(msg).toLowerCase().includes("multiball")) {
             multiballRef.current = true;
           }
@@ -238,6 +255,7 @@ export default function GameMount(props: Props) {
         balls: g.balls,
         multiplier: g.multiplier,
       });
+      setKamikazeActive(isKamikazeMode());
 
       // Update world reactor with game state
       if (g.active) {
@@ -440,11 +458,48 @@ export default function GameMount(props: Props) {
             pointerEvents: "none",
           }}
         >
-          <div>Score: {hud.score}</div>
-          <div>Balls: {hud.balls}</div>
-          <div>Multiplier: {hud.multiplier}x</div>
+          {kamikazeActive ? (
+            <>
+              <div style={{ color: "#ff4444", fontWeight: "bold" }}>KAMIKAZE BALL</div>
+              <div>Time: {(hud.score / 1000).toFixed(1)}s</div>
+              <div>Balls: {hud.balls}</div>
+              <div style={{ fontSize: 10, opacity: 0.7 }}>Tap to nudge toward drain</div>
+            </>
+          ) : (
+            <>
+              <div>Score: {hud.score}</div>
+              <div>Balls: {hud.balls}</div>
+              <div>Multiplier: {hud.multiplier}x</div>
+            </>
+          )}
           {props.paused ? <div style={{ opacity: 0.85 }}>Paused</div> : null}
         </div>
+
+        {/* Kamikaze Ball message overlay (taunts, power-ups) */}
+        {kamikazeMessage && (
+          <div
+            style={{
+              position: "absolute",
+              top: "40%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              padding: "12px 24px",
+              borderRadius: 12,
+              background: "rgba(0,0,0,0.75)",
+              border: "1px solid rgba(255,68,68,0.4)",
+              color: "#ff4444",
+              fontSize: 18,
+              fontWeight: "bold",
+              textTransform: "uppercase",
+              letterSpacing: 1,
+              pointerEvents: "none",
+              zIndex: 10,
+              animation: "fadeIn 0.3s ease-out",
+            }}
+          >
+            {kamikazeMessage}
+          </div>
+        )}
       </div>
     </div>
   );

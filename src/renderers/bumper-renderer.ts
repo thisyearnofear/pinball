@@ -25,6 +25,13 @@ import type { Point, Viewport, IRenderer } from "zcanvas";
 import type Actor from "@/model/actor";
 import type Bumper from "@/model/bumper";
 
+// Kamikaze Ball visual mode — set by game.ts when Kamikaze mode is active.
+// Avoids circular dependency: renderer reads this flag, game.ts sets it.
+let kamikazeMode = false;
+export function setKamikazeMode(enabled: boolean): void {
+    kamikazeMode = enabled;
+}
+
 export default class BumperRenderer extends Sprite {
     protected collisionAnimation = false;
     protected collisionIterations = 0;
@@ -57,12 +64,31 @@ export default class BumperRenderer extends Sprite {
             top = this.collisionOffset.y;
         }
 
+        // Kamikaze Ball: bumpers are red/hostile (enemies that keep ball alive)
+        // Normal mode: bumpers are blue/inviting (hit them for points)
+        const fillColor = kamikazeMode
+            ? (collided ? "#ff3333" : "transparent")
+            : (collided ? "#00AEEF" : "transparent");
+        const strokeColor = kamikazeMode ? "#ff4444" : "#00AEEF";
+        const stroke = !collided ? { color: strokeColor, size: 2 } : undefined;
+
         renderer.drawCircle(
             left - viewport.left, top - viewport.top,
             radius,
-            collided ? "#00AEEF" : "transparent",
-            !collided ? this.collisionStroke : undefined,
+            fillColor,
+            stroke,
         );
+
+        // Kamikaze Ball: pulsing red glow ring around bumpers
+        if (kamikazeMode && !collided) {
+            const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 300);
+            renderer.drawCircle(
+                left - viewport.left, top - viewport.top,
+                radius + 4 + pulse * 3,
+                "transparent",
+                { color: `rgba(255, 50, 50, ${0.3 + pulse * 0.3})`, size: 1 },
+            );
+        }
 
         if ( collided ) {
             if ( !this.collisionAnimation ) {

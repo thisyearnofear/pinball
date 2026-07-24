@@ -45,6 +45,7 @@ import {
     recordCrateSpawn, getRandomTaunt, nudgeBall, isDrainBlocked,
     updateRubberBand,
 } from "@/model/kamikaze";
+import { setKamikazeMode as setBumperKamikazeMode } from "@/renderers/bumper-renderer";
 
 type IRoundEndHandler = (readyCallback: () => void, timeout: number) => void;
 type IMessageHandler = (message: GameMessages, optDuration?: number) => void;
@@ -98,7 +99,10 @@ export const init = async (
 
     // Initialize Kamikaze Ball state if the game has it enabled
     if (game.kamikaze?.enabled) {
+        setBumperKamikazeMode(true);
         messageHandler(GameMessages.KAMIKAZE_START, 3000);
+    } else {
+        setBumperKamikazeMode(false);
     }
 
     // 1. clean up previous instances, when existing

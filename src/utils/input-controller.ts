@@ -4,6 +4,8 @@ type Callbacks = {
   onBump: () => void;
   onPan?: (delta: number) => void;
   onTogglePause?: () => void;
+  onNudge?: (x: number, y: number) => void;
+  isKamikaze?: () => boolean;
 };
 
 type TouchStartState = {
@@ -16,6 +18,12 @@ const SWIPE_TIME = 400;
 
 export function createInputController(cb: Callbacks) {
   const touchStart: TouchStartState = { y: 0, time: 0 };
+
+  // Kamikaze Ball: tap anywhere to nudge ball toward tap location
+  function handleKamikazeTap(clientX: number, clientY: number) {
+    if (!cb.isKamikaze?.()) return;
+    cb.onNudge?.(clientX, clientY);
+  }
 
   function handleKey(event: KeyboardEvent) {
     const { type, keyCode } = event;
@@ -78,6 +86,10 @@ export function createInputController(cb: Callbacks) {
   function addListeners() {
     window.addEventListener("keydown", handleKey);
     window.addEventListener("keyup", handleKey);
+    // Kamikaze Ball: tap-to-nudge on click
+    window.addEventListener("click", (e) => {
+      handleKamikazeTap(e.clientX, e.clientY);
+    });
   }
 
   function removeListeners() {
