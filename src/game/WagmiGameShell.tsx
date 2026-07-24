@@ -9,13 +9,12 @@ import React from "react";
 import { RainbowKitProvider } from "@rainbow-me/rainbowkit";
 import { WagmiProvider } from "wagmi";
 import { config } from "@/config/wagmi-config";
-import GameScreen from "./GameScreen";
 
-export function WagmiGameShell() {
+export function WagmiGameShell({ children }: { children: React.ReactNode }) {
   return (
     <WagmiProvider config={config}>
       <RainbowKitProvider>
-        <GameScreen />
+        {children}
       </RainbowKitProvider>
     </WagmiProvider>
   );

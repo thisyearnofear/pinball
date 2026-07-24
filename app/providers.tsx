@@ -1,13 +1,17 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import "@rainbow-me/rainbowkit/styles.css";
-import { WagmiProvider } from "wagmi";
-import { RainbowKitProvider } from "@rainbow-me/rainbowkit";
+import dynamic from "next/dynamic";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { config, mezoTestnet } from "@/config/wagmi-config";
 import { ToastProvider } from "@/game/ui";
 import { injectGlobalStyles } from "@/theme";
+import { getAppConfig } from "@/config/app-config";
+
+// Dynamically import the Wagmi shell to avoid SSR bundling of RainbowKit
+// dependencies (Coinbase CDP SDK, @x402, etc.) which cause build failures
+// when those optional packages aren't installed.
+// When the Nimiq adapter is active, Wagmi isn't loaded at all.
+const WagmiGameShell = dynamic(() => import("@/game/WagmiGameShell").then(m => ({ default: m.WagmiGameShell })), { ssr: false });
 
 function makeQueryClient() {
   return new QueryClient({
@@ -25,23 +29,34 @@ function getQueryClient() {
 export function Providers({ children }: { children: React.ReactNode }) {
   const queryClient = getQueryClient();
   const [mounted, setMounted] = useState(false);
+  const [isWagmi, setIsWagmi] = useState(false);
 
   useEffect(() => {
     injectGlobalStyles();
+    try {
+      setIsWagmi(getAppConfig().walletAdapter === "wagmi");
+    } catch {
+      setIsWagmi(true); // default to wagmi if config not ready
+    }
     setMounted(true);
   }, []);
 
-  return (
-    <WagmiProvider config={config}>
+  if (isWagmi) {
+    return (
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider initialChain={mezoTestnet}>
-          <ToastProvider>
-            <div style={{ visibility: mounted ? "visible" : "hidden" }}>
-              {children}
-            </div>
-          </ToastProvider>
-        </RainbowKitProvider>
+        <WagmiGameShell>{children}</WagmiGameShell>
       </QueryClientProvider>
-    </WagmiProvider>
+    );
+  }
+
+  // Nimiq profile: no Wagmi/RainbowKit needed
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider>
+        <div style={{ visibility: mounted ? "visible" : "hidden" }}>
+          {children}
+        </div>
+      </ToastProvider>
+    </QueryClientProvider>
   );
 }

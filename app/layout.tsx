@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "Pinball Arcade",
+  title: "Kamikaze Ball",
   description:
-    "Retro-style pinball game with on-chain tournaments for MUSD prizes on the Mezo ecosystem.",
+    "The world's first verifiable arcade. Drain-to-win pinball with on-chain tournaments and power-up tug-of-war.",
   openGraph: {
     images: ["/assets/sprites/logo.png"],
   },

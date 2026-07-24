@@ -21,7 +21,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        {isWagmi ? <WagmiGameShell /> : <NimiqGameShell />}
+        {isWagmi ? <WagmiGameShell><GameScreen /></WagmiGameShell> : <NimiqGameShell />}
       </ToastProvider>
     </QueryClientProvider>
   );
