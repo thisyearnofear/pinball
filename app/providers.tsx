@@ -41,21 +41,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
     setMounted(true);
   }, []);
 
-  if (isWagmi) {
-    return (
-      <QueryClientProvider client={queryClient}>
-        <WagmiGameShell>{children}</WagmiGameShell>
-      </QueryClientProvider>
-    );
-  }
-
-  // Nimiq profile: no Wagmi/RainbowKit needed
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <div style={{ visibility: mounted ? "visible" : "hidden" }}>
-          {children}
-        </div>
+        {isWagmi && <WagmiGameShell>{children}</WagmiGameShell>}
+        {!isWagmi && (
+          <div style={{ visibility: mounted ? "visible" : "hidden" }}>
+            {children}
+          </div>
+        )}
       </ToastProvider>
     </QueryClientProvider>
   );
