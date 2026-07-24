@@ -26,6 +26,7 @@ import type { GameDef, TableDef, FlipperType } from "@/definitions/game";
 import {
     FRAME_RATE, BALL_WIDTH, BALL_HEIGHT, LAUNCH_SPEED, MAX_BUMPS, BUMP_TIMEOUT, BUMP_IMPULSE, RETRY_TIMEOUT, BALLS_PER_GAME,
     GameMessages, GameSounds, TriggerTarget, TriggerTypes, AwardablePoints, ActorLabels, ActorTypes,
+    PowerUpType,
 } from "@/definitions/game";
 import Tables from "@/definitions/tables";
 import Actor from "@/model/actor";
@@ -38,6 +39,12 @@ import TriggerGroup from "@/model/trigger-group";
 import { createEngine } from "@/model/physics/engine";
 import type { IPhysicsEngine, CollisionEvent } from "@/model/physics/engine";
 import { enqueueTrack, setFrequency, playSoundEffect } from "@/services/audio-service";
+import {
+    createKamikazeState, updateAIFlippers, getKamikazeScore, applyPowerUpEffects,
+    hasPowerUp, rollPowerUp, activatePowerUp, cleanupPowerUps, shouldSpawnCrate,
+    recordCrateSpawn, getRandomTaunt, nudgeBall, isDrainBlocked,
+    updateRubberBand,
+} from "@/model/kamikaze";
 
 type IRoundEndHandler = (readyCallback: () => void, timeout: number) => void;
 type IMessageHandler = (message: GameMessages, optDuration?: number) => void;
@@ -67,6 +74,7 @@ let roundStart = 0;
 let bumpAmount = 0;
 let tilt = false;
 let paused = false;
+let gameRef: GameDef | null = null; // reference to current game for external access
 
 const ENGINE_INCREMENT = 1000 / FRAME_RATE;
 let accumulator = 0;
@@ -86,6 +94,12 @@ export const init = async (
 
     inUnderworld = false;
     accumulator = 0;
+    gameRef = game; // store reference for external access (flipper control, nudge)
+
+    // Initialize Kamikaze Ball state if the game has it enabled
+    if (game.kamikaze?.enabled) {
+        messageHandler(GameMessages.KAMIKAZE_START, 3000);
+    }
 
     // 1. clean up previous instances, when existing
 
@@ -120,12 +134,29 @@ export const init = async (
                     break;
                 case ActorLabels.BUMPER:
                     awardPoints(game, AwardablePoints.BUMPER);
+                    // Kamikaze Ball: bumper hits add penalty time (kept ball alive)
+                    if (game.kamikaze?.enabled) {
+                        game.kamikaze.totalBumperHits++;
+                    }
                     (actorMap.get(pair.bodyA.id) as Bumper).collided = true;
                     playSoundEffect(GameSounds.BUMPER);
                     break;
                 case ActorLabels.TRIGGER:
                     const triggerGroup = actorMap.get(pair.bodyA.id) as TriggerGroup;
                     const groupCompleted = triggerGroup?.trigger(pair.bodyA.id);
+
+                    // Kamikaze Ball: trigger hits can spawn munitions crates
+                    if (game.kamikaze?.enabled) {
+                        const now = window.performance.now();
+                        if (shouldSpawnCrate(game.kamikaze, now)) {
+                            recordCrateSpawn(game.kamikaze, now);
+                            updateRubberBand(game.kamikaze, now);
+                            const { type, side } = rollPowerUp(game.kamikaze);
+                            activatePowerUp(game.kamikaze, type, side, now);
+                            playSoundEffect(GameSounds.POWERUP_ROULETTE);
+                            messageHandler(side === "player" ? GameMessages.POWERUP_PLAYER : GameMessages.POWERUP_MACHINE);
+                        }
+                    }
 
                     if (triggerGroup.triggerType !== TriggerTypes.SERIES) {
                         awardPoints(game, AwardablePoints.TRIGGER);
@@ -255,6 +286,14 @@ export const setFlipperState = (type: FlipperType, isPointerDown: boolean): void
     if (tilt) {
         return;
     }
+
+    // In Kamikaze Ball, flippers are AI-controlled. Player uses tap-to-nudge instead.
+    // The global `game` reference is set in handleEngineUpdate via the game param.
+    // We check if kamikaze mode is active via the global gameRef.
+    if (gameRef?.kamikaze?.enabled) {
+        return; // AI controls flippers in Kamikaze Ball
+    }
+
     let movedUp = false;
     for (flipper of flippers) {
         if (flipper.type === type) {
@@ -276,6 +315,10 @@ export const setFlipperState = (type: FlipperType, isPointerDown: boolean): void
 
 export const bumpTable = (game: GameDef): void => {
     if (tilt || game.paused) {
+        return;
+    }
+    // In Kamikaze Ball, the bump/tilt mechanic is disabled (player uses nudge instead)
+    if (game.kamikaze?.enabled) {
         return;
     }
     for (ball of balls) {
@@ -360,6 +403,25 @@ function awardPoints(game: GameDef, points: number): void {
 
 function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
     const singleBall = balls.length === 1;
+    const now = window.performance.now();
+
+    // Kamikaze Ball: update AI flippers, power-ups, and score
+    if (game.kamikaze?.enabled) {
+        const ballPos = balls.length > 0 ? getBallPosition() : null;
+        const ballVel = balls.length > 0
+            ? { x: balls[0].body.velocity.x, y: balls[0].body.velocity.y }
+            : null;
+
+        updateAIFlippers(game.kamikaze, flippers, ballPos, ballVel, now);
+        updateRubberBand(game.kamikaze, now);
+
+        if (balls.length > 0) {
+            applyPowerUpEffects(game.kamikaze, engine, balls[0].body, table.height, now);
+        }
+
+        // Update score = time alive + penalties
+        game.score = getKamikazeScore(game.kamikaze, now);
+    }
 
     for (ball of balls) {
         engine.capSpeed(ball.body);
@@ -388,6 +450,26 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
         const tableBottom = (!tableHasUnderworld || game.underworld) ? table.height : table.underworld;
 
         if (top > tableBottom) {
+            // Kamikaze Ball: drain is the GOAL. Force Field blocks it.
+            if (game.kamikaze?.enabled) {
+                if (isDrainBlocked(game.kamikaze, now)) {
+                    // Force Field active — ball bounces back from drain
+                    engine.launchBall(ball.body, { x: 0, y: -LAUNCH_SPEED * 0.5 });
+                    messageHandler(GameMessages.SAVED, 1500);
+                    continue;
+                }
+                // Drain successful! Record score and show taunt
+                playSoundEffect(GameSounds.DRAIN_VICTORY);
+                messageHandler(GameMessages.DRAINED, 2000);
+                removeBall(ball);
+
+                if (singleBall) {
+                    endRound(game, 2000);
+                }
+                continue;
+            }
+
+            // Normal mode: drain is a failure
             removeBall(ball);
 
             if (singleBall) {
@@ -457,6 +539,13 @@ function startRound(game: GameDef): void {
         roundStart = window.performance.now();
     }
 
+    // Kamikaze Ball: track round start time for scoring
+    if (game.kamikaze?.enabled) {
+        game.kamikaze.roundStartTime = window.performance.now();
+        game.kamikaze.totalBumperHits = 0;
+        game.kamikaze.activePowerUps = [];
+    }
+
     tilt = false;
     inUnderworld = false;
     game.underworld = false;
@@ -472,3 +561,20 @@ export function getBallPosition(): { x: number; y: number } | null {
 export function getBallCount(): number {
     return balls.length;
 }
+
+/**
+ * Kamikaze Ball: nudge the ball toward a tap location.
+ * Called from the UI layer on touch/click events.
+ */
+export const nudgeBallToward = (tapX: number, tapY: number): void => {
+    if (!gameRef?.kamikaze?.enabled || balls.length === 0) return;
+    const ballBody = balls[0].body;
+    nudgeBall(engine, ballBody, tapX, tapY);
+};
+
+/**
+ * Kamikaze Ball: check if the mode is active.
+ */
+export const isKamikazeMode = (): boolean => {
+    return gameRef?.kamikaze?.enabled ?? false;
+};

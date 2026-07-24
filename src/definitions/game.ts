@@ -64,6 +64,13 @@ export enum GameMessages {
     GOT_LUCKY,
     TRY_AGAIN,
     TILT,
+    // Kamikaze Ball messages
+    KAMIKAZE_START,
+    DRAINED,
+    SAVED,
+    POWERUP_PLAYER,
+    POWERUP_MACHINE,
+    AI_TAUNT,
 };
 
 export enum GameSounds {
@@ -74,6 +81,11 @@ export enum GameSounds {
     FLIPPER,
     POPPER,
     TRIGGER,
+    // Kamikaze Ball sounds
+    POWERUP_ROULETTE,
+    POWERUP_ACTIVATE,
+    DRAIN_VICTORY,
+    AI_SAVE,
 };
 
 /**
@@ -97,6 +109,42 @@ export enum ActorLabels {
 };
 
 /**
+ * Kamikaze Ball power-up types.
+ * Player munitions help drain the ball. Machine countermeasures keep it alive.
+ */
+export enum PowerUpType {
+    // Player munitions (help you drain)
+    HOMING_WARHEAD,    // Ball gets pulled toward drain
+    FLIPPER_JAM,       // AI flippers freeze
+    GHOST_BALL,        // Ball phases through bumpers
+    // Machine countermeasures (keep ball alive)
+    IRON_DOME,         // AI flippers become perfect
+    FORCE_FIELD,       // Barrier over drain
+    BUMPER_FRENZY,     // All bumpers activate
+};
+
+export type PowerUpSide = "player" | "machine";
+
+export type ActivePowerUp = {
+    type: PowerUpType;
+    side: PowerUpSide;
+    expiresAt: number;  // timestamp when effect ends
+};
+
+export type KamikazeState = {
+    enabled: boolean;
+    roundStartTime: number;          // when current ball was launched
+    aiAccuracy: number;              // 0-1, probability AI saves the ball
+    aiReactionMs: number;            // AI check interval
+    aiLastCheck: number;             // last AI check timestamp
+    activePowerUps: ActivePowerUp[]; // currently active effects
+    crateCooldownMs: number;         // time between crate respawns
+    lastCrateSpawn: number;          // last crate activation timestamp
+    totalBumperHits: number;         // penalty tracking
+    rubberBandBias: number;          // current rubber-band probability (0-1, 0.5 = neutral)
+};
+
+/**
  * Runtime properties of an active game
  * @see pinball-table.vue, model/game.ts
  */
@@ -109,6 +157,7 @@ export type GameDef = {
     balls: number;       // amount of balls left
     multiplier: number;  // bonus multiplier for each awarded point
     underworld: boolean; // whether underworld is accessible below the table
+    kamikaze?: KamikazeState; // optional Kamikaze Ball mode state
 };
 
 export type FlipperType = ActorTypes.LEFT_FLIPPER | ActorTypes.RIGHT_FLIPPER;

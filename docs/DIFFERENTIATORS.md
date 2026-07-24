@@ -85,25 +85,33 @@ Conventional pinball with a crypto wrapper is forgettable. The following
 inversions convert the wrapper into the substance. Each is ranked by
 delight-per-engineering-hour and by how much it leverages the existing stack.
 
-### Inversion 1 — Drain to win (anti-pinball)
+### Inversion 1 — Kamikaze Ball (drain to win + power-up tug-of-war)
 
-**The pitch:** lowest score wins. Or: fastest drain wins. Bumpers are
-*threats* (they keep the ball alive). Flippers are *obstacles to avoid*.
-Every existing asset inverts meaning with zero art changes.
+**The pitch:** the ball wants to drain. The machine fights to keep it alive.
+You steer the ball INTO the drain while AI flippers try to save it. A dual
+power-up system (player munitions vs machine countermeasures) creates a
+tug-of-war that makes each run feel different. Lowest time-alive wins.
 
 **Why it's the headline inversion:**
 - Mode toggle, not a rebuild — every table, body, and physics definition stays
   identical; only the win condition and score sign invert.
-- "Lowest score wins the Bitcoin pot" is a line that gets retweeted and
-  remembered. It is the kind of contrarian mechanic that defines a category.
+- "Kamikaze Ball: the pinball game where you're trying to lose and the machine
+  won't let you" is a line that gets retweeted and remembered. It is the kind
+  of contrarian mechanic that defines a category.
 - Turns the tournament contract into something stranger and more newsworthy
   than "yet another skill-based payout."
-- Most Thiel-compatible inversion: contrarian, category-defining, hard to copy
-  because no one else would dare.
+- The power-up system transforms it from "a clever inversion" into "a
+  genuinely replayable game with emergent drama." Mario Kart's item-box
+  model applied to inverted pinball.
+- Most Thiel-compatible: contrarian, category-defining, hard to copy because
+  no one else would dare.
 
-**Implementation surface:** win-condition check in `game.ts`, score sign
-inversion in the backend, tournament mode flag in `TournamentManager`. No new
-assets, no physics changes.
+**Implementation surface:** drain mode in `game.ts` (score = time alive),
+AI flipper heuristic, tap-to-nudge control, munitions crates (reuse trigger
+positions), power-up effects, visual inversion (red bumpers, green drain),
+machine taunt messages, tournament `invertedWinCondition` flag. No new
+assets, no physics changes. See [KAMIKAZE_BALL.md](./KAMIKAZE_BALL.md) for
+the full spec.
 
 ### Inversion 2 — The ball IS the token
 

@@ -107,23 +107,29 @@ Conventional pinball with a crypto wrapper is forgettable. The following
 inversions convert the wrapper into the substance. Each is ranked by
 delight-per-engineering-hour and by how much it leverages the existing stack.
 
-### Inversion 1 — Drain to win (anti-pinball)
+### Inversion 1 — Kamikaze Ball (drain to win + power-up tug-of-war)
 
-**The pitch:** lowest score wins. Or: fastest drain wins. Bumpers are
-*threats* (they keep the ball alive). Flippers are *obstacles to avoid*. Every
-existing asset inverts meaning with zero art changes.
+**The pitch:** the ball wants to drain. The machine fights to keep it alive.
+You steer the ball INTO the drain while AI flippers try to save it. A
+dual power-up system (player munitions vs machine countermeasures) creates
+a tug-of-war that makes each run feel different. Lowest time-alive wins.
 
 **Why it's strong:**
 - Mode toggle, not a rebuild — every table, body, and physics definition stays
   identical; only the win condition and score sign invert.
-- "Lowest score wins the Bitcoin pot" is a line that gets retweeted and
-  remembered. It is the kind of contrarian mechanic that defines a category.
+- "Kamikaze Ball: the pinball game where you're trying to lose and the machine
+  won't let you" is a line that gets retweeted and remembered. It is the kind
+  of contrarian mechanic that defines a category.
 - Turns the tournament contract into something stranger and more newsworthy
   than "yet another skill-based payout."
+- The power-up system transforms it from "a clever inversion" into "a
+  genuinely replayable game with emergent drama." Each run creates a unique
+  story of tug-of-war between you and the machine.
+- Most Thiel-compatible: contrarian, category-defining, hard to copy because
+  no one else would dare.
 
-**Alignment:** This is the highest delight-per-engineering-hour inversion and
-the most Thiel-compatible (contrarian, category-defining, hard to copy because
-no one else would dare).
+See [KAMIKAZE_BALL.md](./KAMIKAZE_BALL.md) for the full design spec, power-up
+arsenal, AI flipper heuristic, and build tiers.
 
 ### Inversion 2 — The ball IS the token
 
@@ -176,7 +182,7 @@ NOW (hackathon ship)
   ✓ Jackpot Multiball -> MissionPool payout
   ✓ Ecosystem profile system (Mezo + Nimiq, one codebase)
   ✓ Polygon Amoy deployment (USDT, TournamentManager + MissionPool)
-  → Ship Inversion 1 (drain-to-win mode)         [highest delight/effort]
+  → Ship Kamikaze Ball (drain-to-win + power-ups)  [highest delight/effort]
   → Ship Inversion 2 (ball-is-token metaphor)     [locks ecosystem monopoly]
 
 NEXT (post-hackathon, protocol foundation)
