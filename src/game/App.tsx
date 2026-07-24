@@ -1,14 +1,12 @@
-import "@rainbow-me/rainbowkit/styles.css";
-
 import React, { useEffect } from "react";
-import { RainbowKitProvider } from "@rainbow-me/rainbowkit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { WagmiProvider } from "wagmi";
-import { config, mezoTestnet } from "@/config/wagmi-config";
 
 import { injectGlobalStyles } from "@/theme";
+import { getAppConfig } from "@/config/app-config";
 import { ToastProvider } from "@/game/ui";
 import GameScreen from "./GameScreen";
+import { WagmiGameShell } from "./WagmiGameShell";
+import { NimiqGameShell } from "./NimiqGameShell";
 
 const queryClient = new QueryClient();
 
@@ -17,15 +15,14 @@ export default function App() {
     injectGlobalStyles();
   }, []);
 
+  const cfg = getAppConfig();
+  const isWagmi = cfg.walletAdapter === "wagmi";
+
   return (
-    <WagmiProvider config={config}>
-      <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider initialChain={mezoTestnet}>
-          <ToastProvider>
-            <GameScreen />
-          </ToastProvider>
-        </RainbowKitProvider>
-      </QueryClientProvider>
-    </WagmiProvider>
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider>
+        {isWagmi ? <WagmiGameShell /> : <NimiqGameShell />}
+      </ToastProvider>
+    </QueryClientProvider>
   );
 }

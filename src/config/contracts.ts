@@ -3,12 +3,16 @@ import { getAppConfig } from "./app-config";
 export type ContractsConfig = {
   chainId: number;
   rpcUrlPublic: string;
+  ecosystem: "mezo" | "nimiq";
+  walletAdapter: "wagmi" | "nimiq";
   tournamentManager: {
     address: string;
-    // ABI is imported by the client; here we only keep address and chain
   };
-  musd: {
+  paymentToken: {
+    type: "erc20" | "native";
+    symbol: string;
     address: string;
+    decimals: number;
   };
   missionPool: {
     address: string;
@@ -24,12 +28,12 @@ export function getContractsConfig(): ContractsConfig {
   return {
     chainId: cfg.chain.chainId,
     rpcUrlPublic: cfg.chain.rpcUrlPublic,
+    ecosystem: cfg.ecosystem,
+    walletAdapter: cfg.walletAdapter,
     tournamentManager: {
       address: cfg.contracts.tournamentManager.address,
     },
-    musd: {
-      address: cfg.contracts.musd.address,
-    },
+    paymentToken: cfg.contracts.paymentToken,
     missionPool: {
       address: cfg.contracts.missionPool.address,
     },

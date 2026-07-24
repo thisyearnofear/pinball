@@ -1,8 +1,49 @@
 # Pinball Arcade
 
-Pinball Arcade is a Web3 pinball game built for the Mezo ecosystem, featuring on-chain tournaments where players compete for **MUSD** prizes. It combines retro pinball gameplay with blockchain tournament rails, allowing users to connect a wallet and win Bitcoin-backed stablecoin rewards based on their scores.
+> **North star:** the world's first *verifiable arcade* — a pinball cabinet
+> where every score is provably honest, every prize is Bitcoin-backed, and the
+> on-chain mechanics are inseparable from the fun. See
+> [docs/VISION.md](docs/VISION.md) for the full strategic framing.
 
-Built with **Next.js 16.2** (Turbopack, static export), Matter.js for physics, and Wagmi/RainbowKit for wallet connectivity. All tournament entry fees and prizes are denominated in **MUSD** (Bitcoin-backed stablecoin on Mezo).
+Pinball Arcade is a Web3 pinball game built for the Mezo ecosystem, featuring
+on-chain tournaments where players compete for **MUSD** (Bitcoin-backed
+stablecoin) prizes. It combines retro pinball gameplay with blockchain
+tournament rails and generative 3D world presentation — no other Web3 pinball
+ships inside a Marble Gaussian splat scene with O(topN) signed settlement and
+event-native MUSD rewards.
+
+Built with **Next.js 16.2** (Turbopack, static export), Matter.js for physics,
+and Wagmi/RainbowKit for wallet connectivity. All tournament entry fees and
+prizes are denominated in **MUSD** (Bitcoin-backed stablecoin on Mezo).
+
+## What makes this different
+
+- **Generative world stage:** the 2D playfield is composited inside a
+  photoreal Marble Gaussian splat scene (Spark + Three.js). Tournaments are
+  themed worlds, not just themed tables.
+- **Chain-portable arcade economy:** prizes, entry fees, and micro-rewards
+  work with any token (MUSD on Mezo, NIM on Nimiq, USDT on Polygon) via the
+  ecosystem profile system. One codebase, many ecosystems.
+- **O(topN) signed settlement:** `finalizeWithSignedWinners()` replaces
+  on-chain sorting with an EIP-191 signed winner list — gas-efficient and
+  generalizable.
+- **Verifiable by nature:** pinball's full game state is one ball's position,
+  velocity, and static body definitions — making it the most verifiable
+  competitive game genre, and the foundation for a trustless arcade protocol.
+
+See [docs/DIFFERENTIATORS.md](docs/DIFFERENTIATORS.md) for the full breakdown.
+
+## Ecosystem profiles
+
+The app supports multiple blockchain ecosystems via env-based profiles. Set
+`NEXT_PUBLIC_ECOSYSTEM_PROFILE` and related env vars to switch:
+
+| Profile | Chain | Payment token | Wallet adapter |
+|---|---|---|---|
+| `mezo` (default) | Mezo Testnet/Mainnet | MUSD (ERC-20) | Wagmi + RainbowKit |
+| `nimiq` | Polygon (or Nimiq native) | NIM (native) or USDT (ERC-20) | @nimiq/mini-app-sdk |
+
+See [.env.example](.env.example) for all profile env vars.
 
 ## Live contracts (Mezo Testnet)
 
@@ -114,7 +155,7 @@ npm start
 
 ## Contracts Setup
 
-Smart contracts handle tournament logic on Arbitrum. Uses Hardhat (not Foundry).
+Smart contracts handle tournament logic on Mezo. Uses Hardhat (not Foundry).
 
 ### Prerequisites
 - Node.js 18+

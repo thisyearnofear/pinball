@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useAccount } from "wagmi";
 
+import { getAppConfig } from "@/config/app-config";
 import type { WalletPort } from "@/domains/wallet/wallet-port";
 import { stopGame, setSubmissionStateCallback, type SubmissionStep as LegacySubmissionStep } from "@/services/high-scores-service";
 import { getTournamentMeta, getAllTournaments } from "@/config/tournaments";
@@ -12,6 +12,7 @@ import { colors, spacing } from "@/theme/tokens";
 import { useWorldTheme, getWorldAccent } from "@/hooks/use-world-theme";
 import { usePlayerStats } from "@/hooks/use-player-stats";
 import { useWalletPort } from "@/hooks/use-wallet-port";
+import { useWalletState } from "@/hooks/use-wallet-state";
 import { useTournament } from "@/hooks/use-tournament";
 import {
   useToast, ErrorBoundary,
@@ -34,7 +35,7 @@ type View = "lobby" | "game" | "paused";
 type ActiveModal = "settings" | "how" | "about" | "leaderboard" | null;
 
 export default function GameScreen() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected } = useWalletState();
   const toast = useToast();
   const { recordRun } = usePlayerStats();
   const walletPort = useWalletPort();

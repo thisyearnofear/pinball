@@ -3,7 +3,9 @@
 > **Vision:** Pinball Arcade is no longer "another web pinball game." Each
 > table lives **inside a generative photoreal 3D world** authored by World Labs'
 > Marble. Tournaments are themed worlds. Players will eventually be able to
-> generate their own table-worlds from a text prompt and stake them on-chain.
+> generate their own table-worlds from a text prompt and stake them on-chain —
+> the monopoly lever that turns a cabinet into a platform. See
+> [VISION.md](./VISION.md) for the full strategic framing.
 
 This document defines the **vision, UX, architecture, and rollout plan** for
 integrating [Marble](https://marble.worldlabs.ai) (generative world model) and
@@ -26,10 +28,21 @@ We can drop the existing 2D playfield **inside** any of those worlds with zero
 gameplay risk — and progressively unlock player-generated worlds, fully 3D
 pinball physics, and tournament-as-world.
 
-This integration directly supports our pitch:
-- **Web3-native arcade** (Mezo / MUSD prizes) +
-- **AI-native presentation** (Marble worlds) +
-- **User-generated content** (player-prompted tables).
+This integration is one of four moat layers (see
+[DIFFERENTIATORS.md](./DIFFERENTIATORS.md)):
+
+- **Web3-native arcade** (Mezo / MUSD prizes, verifiable scores) +
+- **AI-native presentation** (Marble worlds — no other Web3 pinball ships in a
+  generative world model) +
+- **User-generated content** (player-prompted tables staked on-chain — the
+  monopoly lever that makes us a platform, not just a cabinet) +
+- **Bitcoin-backed economy** (MUSD as the substance of the game, not just a
+  prize wrapper).
+
+The compositing approach (2D gameplay inside a splat scene, not 3D physics)
+is deliberately chosen to preserve the deterministic, verifiable nature of the
+physics engine — a key requirement for the trustless arcade protocol
+(see [VISION.md](./VISION.md)).
 
 ---
 

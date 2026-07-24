@@ -11,6 +11,7 @@ import { getActiveTournamentId, fetchLeaderboard, submitScoreWithSignature, getN
 import { requestScoreSignature } from './backend-scores-client';
 import { getContractsConfig } from '../config/contracts';
 import { getAppConfig } from '../config/app-config';
+import { getPaymentTokenSymbol } from './contracts/payment-token-client';
 import { showToast } from './toast';
 import { getFromStorage, setInStorage } from '../utils/local-storage';
 import type { WalletPort } from '@/domains/wallet/wallet-port';
@@ -38,7 +39,7 @@ export type HighScoreDef = {
 };
 
 export const isSupported = (): boolean => {
-    // Supported only when contracts are configured (wallet state is managed by wagmi)
+    // Supported only when contracts are configured (wallet state is managed by wallet adapter)
     try {
         getContractsConfig();
         return true;
@@ -317,10 +318,12 @@ function getChainName(chainId: number): string {
             return 'Mezo Testnet';
         case 31612:
             return 'Mezo Mainnet';
+        case 137:
+            return 'Polygon';
         case 42161:
             return 'Arbitrum One';
-        case 421614:
-            return 'Arbitrum Sepolia';
+        case 8453:
+            return 'Base';
         default:
             return `Chain ${chainId}`;
     }

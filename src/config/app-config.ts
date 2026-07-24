@@ -1,3 +1,26 @@
+/**
+ * Ecosystem profile determines which wallet adapter, payment token, and chain
+ * the app uses. This enables one codebase to serve multiple ecosystems
+ * (Mezo, Nimiq, Base, etc.) without forks.
+ *
+ * See docs/VISION.md — "The verifiable arcade is chain-portable."
+ */
+export type EcosystemProfile = "mezo" | "nimiq";
+
+/**
+ * Payment token type determines how entry fees and rewards are handled.
+ * - erc20: requires approve + transferFrom (e.g. MUSD, USDT)
+ * - native: sends value directly with the transaction (e.g. NIM, ETH)
+ */
+export type PaymentTokenType = "erc20" | "native";
+
+/**
+ * Wallet adapter determines which wallet connection layer is used.
+ * - wagmi: RainbowKit + Wagmi (Mezo, generic EVM)
+ * - nimiq: @nimiq/mini-app-sdk (Nimiq Pay)
+ */
+export type WalletAdapter = "wagmi" | "nimiq";
+
 export type AppChainConfig = {
   chainId: number;
   /**
@@ -18,17 +41,27 @@ export type AppChainConfig = {
   };
 };
 
+export type AppPaymentTokenConfig = {
+  type: PaymentTokenType;
+  symbol: string;
+  /**
+   * ERC-20 contract address (only required when type === "erc20").
+   * For native tokens, this is empty.
+   */
+  address: string;
+  decimals: number;
+};
+
 export type AppContractsConfig = {
   tournamentManager: {
     address: string;
   };
   /**
-   * MUSD token address for Mezo integration.
-   * Not necessarily used by the current ETH-based contract, but configured now to keep the app future-proof.
+   * Payment token for entry fees and prizes.
+   * Replaces the former MUSD-specific config. The field is kept as `paymentToken`
+   * but `musd` is retained as a legacy alias for backward compatibility.
    */
-  musd: {
-    address: string;
-  };
+  paymentToken: AppPaymentTokenConfig;
   /**
    * Optional: Sponsored Missions bounty pool.
    * Used for the "differentiated pinball economy" feature.
@@ -51,6 +84,8 @@ export type AppBackendConfig = {
 };
 
 export type AppConfig = {
+  ecosystem: EcosystemProfile;
+  walletAdapter: WalletAdapter;
   chain: AppChainConfig;
   contracts: AppContractsConfig;
   score: AppScoreConfig;
@@ -65,26 +100,75 @@ export type AppConfig = {
 
 let cached: AppConfig | null = null;
 
+function env(key: string): string | undefined {
+  const v = process.env[key];
+  return typeof v === "string" && v.trim().length > 0 ? v.trim() : undefined;
+}
+
+function detectEcosystem(): EcosystemProfile {
+  const explicit = env("NEXT_PUBLIC_ECOSYSTEM_PROFILE");
+  if (explicit === "mezo" || explicit === "nimiq") return explicit;
+  // Default: infer from payment token presence for backward compatibility
+  if (env("NEXT_PUBLIC_MUSD_ADDRESS") || env("NEXT_PUBLIC_PAYMENT_TOKEN_ADDRESS")) {
+    // If MUSD is set and no explicit profile, assume mezo (legacy behavior)
+    if (env("NEXT_PUBLIC_MUSD_ADDRESS")) return "mezo";
+  }
+  return "mezo";
+}
+
+function detectWalletAdapter(profile: EcosystemProfile): WalletAdapter {
+  const explicit = env("NEXT_PUBLIC_WALLET_ADAPTER");
+  if (explicit === "wagmi" || explicit === "nimiq") return explicit;
+  return profile === "nimiq" ? "nimiq" : "wagmi";
+}
+
+function detectPaymentToken(profile: EcosystemProfile): AppPaymentTokenConfig {
+  const tokenType = env("NEXT_PUBLIC_PAYMENT_TOKEN_TYPE") as PaymentTokenType | undefined;
+
+  // Native token (e.g. NIM, ETH)
+  if (tokenType === "native" || (profile === "nimiq" && !env("NEXT_PUBLIC_PAYMENT_TOKEN_ADDRESS"))) {
+    return {
+      type: "native",
+      symbol: env("NEXT_PUBLIC_PAYMENT_TOKEN_SYMBOL") ?? "NIM",
+      address: "",
+      decimals: Number(env("NEXT_PUBLIC_PAYMENT_TOKEN_DECIMALS") ?? 18),
+    };
+  }
+
+  // ERC-20 token (e.g. MUSD, USDT)
+  const address = env("NEXT_PUBLIC_PAYMENT_TOKEN_ADDRESS") ?? env("NEXT_PUBLIC_MUSD_ADDRESS") ?? "";
+  const symbol = env("NEXT_PUBLIC_PAYMENT_TOKEN_SYMBOL") ?? (profile === "mezo" ? "MUSD" : "USDT");
+
+  return {
+    type: "erc20",
+    symbol,
+    address,
+    decimals: Number(env("NEXT_PUBLIC_PAYMENT_TOKEN_DECIMALS") ?? 18),
+  };
+}
+
 export function getAppConfig(): AppConfig {
   if (cached) return cached;
 
-  const chainId = Number(process.env.NEXT_PUBLIC_CHAIN_ID);
+  const ecosystem = detectEcosystem();
+  const walletAdapter = detectWalletAdapter(ecosystem);
+  const chainId = Number(env("NEXT_PUBLIC_CHAIN_ID") ?? (ecosystem === "mezo" ? 31611 : 137));
   if (!Number.isFinite(chainId) || chainId <= 0) {
     throw new Error("Invalid NEXT_PUBLIC_CHAIN_ID (must be a positive number)");
   }
 
   const cfg: AppConfig = {
+    ecosystem,
+    walletAdapter,
     chain: {
       chainId,
-      rpcUrlPublic: (typeof process.env.NEXT_PUBLIC_RPC_URL_PUBLIC === "string" && process.env.NEXT_PUBLIC_RPC_URL_PUBLIC.trim().length > 0)
-        ? process.env.NEXT_PUBLIC_RPC_URL_PUBLIC.trim()
-        : "https://rpc.test.mezo.org",
-      chainName: process.env.NEXT_PUBLIC_CHAIN_NAME,
-      blockExplorerUrl: process.env.NEXT_PUBLIC_BLOCK_EXPLORER_URL,
+      rpcUrlPublic: env("NEXT_PUBLIC_RPC_URL_PUBLIC") ?? "https://rpc.test.mezo.org",
+      chainName: env("NEXT_PUBLIC_CHAIN_NAME"),
+      blockExplorerUrl: env("NEXT_PUBLIC_BLOCK_EXPLORER_URL"),
       nativeCurrency: (() => {
-        const name = process.env.NEXT_PUBLIC_NATIVE_CURRENCY_NAME;
-        const symbol = process.env.NEXT_PUBLIC_NATIVE_CURRENCY_SYMBOL;
-        const decimalsRaw = process.env.NEXT_PUBLIC_NATIVE_CURRENCY_DECIMALS;
+        const name = env("NEXT_PUBLIC_NATIVE_CURRENCY_NAME");
+        const symbol = env("NEXT_PUBLIC_NATIVE_CURRENCY_SYMBOL");
+        const decimalsRaw = env("NEXT_PUBLIC_NATIVE_CURRENCY_DECIMALS");
         const decimals = decimalsRaw ? Number(decimalsRaw) : undefined;
 
         if (!name || !symbol || decimals === undefined) return undefined;
@@ -95,29 +179,22 @@ export function getAppConfig(): AppConfig {
     },
     contracts: {
       tournamentManager: {
-        address: (typeof process.env.NEXT_PUBLIC_TOURNAMENT_MANAGER_ADDRESS === "string"
-          ? process.env.NEXT_PUBLIC_TOURNAMENT_MANAGER_ADDRESS
-          : ""
-        ).trim(),
+        address: env("NEXT_PUBLIC_TOURNAMENT_MANAGER_ADDRESS") ?? "",
       },
-      musd: {
-        address: (typeof process.env.NEXT_PUBLIC_MUSD_ADDRESS === "string" ? process.env.NEXT_PUBLIC_MUSD_ADDRESS : "").trim(),
-      },
+      paymentToken: detectPaymentToken(ecosystem),
       missionPool: {
-        address: (typeof process.env.NEXT_PUBLIC_MISSION_POOL_ADDRESS === "string" ? process.env.NEXT_PUBLIC_MISSION_POOL_ADDRESS : "").trim(),
+        address: env("NEXT_PUBLIC_MISSION_POOL_ADDRESS") ?? "",
       },
     },
     score: {
-      prefix: process.env.NEXT_PUBLIC_SCORE_PREFIX ?? "PINBALL_SCORE:v2",
+      prefix: env("NEXT_PUBLIC_SCORE_PREFIX") ?? "PINBALL_SCORE:v2",
     },
     backend: {
-      baseUrl: (typeof process.env.NEXT_PUBLIC_BACKEND_URL === "string" && process.env.NEXT_PUBLIC_BACKEND_URL.trim().length > 0)
-        ? process.env.NEXT_PUBLIC_BACKEND_URL.trim()
-        : "",
+      baseUrl: env("NEXT_PUBLIC_BACKEND_URL") ?? "",
     },
     missions: {
       activeMissionId: (() => {
-        const v = process.env.NEXT_PUBLIC_ACTIVE_MISSION_ID;
+        const v = env("NEXT_PUBLIC_ACTIVE_MISSION_ID");
         if (!v) return undefined;
         const n = Number(v);
         if (!Number.isFinite(n) || n <= 0) return undefined;

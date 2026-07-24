@@ -1,6 +1,6 @@
 import { ethers } from 'ethers';
 import { getContractsConfig } from '../../config/contracts';
-import { approveMUSD, getMUSDAllowance, getMUSDBalance } from './musd-client';
+import { approvePaymentToken, getPaymentTokenAllowance, getPaymentTokenBalance, getPaymentTokenSymbol, isNativePaymentToken } from './payment-token-client';
 import { TOURNAMENT_MANAGER_ABI } from './abi';
 import {
   estimateGasWithBuffer,
@@ -122,7 +122,8 @@ export async function enterTournament(tournamentId: number, wallet: WalletPort):
     }
 
     const fee: bigint = await publicContract.entryFee();
-    console.log('Entry fee:', ethers.formatUnits(fee, 18), 'MUSD');
+    const tokenSymbol = getPaymentTokenSymbol();
+    console.log('Entry fee:', ethers.formatUnits(fee, 18), tokenSymbol);
 
     // Validate tournament is active before attempting transaction
     console.log('Validating tournament status...');
@@ -137,7 +138,7 @@ export async function enterTournament(tournamentId: number, wallet: WalletPort):
         currentTime: nowSec,
         finalized: tournamentInfo.finalized,
         isActive: nowSec >= tournamentInfo.startTime && nowSec <= tournamentInfo.endTime && !tournamentInfo.finalized,
-        totalPot: ethers.formatUnits(tournamentInfo.totalPot, 18) + ' MUSD'
+        totalPot: ethers.formatUnits(tournamentInfo.totalPot, 18) + ' ' + getPaymentTokenSymbol()
       });
 
       if (nowSec < tournamentInfo.startTime) {
@@ -156,17 +157,17 @@ export async function enterTournament(tournamentId: number, wallet: WalletPort):
       throw validationError;
     }
 
-    // Ensure player has enough MUSD and allowance for transferFrom (DRY: do it once here).
-    const balance = await getMUSDBalance(address);
+    // Ensure player has enough payment token and allowance for entry.
+    const balance = await getPaymentTokenBalance(address);
     if (balance < fee) {
-      throw new Error(`Insufficient MUSD balance. Need ${ethers.formatUnits(fee, 18)} MUSD`);
+      throw new Error(`Insufficient ${tokenSymbol} balance. Need ${ethers.formatUnits(fee, 18)} ${tokenSymbol}`);
     }
 
     const { tournamentManager } = getContractsConfig();
-    const allowance = await getMUSDAllowance(address, tournamentManager.address);
+    const allowance = await getPaymentTokenAllowance(address, tournamentManager.address);
     if (allowance < fee) {
-      console.log('Approving MUSD for tournament entry...');
-      await approveMUSD(tournamentManager.address, ethers.MaxUint256, w);
+      console.log(`Approving ${tokenSymbol} for tournament entry...`);
+      await approvePaymentToken(tournamentManager.address, ethers.MaxUint256, w);
     }
 
     // Estimate gas using PUBLIC RPC

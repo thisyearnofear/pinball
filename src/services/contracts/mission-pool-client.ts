@@ -1,6 +1,6 @@
 import { ethers } from "ethers";
 import { getContractsConfig } from "../../config/contracts";
-import { approveMUSD, getMUSDAllowance, getMUSDBalance } from "./musd-client";
+import { approvePaymentToken, getPaymentTokenAllowance, getPaymentTokenBalance, getPaymentTokenSymbol } from "./payment-token-client";
 import { MISSION_POOL_ABI } from "./abi";
 import { getPublicContract, getWriteContract as getWriteEthersContract } from "./contract-utils";
 import type { WalletPort } from "@/domains/wallet/wallet-port";
@@ -30,15 +30,16 @@ export async function createSponsoredMission(
 
   const total = params.rewardPerWinner * BigInt(params.maxWinners);
 
-  const balance = await getMUSDBalance(address);
+  const tokenSymbol = getPaymentTokenSymbol();
+  const balance = await getPaymentTokenBalance(address);
   if (balance < total) {
-    throw new Error(`Insufficient MUSD balance. Need ${ethers.formatUnits(total, 18)} MUSD`);
+    throw new Error(`Insufficient ${tokenSymbol} balance. Need ${ethers.formatUnits(total, 18)} ${tokenSymbol}`);
   }
 
   const spender = getMissionPoolAddress();
-  const allowance = await getMUSDAllowance(address, spender);
+  const allowance = await getPaymentTokenAllowance(address, spender);
   if (allowance < total) {
-    await approveMUSD(spender, ethers.MaxUint256, w);
+    await approvePaymentToken(spender, ethers.MaxUint256, w);
   }
 
   const c = await getWriteContract(w);

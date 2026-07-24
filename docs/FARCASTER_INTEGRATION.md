@@ -1,5 +1,11 @@
 # Farcaster Mini-App Integration Guide
 
+> **Note:** This guide predates the Mezo migration. The network-specific
+> details (Arbitrum One, Chain ID 42161) are historical. The patterns
+> described here (read-only RPC preference, transaction verification, error
+> handling) remain valid and are applied to the current Mezo deployment.
+> See [MEZO_SETUP.md](./MEZO_SETUP.md) for current chain configuration.
+
 This document records the technical approach and best practices established for the Pinball Farcaster Mini-App, specifically regarding blockchain interactions, network management, and reliability.
 
 ## 1. Network Configuration

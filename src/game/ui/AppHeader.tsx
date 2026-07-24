@@ -1,6 +1,8 @@
 import React, { useMemo } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 
+import { getAppConfig } from "@/config/app-config";
+import { useWalletState } from "@/hooks/use-wallet-state";
 import { useIsSmallScreen } from "@/hooks/use-media-query";
 import type { WorldAccent } from "@/hooks/use-world-theme";
 import { Button } from "./Button";
@@ -20,6 +22,9 @@ type Props = {
 export function AppHeader({ view, gameActive, tournamentName, worldAccent, onOpenMenu, onOpenModal }: Props) {
   const isSmall = useIsSmallScreen();
   const [showMobileMenu, setShowMobileMenu] = React.useState(false);
+  const cfg = getAppConfig();
+  const isWagmi = cfg.walletAdapter === "wagmi";
+  const { address, isConnected } = useWalletState();
 
   const mobileMenuItems = useMemo(() => [
     { label: "Leaderboard", action: () => { onOpenModal("leaderboard"); setShowMobileMenu(false); } },
@@ -40,6 +45,29 @@ export function AppHeader({ view, gameActive, tournamentName, worldAccent, onOpe
 
   const tournamentStyle: React.CSSProperties = {
     background: worldAccent.muted,
+  };
+
+  // Render the connect button based on wallet adapter
+  const renderConnectButton = () => {
+    if (isWagmi) return <ConnectButton />;
+    // Nimiq: show a simple connected/disconnected badge
+    if (isConnected && address) {
+      return (
+        <span className={styles.liveBadge} style={{ opacity: 0.8 }}>
+          {address.slice(0, 6)}...{address.slice(-4)}
+        </span>
+      );
+    }
+    return (
+      <Button variant="ghost" size="sm" onClick={async () => {
+        const provider = (window as any).ethereum;
+        if (provider?.request) {
+          try { await provider.request({ method: "eth_requestAccounts" }); } catch {}
+        }
+      }}>
+        Connect
+      </Button>
+    );
   };
 
   return (
@@ -94,7 +122,7 @@ export function AppHeader({ view, gameActive, tournamentName, worldAccent, onOpe
             <Button variant="ghost" size="sm" onClick={() => onOpenModal("settings")}>
               Settings
             </Button>
-            <ConnectButton />
+            {renderConnectButton()}
           </div>
         )}
       </header>
@@ -115,7 +143,7 @@ export function AppHeader({ view, gameActive, tournamentName, worldAccent, onOpe
           ))}
           <div className={styles.dropdownDivider} />
           <div className={styles.dropdownConnectWrap}>
-            <ConnectButton />
+            {renderConnectButton()}
           </div>
         </div>
       )}
