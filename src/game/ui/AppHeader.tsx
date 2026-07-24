@@ -1,5 +1,5 @@
-import React, { useMemo } from "react";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
+import React, { useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 
 import { getAppConfig } from "@/config/app-config";
 import { useWalletState } from "@/hooks/use-wallet-state";
@@ -7,6 +7,13 @@ import { useIsSmallScreen } from "@/hooks/use-media-query";
 import type { WorldAccent } from "@/hooks/use-world-theme";
 import { Button } from "./Button";
 import styles from "./AppHeader.module.scss";
+
+// Lazy-load RainbowKit's ConnectButton only on the client to avoid
+// SSR bundling of @rainbow-me/rainbowkit → @coinbase/cdp-sdk → @x402/*
+const ConnectButton = dynamic(
+  () => import("@rainbow-me/rainbowkit").then(m => ({ default: m.ConnectButton })),
+  { ssr: false }
+);
 
 type View = "lobby" | "game" | "paused";
 
