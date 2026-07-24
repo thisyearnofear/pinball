@@ -320,6 +320,8 @@ function getChainName(chainId: number): string {
             return 'Mezo Mainnet';
         case 137:
             return 'Polygon';
+        case 80002:
+            return 'Polygon Amoy';
         case 42161:
             return 'Arbitrum One';
         case 8453:

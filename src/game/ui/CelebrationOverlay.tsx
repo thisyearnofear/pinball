@@ -50,7 +50,7 @@ export function CelebrationOverlay(props: Props) {
 
         {!props.isPractice && (
           <div style={{ textAlign: "center", fontSize: typography.size.sm, color: colors.text.muted, padding: `${spacing.xs}px 0` }}>
-            Mezo Testnet · MUSD prizes via TournamentManager
+            Polygon Amoy · Prizes via TournamentManager
           </div>
         )}
 

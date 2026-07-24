@@ -37,7 +37,7 @@ function tokenSymbol(): string {
   try {
     return getAppConfig().contracts.paymentToken.symbol;
   } catch {
-    return "MUSD"; // safe default
+    return "USDT"; // safe default
   }
 }
 

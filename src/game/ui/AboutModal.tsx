@@ -34,19 +34,19 @@ export function AboutModal(props: { onClose: () => void }) {
     <Modal title="About" onClose={props.onClose}>
       <div style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}>
         <p style={{ margin: 0, fontSize: typography.size.md, color: colors.text.secondary, lineHeight: typography.lineHeight.relaxed }}>
-          Pinball Arcade — retro pinball with onchain tournaments on Mezo. Compete for MUSD prizes (Bitcoin-backed stablecoin). 
-          Scores are cryptographically signed and verified onchain via EIP-191. Built for the Mezo Hackathon.
+          Kamikaze Ball — the world's first verifiable arcade. Drain-to-win pinball with onchain tournaments and power-up tug-of-war.
+          Scores are cryptographically signed and verified onchain via EIP-191. Built for the Nimiq Pay Mini Apps Competition.
         </p>
 
         <div>
           <h3 style={{ margin: `0 0 ${spacing.md}px`, fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text.primary }}>
-            Contracts (Mezo Testnet)
+            Contracts (Polygon Amoy)
           </h3>
           <div style={{ fontSize: typography.size.sm, color: colors.text.secondary, fontFamily: typography.fontFamilyMono, lineHeight: typography.lineHeight.relaxed }}>
-            TournamentManager: 0x3906...cfa0<br />
-            MissionPool: 0xC3fb...35B3<br />
-            MUSD: 0x1189...c503<br />
-            Chain: 31611
+            TournamentManager: 0x711a...C860<br />
+            MissionPool: 0xf0Fc...FD49<br />
+            Test USDT: 0xD391...3A66<br />
+            Chain: 80002
           </div>
         </div>
 

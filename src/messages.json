@@ -91,7 +91,7 @@
         },
         "about": {
             "credits": "Credits",
-            "introduction": "Pinball Arcade is a pinball mini app with recurring tournaments on Mezo. Players pay a fixed entry fee in MUSD to enter, and entry fees fund the prize pot. After the tournament ends, prizes are distributed among the top winners according to the configured split (e.g., top 3: 50/30/20).",
+            "introduction": "Kamikaze Ball is a drain-to-win pinball mini app with onchain tournaments. The table fights back with AI flippers and countermeasures. Players pay a fixed entry fee in USDT to enter, and entry fees fund the prize pot. After the tournament ends, prizes are distributed among the top winners according to the configured split (e.g., top 3: 50/30/20).",
             "animation": "Animation",
             "tableDesign": "Table design",
             "font": "Font"

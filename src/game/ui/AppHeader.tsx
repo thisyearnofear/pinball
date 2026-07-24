@@ -85,7 +85,7 @@ export function AppHeader({ view, gameActive, tournamentName, worldAccent, onOpe
       >
         <div className={`${styles.brandGroup} ${isSmall ? styles.brandGroupMobile : ''}`}>
           <span className={`${styles.brandName} ${isSmall ? styles.brandNameMobile : ''}`} style={brandStyle}>
-            Pinball Arcade
+            Kamikaze Ball
           </span>
           {!isSmall && tournamentName && (
             <span className={styles.tournamentTag} style={tournamentStyle}>

@@ -40,17 +40,17 @@ export function ArcadeLobby(props: Props) {
     <CRTOverlay intensity={0.15}>
       <div className={styles.container}>
         <div className={styles.marquee}>
-          <NeonTitle text="PINBALL ARCADE" size="lg" color="#6366f1" />
+          <NeonTitle text="KAMIKAZE BALL" size="lg" color="#6366f1" />
           <p className={styles.marqueeSubtitle}>
-            Onchain pinball on Mezo — compete for MUSD prizes
+            Drain-to-win pinball — the machine fights back
           </p>
         </div>
 
         {!props.isConnected && (
           <div className={styles.connectPrompt}>
             <div className={styles.connectIcon}>🔌</div>
-            <div className={styles.connectText}>Connect your wallet to enter tournaments and win MUSD</div>
-            <div className={styles.connectChain}>Mezo Testnet · Chain 31611</div>
+            <div className={styles.connectText}>Connect your wallet to enter tournaments and win prizes</div>
+            <div className={styles.connectChain}>Polygon Amoy · Chain 80002</div>
           </div>
         )}
 
