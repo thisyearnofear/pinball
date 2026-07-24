@@ -5,9 +5,6 @@
 [build.environment]
   NODE_VERSION = "22"
   NPM_FLAGS = "--version"
-
-# Nimiq profile env vars (Polygon Amoy testnet)
-[build.environment]
   NEXT_PUBLIC_ECOSYSTEM_PROFILE = "nimiq"
   NEXT_PUBLIC_WALLET_ADAPTER = "nimiq"
   NEXT_PUBLIC_CHAIN_ID = "80002"
