@@ -23,7 +23,7 @@ const config: HardhatUserConfig = {
   solidity: {
     version: "0.8.28",
     settings: {
-      optimizer: { enabled: true, runs: 200 },
+      optimizer: { enabled: true, runs: 1 }, // optimize for deployment size (cheaper deploy gas)
       viaIR: true,
       evmVersion: "london",
     },
@@ -35,9 +35,18 @@ const config: HardhatUserConfig = {
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
     },
     mezomainnet: {
-      // Validation Cloud public endpoint works without signup; for higher limits use an API key.
       url: process.env.MEZO_MAINNET_RPC_URL ?? "https://mainnet.mezo.public.validationcloud.io/",
       chainId: Number(process.env.MEZO_MAINNET_CHAIN_ID ?? 31612),
+      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
+    },
+    polygonamoy: {
+      url: process.env.POLYGON_AMOY_RPC_URL ?? "https://polygon-amoy.publicnode.com",
+      chainId: Number(process.env.POLYGON_AMOY_CHAIN_ID ?? 80002),
+      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
+    },
+    polygon: {
+      url: process.env.POLYGON_RPC_URL ?? "https://polygon-rpc.com",
+      chainId: Number(process.env.POLYGON_CHAIN_ID ?? 137),
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
     },
   },

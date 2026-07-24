@@ -40,10 +40,20 @@ export const mezoMainnet = defineChain({
 export const polygon = defineChain({
   id: 137,
   name: "Polygon",
-  nativeCurrency: { name: "MATIC", symbol: "MATIC", decimals: 18 },
+  nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 },
   rpcUrls: {
     default: { http: ["https://polygon-rpc.com"] },
   },
+});
+
+export const polygonAmoy = defineChain({
+  id: 80002,
+  name: "Polygon Amoy",
+  nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 },
+  rpcUrls: {
+    default: { http: ["https://polygon-amoy.publicnode.com"] },
+  },
+  testnet: true,
 });
 
 /**
@@ -65,6 +75,9 @@ export function buildWagmiConfig() {
       break;
     case polygon.id:
       chain = polygon;
+      break;
+    case polygonAmoy.id:
+      chain = polygonAmoy;
       break;
     default:
       // Build a chain definition from config for unknown chains

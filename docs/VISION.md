@@ -175,6 +175,7 @@ NOW (hackathon ship)
   ✓ Marble splat world compositing (Tier 1)
   ✓ Jackpot Multiball -> MissionPool payout
   ✓ Ecosystem profile system (Mezo + Nimiq, one codebase)
+  ✓ Polygon Amoy deployment (USDT, TournamentManager + MissionPool)
   → Ship Inversion 1 (drain-to-win mode)         [highest delight/effort]
   → Ship Inversion 2 (ball-is-token metaphor)     [locks ecosystem monopoly]
 

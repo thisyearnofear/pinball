@@ -43,17 +43,31 @@ The app supports multiple blockchain ecosystems via env-based profiles. Set
 | `mezo` (default) | Mezo Testnet/Mainnet | MUSD (ERC-20) | Wagmi + RainbowKit |
 | `nimiq` | Polygon (or Nimiq native) | NIM (native) or USDT (ERC-20) | @nimiq/mini-app-sdk |
 
-See [.env.example](.env.example) for all profile env vars.
+See [.env.example](.env.example) for all profile env vars, or
+[.env.nimiq](.env.nimiq) for the complete Nimiq profile.
 
-## Live contracts (Mezo Testnet)
+## Live contracts
 
-| Contract | Address | 
+### Mezo Testnet
+
+| Contract | Address |
 |---|---|
 | TournamentManager | `0x39067C81a3ccc3184000b88b7466A4A77B59cfa0` |
 | MissionPool | `0xC3fbd6315F00aB3fcc2d1855A75d6B0c3af235B3` |
 | MUSD | `0x118917a40FAF1CD7a13dB0Ef56C86De7973Ac503` |
 
-See [docs/MEZO_SETUP.md](docs/MEZO_SETUP.md) for full deployment and configuration guide.
+See [docs/MEZO_SETUP.md](docs/MEZO_SETUP.md) for full deployment guide.
+
+### Polygon Amoy (Nimiq profile)
+
+| Contract | Address |
+|---|---|
+| MockERC20 (test USDT) | `0xD391D6131F92E0A9717a98aD69BAeCfcA4c23A66` |
+| TournamentManager | `0x711aB8af92bA35C3ce910468e45b3B0097C6C860` |
+| MissionPool | `0xf0Fc8d4Ad5b00AF6aAb4E74Cd59B67c4eEB2FD49` |
+
+See [docs/NIMIQ_SETUP.md](docs/NIMIQ_SETUP.md) for the Nimiq/Polygon
+deployment guide and Nimiq Pay Mini App testing instructions.
 
 ## Architecture
 

@@ -7,7 +7,9 @@
     "build": "hardhat compile",
     "test": "hardhat test",
     "deploy:mezotestnet": "hardhat run scripts/deploy.ts --network mezotestnet",
-    "deploy:mezomainnet": "hardhat run scripts/deploy.ts --network mezomainnet"
+    "deploy:mezomainnet": "hardhat run scripts/deploy.ts --network mezomainnet",
+    "deploy:polygonamoy": "hardhat run scripts/deploy-polygon.ts --network polygonamoy",
+    "deploy:polygon": "hardhat run scripts/deploy-polygon.ts --network polygon"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
