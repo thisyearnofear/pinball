@@ -40,8 +40,8 @@ describe('Input Validation - Phase 1', () => {
     test('should reject Infinity', () => {
       const result = validateScoreBounds(Infinity);
       expect(result.valid).toBe(false);
-      // Infinity is "too high" for our ordering (bounds check first)
-      expect(result.reason).toBe('SCORE_TOO_HIGH');
+      // Non-finite values are caught before bounds checks
+      expect(result.reason).toBe('INVALID_SCORE');
     });
 
     test('should reject NaN', () => {
@@ -169,7 +169,8 @@ describe('Input Validation - Phase 1', () => {
         metadata: '{invalid'
       });
       expect(result.valid).toBe(false);
-      expect(result.reason).toBe('SCORE_TOO_HIGH'); // First validation to fail
+      // Metadata is validated first (it determines the game mode for score bounds)
+      expect(result.reason).toBe('METADATA_INVALID_JSON');
     });
   });
 });

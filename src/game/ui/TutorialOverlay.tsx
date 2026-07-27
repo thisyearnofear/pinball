@@ -4,11 +4,13 @@ import { Button } from "./Button";
 
 import { STORED_HAS_VIEWED_TUTORIAL } from "@/definitions/settings";
 import { getFromStorage, setInStorage } from "@/utils/local-storage";
+import type { GameMode } from "@/config/tournaments";
 
 import { colors, spacing, typography, radius } from "@/theme/tokens";
 
 type Props = {
   onClose: () => void;
+  gameMode?: GameMode;
 };
 
 export function hasSeenTutorial(): boolean {
@@ -26,12 +28,23 @@ export function TutorialOverlay(props: Props) {
   }, []);
 
   const slides = useMemo(() => {
+    if (props.gameMode === "kamikaze") {
+      return [
+        "The machine fights to SAVE the ball.",
+        "You want to DRAIN it. Fastest drain wins.",
+        touchscreen ? "Tap anywhere on the table to nudge the ball." : "Click anywhere on the table to nudge the ball.",
+        "Grab munition crates for power-ups — some help you, some help the machine.",
+        "Bumpers and targets add penalty time. Avoid them.",
+        "Beat the machine!",
+      ];
+    }
+
     const base = touchscreen
       ? ["Tap left side for left flipper.", "Tap right side for right flipper.", "Swipe up to bump the table."]
       : ["Press ← for left flipper.", "Press → for right flipper.", "Press spacebar to bump the table."];
 
     return [...base, "Bumping is powerful — don't spam it.", "Keep the ball alive.", "Have fun!"];
-  }, [touchscreen]);
+  }, [touchscreen, props.gameMode]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

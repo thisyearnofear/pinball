@@ -11,26 +11,43 @@ import { z } from 'zod';
 // Maximum plausible score (reasonable upper bound for any game)
 export const MAX_SCORE = 10_000_000; // 10 million points
 
+// Kamikaze mode: score is drain time in milliseconds (lower = better).
+// Anything below MIN_DRAIN_MS is physically implausible (ball can't reach the drain).
+export const MIN_DRAIN_MS = 800;
+export const MAX_DRAIN_MS = 3_600_000; // 1 hour
+
+export type GameMode = 'classic' | 'kamikaze';
+
 // Metadata constraints
 export const MAX_METADATA_LENGTH = 10_000; // 10KB JSON
 
 /**
- * Score bounds validation
+ * Score bounds validation (direction-aware)
  */
-export function validateScoreBounds(score: number): { valid: boolean; reason?: string } {
-  if (score < 0) {
-    return { valid: false, reason: 'NEGATIVE_SCORE' };
-  }
-  
-  if (score > MAX_SCORE) {
-    return { valid: false, reason: 'SCORE_TOO_HIGH' };
-  }
-  
+export function validateScoreBounds(score: number, mode: GameMode = 'classic'): { valid: boolean; reason?: string } {
   // Check for NaN or Infinity
   if (!Number.isFinite(score)) {
     return { valid: false, reason: 'INVALID_SCORE' };
   }
-  
+
+  if (score < 0) {
+    return { valid: false, reason: 'NEGATIVE_SCORE' };
+  }
+
+  if (mode === 'kamikaze') {
+    if (score < MIN_DRAIN_MS) {
+      return { valid: false, reason: 'DRAIN_TOO_FAST' };
+    }
+    if (score > MAX_DRAIN_MS) {
+      return { valid: false, reason: 'DRAIN_TOO_SLOW' };
+    }
+    return { valid: true };
+  }
+
+  if (score > MAX_SCORE) {
+    return { valid: false, reason: 'SCORE_TOO_HIGH' };
+  }
+
   return { valid: true };
 }
 
@@ -54,6 +71,7 @@ export function getPlayerName(input: string): string {
  */
 export interface GameMetadata {
   gameId?: string;
+  mode?: GameMode;
   duration?: number;
   ballsUsed?: number;
   tableId?: number;
@@ -87,6 +105,12 @@ export function validateGameMetadata(metadataStr: string): { valid: boolean; dat
   }
   
   // Optional: validate known fields if present
+  if (data.mode !== undefined) {
+    if (data.mode !== 'classic' && data.mode !== 'kamikaze') {
+      return { valid: false, reason: 'METADATA_INVALID_MODE' };
+    }
+  }
+
   if (data.duration !== undefined) {
     if (typeof data.duration !== 'number' || data.duration < 0 || data.duration > 3600000) {
       return { valid: false, reason: 'METADATA_INVALID_DURATION' };
@@ -114,6 +138,37 @@ export function validateGameMetadata(metadataStr: string): { valid: boolean; dat
   return { valid: true, data };
 }
 
+// Classic scoring rate ceiling for plausibility. Peak legit rate is ~50k/s
+// (bumper 500 × multiplier 32 × ~3 hits/s), so 100k/s only catches absurd claims.
+export const MAX_POINTS_PER_SECOND = 100_000;
+
+/**
+ * Cross-check the score against self-reported metadata.
+ * These fields are optional (older clients omit them), so checks only fire when present.
+ */
+export function validatePlausibility(
+  score: number,
+  mode: GameMode,
+  data: GameMetadata
+): { valid: boolean; reason?: string } {
+  const duration = typeof data.duration === 'number' ? data.duration : undefined;
+
+  if (mode === 'kamikaze') {
+    // Score = best ball's time-alive + penalties. Penalties accrue at most a few
+    // multiples of real time (bumper +500ms/hit), so 4× duration is a safe ceiling.
+    if (duration !== undefined && duration > 0 && score > duration * 4 + 5_000) {
+      return { valid: false, reason: 'SCORE_EXCEEDS_DURATION' };
+    }
+  } else if (duration !== undefined && duration > 0) {
+    const maxPlausible = Math.ceil(duration / 1000) * MAX_POINTS_PER_SECOND + 10_000;
+    if (score > maxPlausible) {
+      return { valid: false, reason: 'SCORE_RATE_IMPLAUSIBLE' };
+    }
+  }
+
+  return { valid: true };
+}
+
 /**
  * Combined validation for score submission request
  */
@@ -134,10 +189,23 @@ export function validateScoreSubmission(input: {
     metadata: GameMetadata;
   };
 } {
-  // Validate score
-  const scoreValid = validateScoreBounds(input.score);
+  // Validate metadata first so we know the game mode for score bounds
+  const metadataValidation = validateGameMetadata(input.metadata || '');
+  if (!metadataValidation.valid) {
+    return { valid: false, reason: metadataValidation.reason };
+  }
+  const mode: GameMode = metadataValidation.data?.mode === 'kamikaze' ? 'kamikaze' : 'classic';
+
+  // Validate score (direction-aware)
+  const scoreValid = validateScoreBounds(input.score, mode);
   if (!scoreValid.valid) {
     return { valid: false, reason: scoreValid.reason };
+  }
+
+  // Plausibility cross-checks against metadata (when fields are present)
+  const plausible = validatePlausibility(input.score, mode, metadataValidation.data || {});
+  if (!plausible.valid) {
+    return { valid: false, reason: plausible.reason };
   }
   
   // Validate tournament ID
@@ -157,12 +225,6 @@ export function validateScoreSubmission(input: {
   
   // Player name: wallet-derived, no validation needed
   const playerName = getPlayerName(input.name || '');
-  
-  // Validate metadata
-  const metadataValidation = validateGameMetadata(input.metadata || '');
-  if (!metadataValidation.valid) {
-    return { valid: false, reason: metadataValidation.reason };
-  }
   
   return {
     valid: true,

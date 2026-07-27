@@ -9,10 +9,14 @@
 import { MARBLE_WORLDS, type MarbleWorld, getWorldById } from './worlds';
 import { getAppConfig } from './app-config';
 
+export type GameMode = "classic" | "kamikaze";
+
 export interface TournamentMeta {
   id: number;
   name: string;
   worldId: string;
+  /** kamikaze tournaments rank ascending (lowest drain time wins) */
+  mode: GameMode;
   description?: string;
   posterUrl?: string;
   audioUrl?: string;
@@ -46,7 +50,8 @@ export const TOURNAMENT_META: Record<number, TournamentMeta> = {
     id: 1,
     name: 'Pirate Ship',
     worldId: 'pirate-ship',
-    description: 'Brave the depths of the sunken galleon.',
+    mode: 'kamikaze',
+    description: 'Kamikaze Ball — drain fast, the galleon fights back.',
     entryFee: '1',  // symbol appended dynamically
     prizePool: 'Pot grows with each entry',
   },
@@ -54,7 +59,8 @@ export const TOURNAMENT_META: Record<number, TournamentMeta> = {
     id: 2,
     name: 'Spaceship',
     worldId: 'spaceship',
-    description: 'Zero-gravity pinball aboard a cozy spaceship.',
+    mode: 'kamikaze',
+    description: 'Kamikaze Ball in zero gravity. Fastest drain wins.',
     entryFee: '1',
     prizePool: 'Pot grows with each entry',
   },
@@ -62,7 +68,8 @@ export const TOURNAMENT_META: Record<number, TournamentMeta> = {
     id: 3,
     name: 'Hobbiton',
     worldId: 'hobbiton',
-    description: 'Pinball in the Shire. Second breakfast included.',
+    mode: 'classic',
+    description: 'Classic pinball in the Shire. Highest score wins.',
     entryFee: '1',
     prizePool: 'Pot grows with each entry',
   },
@@ -70,11 +77,19 @@ export const TOURNAMENT_META: Record<number, TournamentMeta> = {
     id: 4,
     name: 'Haunted House',
     worldId: 'haunted-house',
-    description: 'Spooky bumpers, spectral jackpots.',
+    mode: 'classic',
+    description: 'Classic pinball. Spooky bumpers, spectral jackpots.',
     entryFee: '1',
     prizePool: 'Pot grows with each entry',
   },
 };
+
+/**
+ * Whether a tournament ranks ascending (lower score = better).
+ */
+export function isInvertedTournament(id: number): boolean {
+  return getTournamentMeta(id)?.mode === 'kamikaze';
+}
 
 export function getAllTournamentIds(): number[] {
   return Object.keys(TOURNAMENT_META).map(Number);

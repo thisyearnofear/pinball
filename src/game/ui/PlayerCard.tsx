@@ -1,6 +1,7 @@
 import React from "react";
 import { PlayerAvatar } from "./PlayerAvatar";
 import { Card } from "./Card";
+import { formatGameScore } from "@/utils/score-format";
 
 import { colors, spacing, typography, radius } from "@/theme/tokens";
 
@@ -9,14 +10,10 @@ type Props = {
   stats: {
     gamesPlayed: number;
     bestScore: number;
-    bestWorld: string;
+    bestDrainMs: number;
     tournamentsEntered: number;
   };
 };
-
-function formatScore(score: number): string {
-  return score.toLocaleString();
-}
 
 export function PlayerCard(props: Props) {
   if (!props.address) return null;
@@ -43,8 +40,8 @@ export function PlayerCard(props: Props) {
         gap: spacing.md,
       }}>
         <StatBlock label="Games" value={props.stats.gamesPlayed.toString()} />
-        <StatBlock label="Best" value={formatScore(props.stats.bestScore)} />
-        <StatBlock label="World" value={props.stats.bestWorld || "—"} />
+        <StatBlock label="Best Drain" value={props.stats.bestDrainMs > 0 ? formatGameScore(props.stats.bestDrainMs, true) : "—"} />
+        <StatBlock label="Best Score" value={props.stats.bestScore > 0 ? formatGameScore(props.stats.bestScore, false) : "—"} />
         <StatBlock label="Tournaments" value={props.stats.tournamentsEntered.toString()} />
       </div>
     </Card>

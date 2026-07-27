@@ -3,9 +3,11 @@ import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import { env } from './lib/env.js';
 import { scoresRoutes } from './routes/scores.js';
+import { replaysRoutes } from './routes/replays.js';
 import { scoreSignatureRateLimiter } from './lib/rate-limiter.js';
 import { nonceTracker } from './lib/nonce-tracker.js';
 import { isRedisAvailable } from './lib/redis-client.js';
+import { adminAuth } from './lib/admin-auth.js';
 
 const app = Fastify({ logger: true });
 
@@ -27,10 +29,11 @@ await app.register(rateLimit, {
 });
 
 await app.register(scoresRoutes);
+await app.register(replaysRoutes);
 
 app.get('/health', async () => ({ ok: true }));
 
-app.get('/admin/metrics', async () => {
+app.get('/admin/metrics', { preHandler: adminAuth }, async () => {
   const rateLimitStats = scoreSignatureRateLimiter.getStats();
   const nonceStats = nonceTracker.getStats();
   return {

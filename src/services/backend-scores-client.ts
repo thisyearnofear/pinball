@@ -26,7 +26,6 @@ export async function requestScoreSignature(params: {
   score: number;
   name?: string;
   metadata?: string;
-  nonce?: string;
   missionId?: number;
 }): Promise<ScoreSignatureResponse> {
   if (!API_BASE) throw new Error('Backend URL not configured');
@@ -40,4 +39,21 @@ export async function requestScoreSignature(params: {
     missionTxHash: data.missionTxHash as string | undefined,
     missionError: data.missionError as string | undefined,
   };
+}
+
+/**
+ * Ship a full replay recording to the backend for storage.
+ * The replay's keccak hash travels inside the signed score metadata,
+ * binding this payload to the on-chain submission.
+ */
+export async function uploadReplay(params: {
+  tournamentId: number;
+  address: string;
+  replay: string;
+}): Promise<{ ok: boolean; hash?: string }> {
+  if (!API_BASE) throw new Error('Backend URL not configured');
+  const { data } = await axios.post(`${API_BASE}/api/replays`, params, {
+    headers: { 'Content-Type': 'application/json' },
+  });
+  return { ok: Boolean(data.ok), hash: data.hash as string | undefined };
 }

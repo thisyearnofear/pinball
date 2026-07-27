@@ -25,4 +25,5 @@ export const getMockPhysicsEngine = (): IPhysicsEngine => ({
     })),
     removeBody: vi.fn(),
     triggerFlipper: vi.fn(),
+    launchBall: vi.fn(),
 });

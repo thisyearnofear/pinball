@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { getWorldById } from '@/config/worlds';
+import { formatGameScore } from '@/utils/score-format';
 import { Button, Card } from './index';
 
 import { colors, spacing, typography, radius } from '@/theme/tokens';
@@ -8,6 +9,9 @@ interface ShareCardProps {
   score: number;
   worldId: string;
   tournamentName?: string;
+  kamikaze?: boolean;
+  aiDifficulty?: string;
+  taunt?: string;
   onDismiss: () => void;
   onShare?: () => void;
 }
@@ -16,13 +20,22 @@ export function ShareCard(props: ShareCardProps) {
   const [copied, setCopied] = useState(false);
   const world = getWorldById(props.worldId);
   const gradient = world?.gradient || 'linear-gradient(135deg, #1a0a2e, #0f0f23)';
+  const kamikaze = Boolean(props.kamikaze);
+  const scoreLabel = kamikaze ? 'Drain time' : 'Score';
+  const scoreText = formatGameScore(props.score, kamikaze);
 
   function handleCopy() {
-    const text = `Kamikaze Ball\n` +
-      `${props.tournamentName ? `Tournament: ${props.tournamentName}\n` : ''}` +
-      `Score: ${props.score.toLocaleString()}\n` +
-      `World: ${world?.name || props.worldId}\n` +
-      `\nPlay now!`;
+    const text = kamikaze
+      ? `Kamikaze Ball\n` +
+        `${props.tournamentName ? `Tournament: ${props.tournamentName}\n` : ''}` +
+        `Drained the ball in ${scoreText}${props.aiDifficulty ? ` on ${props.aiDifficulty}` : ''}.\n` +
+        `${props.taunt ? `The machine said: "${props.taunt}"\n` : ''}` +
+        `\nThink you can drain it faster? Play now!`
+      : `Kamikaze Ball\n` +
+        `${props.tournamentName ? `Tournament: ${props.tournamentName}\n` : ''}` +
+        `Score: ${scoreText}\n` +
+        `World: ${world?.name || props.worldId}\n` +
+        `\nPlay now!`;
 
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
@@ -67,12 +80,31 @@ export function ShareCard(props: ShareCardProps) {
               {props.tournamentName || 'Practice'}
             </div>
             <div style={{ fontSize: typography.size['4xl'], fontWeight: typography.weight.bold }}>
-              {props.score.toLocaleString()}
+              {scoreText}
             </div>
+            {kamikaze && (
+              <div style={{ fontSize: typography.size.sm, opacity: 0.85, marginTop: spacing.xs }}>
+                Kamikaze · {props.aiDifficulty ? `machine on ${props.aiDifficulty}` : 'vs the machine'}
+              </div>
+            )}
           </div>
         </div>
 
         <div style={{ padding: spacing.xl }}>
+          {kamikaze && props.taunt && (
+            <div style={{
+              marginBottom: spacing.lg,
+              padding: spacing.md,
+              borderRadius: radius.md,
+              border: `1px solid rgba(255, 68, 68, 0.4)`,
+              background: 'rgba(255, 68, 68, 0.08)',
+              textAlign: 'center',
+              fontSize: typography.size.sm,
+              color: colors.text.secondary,
+            }}>
+              The machine said: <strong style={{ color: '#ff4444' }}>"{props.taunt}"</strong>
+            </div>
+          )}
           <Card padding={spacing.lg} style={{ marginBottom: spacing.lg }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
@@ -82,9 +114,9 @@ export function ShareCard(props: ShareCardProps) {
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: typography.size.xs, color: colors.text.muted }}>Score</div>
+                <div style={{ fontSize: typography.size.xs, color: colors.text.muted }}>{scoreLabel}</div>
                 <div style={{ fontSize: typography.size.md, fontWeight: typography.weight.semibold, color: colors.text.primary }}>
-                  {props.score.toLocaleString()}
+                  {scoreText}
                 </div>
               </div>
             </div>

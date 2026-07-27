@@ -3,10 +3,11 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { getAppConfig } from "@/config/app-config";
 import type { WalletPort } from "@/domains/wallet/wallet-port";
 import { stopGame, setSubmissionStateCallback, type SubmissionStep as LegacySubmissionStep } from "@/services/high-scores-service";
-import { getTournamentMeta, getAllTournaments } from "@/config/tournaments";
+import { getTournamentMeta, getAllTournaments, type GameMode } from "@/config/tournaments";
 import { getFromStorage } from "@/utils/local-storage";
 import { STORED_WORLD_ID } from "@/definitions/settings";
 import { START_TABLE_INDEX } from "@/definitions/tables";
+import type { AIDifficulty } from "@/model/kamikaze";
 
 import { colors, spacing } from "@/theme/tokens";
 import { useWorldTheme, getWorldAccent } from "@/hooks/use-world-theme";
@@ -37,11 +38,17 @@ type ActiveModal = "settings" | "how" | "about" | "leaderboard" | null;
 export default function GameScreen() {
   const { address, isConnected } = useWalletState();
   const toast = useToast();
-  const { recordRun } = usePlayerStats();
+  const { stats, recordRun } = usePlayerStats();
   const walletPort = useWalletPort();
   const { tournament, setTournament, isLoading: isLoadingTournament, refresh: refreshTournament, enterTournament: doEnterTournament } = useTournament(address, walletPort);
 
   const [mode, setMode] = useState<"practice" | "tournament">("practice");
+  const [gameMode, setGameMode] = useState<GameMode>(() => {
+    try { return (localStorage.getItem("pinball_game_mode") as GameMode) || "kamikaze"; } catch { return "kamikaze"; }
+  });
+  const [aiDifficulty, setAiDifficulty] = useState<AIDifficulty>(() => {
+    try { return (localStorage.getItem("pinball_kamikaze_difficulty") as AIDifficulty) || "medium"; } catch { return "medium"; }
+  });
   const [runKey, setRunKey] = useState(0);
   const [selectedWorldId, setSelectedWorldId] = useState<string>(() => getFromStorage(STORED_WORLD_ID) || "hobbiton");
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
@@ -77,6 +84,16 @@ export default function GameScreen() {
     return tournament.entered;
   }, [isConnected, tournament.tournamentId, tournament.entered]);
 
+  function selectGameMode(next: GameMode) {
+    setGameMode(next);
+    try { localStorage.setItem("pinball_game_mode", next); } catch {}
+  }
+
+  function selectDifficulty(next: AIDifficulty) {
+    setAiDifficulty(next);
+    try { localStorage.setItem("pinball_kamikaze_difficulty", next); } catch {}
+  }
+
   function startPractice() {
     setMode("practice");
     setShowCelebration(false);
@@ -104,6 +121,14 @@ export default function GameScreen() {
     return null;
   }, [mode, tournament.tournamentId]);
 
+  // Tournament runs play in the tournament's mode; practice uses the player's choice.
+  const effectiveGameMode = useMemo<GameMode>(() => {
+    if (mode === "tournament" && tournament.tournamentId) {
+      return getTournamentMeta(tournament.tournamentId)?.mode ?? "classic";
+    }
+    return gameMode;
+  }, [mode, tournament.tournamentId, gameMode]);
+
   const pausedEffective = view === "paused" || activeModal !== null || showTutorial || showCelebration || submissionStep !== null;
 
   useEffect(() => {
@@ -122,9 +147,9 @@ export default function GameScreen() {
 
   const handleRunEnd = useCallback((score: number) => {
     setLastScore(score);
-    recordRun({ score, mode, worldId: activeWorldId, tournamentId: tournament.tournamentId ?? undefined });
+    recordRun({ score, mode, gameMode: effectiveGameMode, worldId: activeWorldId, tournamentId: tournament.tournamentId ?? undefined });
     setShowCelebration(true);
-  }, [mode, activeWorldId, tournament.tournamentId, recordRun]);
+  }, [mode, effectiveGameMode, activeWorldId, tournament.tournamentId, recordRun]);
 
   return (
     <ScreenFxProvider>
@@ -147,6 +172,12 @@ export default function GameScreen() {
                 entered={tournament.entered}
                 isConnected={isConnected}
                 loading={isLoadingTournament}
+                gameMode={gameMode}
+                aiDifficulty={aiDifficulty}
+                playerAddress={address ?? null}
+                playerStats={stats}
+                onSelectGameMode={selectGameMode}
+                onSelectDifficulty={selectDifficulty}
                 onSelectTournament={(id) => setTournament((prev) => ({ ...prev, tournamentId: id }))}
                 onEnterTournament={(_id: number) => {
                   doEnterTournament()
@@ -168,6 +199,7 @@ export default function GameScreen() {
             {view === "paused" && (
               <PauseMenu
                 score={lastScore}
+                kamikaze={effectiveGameMode === "kamikaze"}
                 onResume={() => setView("game")}
                 onRestart={() => { setRunKey((k) => k + 1); setView("game"); }}
                 onSettings={() => setActiveModal("settings")}
@@ -181,6 +213,8 @@ export default function GameScreen() {
                   <GameMount
                     runKey={runKey}
                     mode={mode}
+                    gameMode={effectiveGameMode}
+                    aiDifficulty={aiDifficulty}
                     tournamentId={tournament.tournamentId}
                     worldId={mode === "practice" ? selectedWorldId : tournament.worldId}
                     playerAddress={address ?? null}
@@ -205,15 +239,16 @@ export default function GameScreen() {
           {activeModal === "how" && <HowToPlayModal onClose={() => setActiveModal(null)} />}
           {activeModal === "about" && <AboutModal onClose={() => setActiveModal(null)} />}
           {activeModal === "leaderboard" && (
-            <LeaderboardModal onClose={() => setActiveModal(null)} rows={tournament.leaderboard} playerAddress={address} loading={isLoadingTournament} />
+            <LeaderboardModal onClose={() => setActiveModal(null)} rows={tournament.leaderboard} playerAddress={address} loading={isLoadingTournament} inverted={tournament.invertedWinCondition} />
           )}
 
-          {showTutorial && <TutorialOverlay onClose={() => { markTutorialSeen(); setShowTutorial(false); }} />}
+          {showTutorial && <TutorialOverlay gameMode={effectiveGameMode} onClose={() => { markTutorialSeen(); setShowTutorial(false); }} />}
 
           {submissionStep && (
             <ScoreSubmissionOverlay
               score={submission?.score ?? lastScore}
               step={submissionStep}
+              kamikaze={effectiveGameMode === "kamikaze"}
               errorMessage={submissionError}
               onClose={() => { setSubmissionStep(null); setSubmissionError(""); }}
               onRetry={submission && submissionStep === "error" ? async () => {
@@ -235,6 +270,8 @@ export default function GameScreen() {
             <CelebrationOverlay
               score={lastScore}
               isPractice={mode === "practice"}
+              kamikaze={effectiveGameMode === "kamikaze"}
+              aiDifficulty={effectiveGameMode === "kamikaze" ? aiDifficulty : undefined}
               worldId={mode === "practice" ? selectedWorldId : tournament.worldId || undefined}
               tournamentName={tournamentName || undefined}
               onDismiss={() => setShowCelebration(false)}

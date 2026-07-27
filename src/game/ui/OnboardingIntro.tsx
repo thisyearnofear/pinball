@@ -12,7 +12,12 @@ const slides = [
   {
     icon: "🎯",
     title: "Kamikaze Ball",
-    body: "The world's first verifiable arcade. Drain the ball to win — but the machine fights back with AI flippers and countermeasures. Tap to nudge, collect power-ups, and outsmart the table.",
+    body: "The world's first verifiable arcade. In Kamikaze mode the machine fights to keep the ball alive — you win by draining it fast. Tap to nudge, collect power-ups, and outsmart the table.",
+  },
+  {
+    icon: "🕹️",
+    title: "Two Ways to Play",
+    body: "Kamikaze is the flagship: AI flippers, munition crates, fastest drain wins. Prefer tradition? Classic mode is pure high-score pinball. Every tournament is tied to one mode.",
   },
   {
     icon: "⛓️",

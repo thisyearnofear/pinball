@@ -85,8 +85,8 @@ async function main() {
   const mpAddr = mpReceipt.contractAddress;
   console.log("   MissionPool deployed:", mpAddr);
 
-  // ── 4. Create initial tournament ────────────────────────────────
-  console.log("\n4. Creating initial tournament...");
+  // ── 4. Create tournaments (2 kamikaze inverted + 2 classic) ─────
+  console.log("\n4. Creating tournaments...");
   const tm = new hre.ethers.Contract(tmAddr, tmArtifact.abi, deployer);
   const now = Math.floor(Date.now() / 1000);
   const startTime = now;
@@ -94,11 +94,17 @@ async function main() {
   const topN = 3;
   const prizeBps = [5000, 3000, 2000];
 
-  const createTx = await tm.createTournament(startTime, endTime, topN, prizeBps, {
-    gasLimit: 500_000n, gasPrice: lowGasPrice,
-  });
-  await createTx.wait();
-  console.log("   Tournament #1 created!");
+  // ids 1-2: Kamikaze (inverted — lowest drain time wins)
+  // ids 3-4: Classic (highest score wins)
+  const tournamentModes = [true, true, false, false];
+  for (let i = 0; i < tournamentModes.length; i++) {
+    const inverted = tournamentModes[i];
+    const createTx = await tm.createTournament(startTime, endTime, topN, prizeBps, inverted, {
+      gasLimit: 500_000n, gasPrice: lowGasPrice,
+    });
+    await createTx.wait();
+    console.log(`   Tournament #${i + 1} created (${inverted ? "KAMIKAZE / inverted" : "CLASSIC"})`);
+  }
   console.log("   Start:", new Date(startTime * 1000).toISOString());
   console.log("   End:", new Date(endTime * 1000).toISOString());
   console.log("   Prize split: 50% / 30% / 20%");
@@ -132,7 +138,8 @@ async function main() {
   console.log("MockERC20 (USDT):    ", tokenAddr);
   console.log("TournamentManager:   ", tmAddr);
   console.log("MissionPool:         ", mpAddr);
-  console.log("Tournament #1:       active (30 days)");
+  console.log("Tournaments #1-2:    KAMIKAZE (inverted, 30 days)");
+  console.log("Tournaments #3-4:    CLASSIC (30 days)");
   console.log("Mission #1:          active (10 USDT x 100 winners)");
   console.log("═══════════════════════════════════════════════════════════");
   console.log("\nAdd these to your .env for the Nimiq profile:");

@@ -90,39 +90,8 @@ export async function signScore(
     nameHash,
     metaHash
   );
-  
-  // Build the inner hash that should be signed
-  const innerHashToSign = innerScoreHashV2(
-    BigInt(tournamentId),
-    player,
-    BigInt(score),
-    nonce,
-    chainId,
-    scorePrefix,
-    nameHash,
-    metaHash
-  );
-  
-  // Sign the inner hash directly (the contract will add the EIP-191 prefix during verification)
-  // Use signMessage with raw bytes to avoid double-prefixing
-  const sig = await wallet.signMessage(getBytes(innerHashToSign));
-  
-  // Log detailed information for debugging
-  console.log('SIGNATURE DEBUG INFO:', {
-    tournamentId,
-    player,
-    score,
-    nonce: nonce.toString(),
-    name,
-    metadata,
-    nameHash,
-    metaHash,
-    innerHash: inner,
-    signature: sig,
-    signatureLength: sig.length,
-    chainId: chainId.toString(),
-    scorePrefix
-  });
-  
-  return sig;
+
+  // Sign the inner hash directly (the contract adds the EIP-191 prefix during verification).
+  // signMessage with raw bytes avoids double-prefixing.
+  return wallet.signMessage(getBytes(inner));
 }

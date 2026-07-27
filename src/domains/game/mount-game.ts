@@ -96,6 +96,23 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
   let destroyed = false;
   let changeTimeout: number | null = null;
 
+  /**
+   * Convert client (screen) coordinates to world (table) coordinates,
+   * accounting for canvas zoom and viewport panning.
+   */
+  function clientToWorld(clientX: number, clientY: number): { x: number; y: number } | null {
+    const el = (canvas as any).getElement?.() as HTMLElement | undefined;
+    const rect = (el ?? canvasContainer).getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    const vp = (canvas as any).getViewport?.();
+    const worldWidth = vp?.width ?? tableSize?.width ?? 600;
+    const worldHeight = vp?.height ?? tableSize?.height ?? 800;
+    return {
+      x: (vp?.left ?? 0) + ((clientX - rect.left) / rect.width) * worldWidth,
+      y: (vp?.top ?? 0) + ((clientY - rect.top) / rect.height) * worldHeight,
+    };
+  }
+
   const bumpHandler = throttle(() => {
     bumpTable(gameRef);
     haptics.bump();
@@ -117,16 +134,13 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
       setPaused(gameRef.paused);
     },
     onNudge: (x: number, y: number) => {
-      // Convert screen coordinates to canvas coordinates
-      const rect = canvasContainer.getBoundingClientRect();
-      const scaleX = (gameRef.table !== undefined ? 600 : 600); // table width fallback
-      const canvasX = ((x - rect.left) / rect.width) * scaleX;
-      const canvasY = ((y - rect.top) / rect.height) * 800; // approx table height
-      nudgeBallToward(canvasX, canvasY);
+      const world = clientToWorld(x, y);
+      if (!world) return;
+      nudgeBallToward(world.x, world.y);
       haptics.bump();
     },
     isKamikaze: () => isKamikazeMode(),
-  });
+  }, root);
 
   function resize() {
     if (!inited || !tableSize) return;
@@ -156,12 +170,11 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
           // Kamikaze Ball: tap to nudge
           const t = e.touches[0];
           if (t) {
-            const rect = canvasContainer.getBoundingClientRect();
-            const scaleX = 600;
-            const canvasX = ((t.clientX - rect.left) / rect.width) * scaleX;
-            const canvasY = ((t.clientY - rect.top) / rect.height) * 800;
-            nudgeBallToward(canvasX, canvasY);
-            haptics.bump();
+            const world = clientToWorld(t.clientX, t.clientY);
+            if (world) {
+              nudgeBallToward(world.x, world.y);
+              haptics.bump();
+            }
           }
           e.preventDefault();
           e.stopPropagation();

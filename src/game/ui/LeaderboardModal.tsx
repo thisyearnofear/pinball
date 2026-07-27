@@ -10,6 +10,8 @@ type Props = {
   rows: Row[];
   playerAddress?: string;
   loading?: boolean;
+  /** Kamikaze mode: lower score (drain time in ms) wins; scores shown as seconds */
+  inverted?: boolean;
 };
 
 const rankBadges = ["🥇", "🥈", "🥉"];
@@ -18,14 +20,19 @@ function formatAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
-function formatScore(score: number): string {
+function formatScore(score: number, inverted: boolean): string {
+  if (inverted) return `${(score / 1000).toFixed(1)}s`;
   return score.toLocaleString();
 }
 
 export function LeaderboardModal(props: Props) {
+  const inverted = Boolean(props.inverted);
   const sorted = React.useMemo(() => {
-    return [...props.rows].sort((a, b) => b.score - a.score).slice(0, 50);
-  }, [props.rows]);
+    const rows = inverted ? props.rows.filter((r) => r.score > 0) : props.rows;
+    return [...rows]
+      .sort((a, b) => (inverted ? a.score - b.score : b.score - a.score))
+      .slice(0, 50);
+  }, [props.rows, inverted]);
 
   if (props.loading) {
     return (
@@ -96,7 +103,7 @@ export function LeaderboardModal(props: Props) {
                   color: colors.text.primary,
                   fontVariantNumeric: "tabular-nums",
                 }}>
-                  {formatScore(r.score)}
+                  {formatScore(r.score, inverted)}
                 </div>
               </div>
             );

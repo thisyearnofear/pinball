@@ -1,11 +1,13 @@
 import React from "react";
 import { useIsSmallScreen } from "@/hooks/use-media-query";
 import { Button } from "./Button";
+import { formatGameScore } from "@/utils/score-format";
 
 import { colors, spacing, typography, radius } from "@/theme/tokens";
 
 type Props = {
   score: number;
+  kamikaze?: boolean;
   onResume: () => void;
   onRestart: () => void;
   onSettings?: () => void;
@@ -64,7 +66,7 @@ export function PauseMenu(props: Props) {
             Paused
           </h2>
           <div style={{ marginTop: spacing.sm, fontSize: typography.size.lg, color: colors.text.muted }}>
-            {props.score.toLocaleString()} pts
+            {props.kamikaze ? formatGameScore(props.score, true) : `${props.score.toLocaleString()} pts`}
           </div>
         </div>
 

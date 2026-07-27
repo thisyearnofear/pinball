@@ -5,8 +5,9 @@ import { signScore } from '../lib/sign.js';
 import { validateScoreSubmission, MAX_SCORE } from '../lib/validation.js';
 import { scoreSignatureRateLimiter } from '../lib/rate-limiter.js';
 import { nonceTracker } from '../lib/nonce-tracker.js';
-import { keccak256, toUtf8Bytes } from 'ethers';
+import { deriveNextNonce } from '../lib/nonce-source.js';
 import { awardMissionWinner } from '../lib/mission-awarder.js';
+import { adminAuth } from '../lib/admin-auth.js';
 
 const SignBody = z.object({
   tournamentId: z.number().int().positive(),
@@ -14,7 +15,6 @@ const SignBody = z.object({
   score: z.number().int().nonnegative(),
   name: z.string().default(''),  // Wallet-derived, no length limit
   metadata: z.string().default(''),
-  nonce: z.string().optional(),
   // Optional differentiator: if provided, backend may award a Sponsored Mission bounty.
   missionId: z.number().int().positive().optional(),
 });
@@ -83,12 +83,9 @@ export async function scoresRoutes(app: FastifyInstance) {
       sanitized: { tournamentId: tid, address: addr, score: s, name: n, metadata: m }
     } = validationResult;
 
-    // Get nonce from request or tracker
-    const nonceStr = parsed.data.nonce;
-
     try {
-      // Get next nonce for this player
-      const nonce = nonceStr ? BigInt(nonceStr) : await nonceTracker.getNextNonce(tid, addr);
+      // Server-derived nonce only (chain + local tracker) — clients cannot override it
+      const nonce = await deriveNextNonce(tid, addr);
 
       const signature = await signScore(
         env.SCORE_SIGNER_PK,
@@ -102,28 +99,8 @@ export async function scoresRoutes(app: FastifyInstance) {
         metadata // Use original metadata string, not JSON.stringify(m)
       );
 
-      // Log the parameters for debugging
-      app.log.info({
-        event: 'SCORE_SIGNING_DEBUG',
-        tournamentId: tid,
-        address: addr,
-        score: s,
-        nonce: nonce.toString(),
-        name: n,
-        metadata: metadata,
-        signatureLength: signature.length
-      });
-
-      // Also log the nameHash and metaHash that would be generated
-      const nameHash = keccak256(toUtf8Bytes(n || ''));
-      const metaHash = keccak256(toUtf8Bytes(metadata || ''));
-      app.log.info({
-        event: 'HASH_COMPONENTS_DEBUG',
-        nameHash,
-        metaHash,
-        playerNameBytes: toUtf8Bytes(n || ''),
-        metadataBytes: toUtf8Bytes(metadata || '')
-      });
+      // Persist the issued nonce so the next request gets nonce+1
+      await nonceTracker.recordNonce(tid, addr, nonce);
 
       app.log.info({
         event: 'SCORE_SIGNED',
@@ -144,7 +121,11 @@ export async function scoresRoutes(app: FastifyInstance) {
           // This keeps the frontend integration seamless: "submit score" can trigger a reward.
           if (!missionId) return {};
           if (!env.MISSION_POOL_ADDRESS) return { missionAwarded: false, missionError: 'MISSION_POOL_ADDRESS not configured' };
-          if (s < env.MISSION_SCORE_THRESHOLD) return { missionAwarded: false, missionError: `Score below threshold (${env.MISSION_SCORE_THRESHOLD})` };
+          // Direction-aware threshold: kamikaze missions award for fast drains (score <= threshold)
+          const missedThreshold = env.MISSION_INVERTED
+            ? s > env.MISSION_SCORE_THRESHOLD
+            : s < env.MISSION_SCORE_THRESHOLD;
+          if (missedThreshold) return { missionAwarded: false, missionError: `Score ${env.MISSION_INVERTED ? 'above' : 'below'} threshold (${env.MISSION_SCORE_THRESHOLD})` };
           if (env.MISSION_REQUIRE_MULTIBALL) {
             try {
               const parsed = JSON.parse(metadata);
@@ -181,7 +162,7 @@ export async function scoresRoutes(app: FastifyInstance) {
   });
 
   // Admin endpoint to get rate limit status (optional)
-  app.get<{ Params: { address: string } }>('/admin/rate-limit/:address', async (req, reply) => {
+  app.get<{ Params: { address: string } }>('/admin/rate-limit/:address', { preHandler: adminAuth }, async (req, reply) => {
     const { address } = req.params;
 
     // Validate address format
@@ -197,7 +178,7 @@ export async function scoresRoutes(app: FastifyInstance) {
   });
 
   // Admin endpoint to reset rate limit
-  app.post<{ Params: { address: string } }>('/admin/rate-limit/:address/reset', async (req, reply) => {
+  app.post<{ Params: { address: string } }>('/admin/rate-limit/:address/reset', { preHandler: adminAuth }, async (req, reply) => {
     const { address } = req.params;
 
     // Validate address format
@@ -214,6 +195,7 @@ export async function scoresRoutes(app: FastifyInstance) {
   // Admin endpoint to get current nonce for a player
   app.get<{ Params: { tournamentId: string; address: string } }>(
     '/admin/nonce/:tournamentId/:address',
+    { preHandler: adminAuth },
     async (req, reply) => {
       const { tournamentId, address } = req.params;
 
@@ -242,6 +224,7 @@ export async function scoresRoutes(app: FastifyInstance) {
   // Admin endpoint to reset nonce for a player
   app.post<{ Params: { tournamentId: string; address: string } }>(
     '/admin/nonce/:tournamentId/:address/reset',
+    { preHandler: adminAuth },
     async (req, reply) => {
       const { tournamentId, address } = req.params;
 
@@ -265,6 +248,7 @@ export async function scoresRoutes(app: FastifyInstance) {
   // Admin endpoint to reset all nonces for a tournament
   app.post<{ Params: { tournamentId: string } }>(
     '/admin/nonce/:tournamentId/reset',
+    { preHandler: adminAuth },
     async (req, reply) => {
       const { tournamentId } = req.params;
 

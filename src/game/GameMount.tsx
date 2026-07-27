@@ -12,7 +12,13 @@ import { mountWorld, isSplatSupported, prefersReducedMotion, type WorldHandle } 
 import { MARBLE_WORLDS, getWorldById } from "@/config/worlds";
 import { WorldLoadingOverlay, WorldLoadingIndicator } from "./ui/WorldLoadingOverlay";
 import { type WorldReaction } from "@/presentation/world-reactor";
-import { isKamikazeMode } from "@/model/game";
+import { isKamikazeMode, getLastTaunt, getTickCount } from "@/model/game";
+import { createKamikazeState, POWERUP_NAMES, type AIDifficulty } from "@/model/kamikaze";
+import type { PowerUpSide } from "@/definitions/game";
+import { mulberry32, createRunSeed } from "@/utils/rng";
+import { startReplayRecording, finishReplayRecording, encodeReplay } from "@/model/replay-recorder";
+import { uploadReplay } from "@/services/backend-scores-client";
+import { keccak256, toUtf8Bytes } from "ethers";
 
 function applyWorldReaction(reaction: WorldReaction): void {
   const { type, intensity, data } = reaction;
@@ -53,6 +59,8 @@ function applyWorldReaction(reaction: WorldReaction): void {
 type Props = {
   runKey: number;
   mode: "practice" | "tournament";
+  gameMode: "classic" | "kamikaze";
+  aiDifficulty?: AIDifficulty;
   tournamentId: number | null;
   playerAddress: string | null;
   walletPort: WalletPort | null;
@@ -88,6 +96,17 @@ export default function GameMount(props: Props) {
   });
   const [kamikazeActive, setKamikazeActive] = useState(false);
   const [kamikazeMessage, setKamikazeMessage] = useState<string | null>(null);
+  const [activePowerUps, setActivePowerUps] = useState<{ name: string; side: PowerUpSide; remainingMs: number }[]>([]);
+  const [ripples, setRipples] = useState<{ id: number; x: number; y: number }[]>([]);
+  const rippleIdRef = useRef(0);
+
+  function spawnRipple(e: React.MouseEvent<HTMLDivElement>) {
+    if (!isKamikazeMode()) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const id = ++rippleIdRef.current;
+    setRipples((prev) => [...prev.slice(-4), { id, x: e.clientX - rect.left, y: e.clientY - rect.top }]);
+    window.setTimeout(() => setRipples((prev) => prev.filter((r) => r.id !== id)), 600);
+  }
   const [worldFallback, setWorldFallback] = useState(false);
   const [worldLoadingProgress, setWorldLoadingProgress] = useState<number | null>(null);
   const multiballRef = useRef(false);
@@ -98,20 +117,27 @@ export default function GameMount(props: Props) {
   const prevScoreRef = useRef<number>(0);
   const gameOverRef = useRef<boolean>(false);
   const lastDuckTimeRef = useRef<number>(0);
+  const runStartRef = useRef<number>(0);
   const worldContainerStyleRef = useRef<HTMLDivElement | null>(null);
 
   const initialGame = useMemo<GameDef>(
-    () => ({
-      id: "practice",
-      active: false,
-      paused: false,
-      table: START_TABLE_INDEX,
-      score: 0,
-      balls: BALLS_PER_GAME,
-      multiplier: 1,
-      underworld: false,
-    }),
-    [],
+    () => {
+      const rngSeed = createRunSeed();
+      return {
+        id: "practice",
+        active: false,
+        paused: false,
+        table: START_TABLE_INDEX,
+        score: 0,
+        balls: BALLS_PER_GAME,
+        multiplier: 1,
+        underworld: false,
+        kamikaze: props.gameMode === "kamikaze" ? createKamikazeState(props.aiDifficulty) : undefined,
+        rngSeed,
+        rng: mulberry32(rngSeed),
+      };
+    },
+    [props.gameMode, props.aiDifficulty],
   );
 
   useEffect(() => {
@@ -161,10 +187,13 @@ export default function GameMount(props: Props) {
             [GameMessages.KAMIKAZE_START]: "KAMIKAZE BALL — DRAIN IT!",
             [GameMessages.DRAINED]: "REKT! The machine is disappointed.",
             [GameMessages.SAVED]: "SAVED! The machine won't let you lose.",
+            [GameMessages.POWERUP_ROULETTE]: "MUNITIONS CRATE! Rolling…",
             [GameMessages.POWERUP_PLAYER]: "MUNITION ACTIVATED!",
             [GameMessages.POWERUP_MACHINE]: "COUNTERMEASURE DEPLOYED!",
           };
-          const kamMsg = kamikazeMessages[msg];
+          const kamMsg = msg === GameMessages.AI_TAUNT
+            ? `MACHINE: "${getLastTaunt()}"`
+            : kamikazeMessages[msg];
           if (kamMsg) {
             setKamikazeMessage(kamMsg);
             window.setTimeout(() => setKamikazeMessage(null), 2500);
@@ -201,6 +230,7 @@ export default function GameMount(props: Props) {
   useEffect(() => {
     if (!mountedRef.current) return;
 
+    const rngSeed = createRunSeed();
     const g: GameDef = {
       id: props.mode === "tournament" && props.tournamentId ? String(props.tournamentId) : "practice",
       active: false,
@@ -210,7 +240,18 @@ export default function GameMount(props: Props) {
       balls: BALLS_PER_GAME,
       multiplier: 1,
       underworld: false,
+      kamikaze: props.gameMode === "kamikaze" ? createKamikazeState(props.aiDifficulty) : undefined,
+      rngSeed,
+      rng: mulberry32(rngSeed),
     };
+
+    startReplayRecording({
+      seed: rngSeed,
+      table: props.tableIndex,
+      mode: props.gameMode,
+      aiDifficulty: props.gameMode === "kamikaze" ? props.aiDifficulty ?? "medium" : undefined,
+    });
+    runStartRef.current = performance.now();
 
     multiballRef.current = false;
     prevActiveRef.current = false;
@@ -257,9 +298,20 @@ export default function GameMount(props: Props) {
       });
       setKamikazeActive(isKamikazeMode());
 
-      // Update world reactor with game state
+      // Kamikaze power-up HUD: active effects per side with countdown
+      if (g.kamikaze?.enabled) {
+        const now = performance.now();
+        setActivePowerUps(
+          g.kamikaze.activePowerUps
+            .filter((p) => p.expiresAt > now)
+            .map((p) => ({ name: POWERUP_NAMES[p.type], side: p.side, remainingMs: p.expiresAt - now })),
+        );
+      }
+
+      // Update world reactor with game state.
+      // Kamikaze: score is a running timer, not points — skip score milestones.
       if (g.active) {
-        worldHandleRef.current?.updateReactor(g.score, multiballRef.current);
+        worldHandleRef.current?.updateReactor(g.kamikaze?.enabled ? 0 : g.score, multiballRef.current);
       }
 
       // Update ball position for camera tracking
@@ -271,8 +323,9 @@ export default function GameMount(props: Props) {
         }
       }
 
-      // Duck ambience on score changes (ball hits/bumpers)
-      if (g.score > prevScoreRef.current && g.active) {
+      // Duck ambience on score changes (ball hits/bumpers).
+      // Skipped in kamikaze mode where score is a running timer.
+      if (g.score > prevScoreRef.current && g.active && !g.kamikaze?.enabled) {
         const now = performance.now();
         if (now - lastDuckTimeRef.current > 150) {
           worldHandleRef.current?.duckAmbience(300);
@@ -284,6 +337,10 @@ export default function GameMount(props: Props) {
 
       // Ball drain detection - fly camera on ball loss
       if (prevBallsRef.current > g.balls && g.balls > 0) {
+        // Kamikaze: draining is a WIN — celebrate with a world flash
+        if (g.kamikaze?.enabled) {
+          worldHandleRef.current?.triggerImpact(0.9);
+        }
         worldHandleRef.current?.pauseBallTracking(true);
         worldHandleRef.current?.flyToPreset('drain', { duration: 600, onComplete: () => {
           worldHandleRef.current?.pauseBallTracking(false);
@@ -307,6 +364,14 @@ export default function GameMount(props: Props) {
       prevBallsRef.current = g.balls;
 
       if (wasActive && !isActive && g.score > 0) {
+        const replay = finishReplayRecording(g.score, getTickCount());
+        const replayJson = replay ? encodeReplay(replay) : null;
+        const replayHash = replayJson ? keccak256(toUtf8Bytes(replayJson)) : undefined;
+        const duration = Math.min(
+          3_600_000,
+          Math.max(1, Math.round(performance.now() - runStartRef.current)),
+        );
+
         props.onRunEnd?.(g.score);
 
         if (props.mode !== "tournament") return;
@@ -315,6 +380,22 @@ export default function GameMount(props: Props) {
         const address = props.playerAddress;
 
         if (!tournamentId || !address || !props.walletPort) return;
+
+        const metadata = JSON.stringify({
+          table: g.table,
+          multiplier: g.multiplier,
+          multiball: multiballRef.current,
+          mode: props.gameMode,
+          duration,
+          ...(replayHash ? { replayHash } : {}),
+          ...(props.gameMode === "kamikaze" ? { aiDifficulty: props.aiDifficulty ?? "medium" } : {}),
+        });
+
+        // Ship the full replay to the backend (fire-and-forget); its hash is
+        // bound into the signed metadata for later verification.
+        if (replayJson) {
+          uploadReplay({ tournamentId, address, replay: replayJson }).catch(() => {});
+        }
 
         try {
           props.onStatus?.("Submitting score…");
@@ -325,12 +406,6 @@ export default function GameMount(props: Props) {
             props.onSubmissionStep?.("error", "You are not entered in the active tournament.");
             return;
           }
-
-          const metadata = JSON.stringify({
-            table: g.table,
-            multiplier: g.multiplier,
-            multiball: multiballRef.current,
-          });
 
           const name = (props.playerName || "").trim();
           props.onSubmissionAvailable?.({
@@ -357,11 +432,7 @@ export default function GameMount(props: Props) {
               tournamentId,
               score: g.score,
               playerName: (props.playerName || "").trim(),
-              metaData: JSON.stringify({
-                table: g.table,
-                multiplier: g.multiplier,
-                multiball: multiballRef.current,
-              }),
+              metaData: metadata,
               walletPort: props.walletPort,
             });
           }
@@ -388,7 +459,25 @@ export default function GameMount(props: Props) {
       {message ? (
         <div style={{ fontSize: 12, opacity: 0.9, marginBottom: 8 }}>Event: {message}</div>
       ) : null}
-      <div style={{ position: "relative" }}>
+      <div style={{ position: "relative" }} onClick={spawnRipple}>
+        <style>{`@keyframes kamikazeRipple { from { transform: translate(-50%, -50%) scale(0.3); opacity: 0.8; } to { transform: translate(-50%, -50%) scale(2); opacity: 0; } }`}</style>
+        {ripples.map((r) => (
+          <div
+            key={r.id}
+            style={{
+              position: "absolute",
+              left: r.x,
+              top: r.y,
+              width: 44,
+              height: 44,
+              borderRadius: "50%",
+              border: "2px solid rgba(255, 68, 68, 0.8)",
+              pointerEvents: "none",
+              zIndex: 9,
+              animation: "kamikazeRipple 0.6s ease-out forwards",
+            }}
+          />
+        ))}
         <div
           ref={worldContainerRef}
           style={{
@@ -474,6 +563,57 @@ export default function GameMount(props: Props) {
           )}
           {props.paused ? <div style={{ opacity: 0.85 }}>Paused</div> : null}
         </div>
+
+        {/* Kamikaze power-up bar: player munitions (green) vs machine countermeasures (red) */}
+        {kamikazeActive && activePowerUps.length > 0 && (
+          <div
+            style={{
+              position: "absolute",
+              top: 10,
+              right: 10,
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              pointerEvents: "none",
+              zIndex: 6,
+            }}
+          >
+            {activePowerUps.map((p) => (
+              <div
+                key={`${p.side}-${p.name}`}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 8,
+                  background: "rgba(0,0,0,0.6)",
+                  border: `1px solid ${p.side === "player" ? "rgba(34,197,94,0.6)" : "rgba(255,68,68,0.6)"}`,
+                  color: p.side === "player" ? "#22c55e" : "#ff4444",
+                  fontSize: 12,
+                  fontWeight: "bold",
+                  minWidth: 140,
+                }}
+              >
+                <div>{p.side === "player" ? "YOU" : "MACHINE"} · {p.name}</div>
+                <div
+                  style={{
+                    marginTop: 4,
+                    height: 3,
+                    borderRadius: 2,
+                    background: "rgba(255,255,255,0.15)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${Math.min(100, (p.remainingMs / 5000) * 100)}%`,
+                      background: p.side === "player" ? "#22c55e" : "#ff4444",
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Kamikaze Ball message overlay (taunts, power-ups) */}
         {kamikazeMessage && (

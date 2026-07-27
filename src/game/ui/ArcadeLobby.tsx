@@ -1,9 +1,9 @@
 import React from "react";
-import { getAllTournaments, type TournamentMeta } from "@/config/tournaments";
+import { getAllTournaments, type TournamentMeta, type GameMode } from "@/config/tournaments";
 import { getTournamentWorld } from "@/config/tournaments";
+import type { AIDifficulty } from "@/model/kamikaze";
 
-import { useIsSmallScreen } from "@/hooks/use-media-query";
-import { Button, Skeleton, NeonTitle, CRTOverlay } from "@/game/ui";
+import { Button, Skeleton, NeonTitle, CRTOverlay, PlayerCard } from "@/game/ui";
 import styles from "./ArcadeLobby.module.scss";
 
 type Props = {
@@ -12,11 +12,24 @@ type Props = {
   entered: boolean;
   isConnected: boolean;
   loading?: boolean;
+  gameMode: GameMode;
+  aiDifficulty: AIDifficulty;
+  playerAddress?: string | null;
+  playerStats?: {
+    gamesPlayed: number;
+    bestScore: number;
+    bestDrainMs: number;
+    tournamentsEntered: number;
+  };
+  onSelectGameMode: (mode: GameMode) => void;
+  onSelectDifficulty: (d: AIDifficulty) => void;
   onSelectTournament: (id: number) => void;
   onEnterTournament: (id: number) => void;
   onStartTournament: (id: number) => void;
   onPractice: () => void;
 };
+
+const DIFFICULTIES: AIDifficulty[] = ["easy", "medium", "hard"];
 
 export function ArcadeLobby(props: Props) {
   const tournaments = props.tournaments.length > 0 ? props.tournaments : getAllTournaments();
@@ -46,6 +59,44 @@ export function ArcadeLobby(props: Props) {
           </p>
         </div>
 
+        <div className={styles.modeSelector}>
+          <button
+            type="button"
+            className={`${styles.modeCard} ${styles.modeCardKamikaze} ${props.gameMode === "kamikaze" ? styles.modeCardSelected : ""}`}
+            onClick={() => props.onSelectGameMode("kamikaze")}
+          >
+            <span className={styles.modeBadgeFlagship}>FLAGSHIP</span>
+            <span className={styles.modeName}>Kamikaze</span>
+            <span className={styles.modeDesc}>Drain the ball. The machine fights back. Fastest drain wins.</span>
+          </button>
+          <button
+            type="button"
+            className={`${styles.modeCard} ${props.gameMode === "classic" ? styles.modeCardSelected : ""}`}
+            onClick={() => props.onSelectGameMode("classic")}
+          >
+            <span className={styles.modeName}>Classic</span>
+            <span className={styles.modeDesc}>Traditional pinball. Rack up the highest score.</span>
+          </button>
+        </div>
+
+        {props.gameMode === "kamikaze" && (
+          <div className={styles.difficultyRow}>
+            <span className={styles.difficultyLabel}>Machine difficulty</span>
+            <div className={styles.difficultyPills}>
+              {DIFFICULTIES.map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  className={`${styles.difficultyPill} ${props.aiDifficulty === d ? styles.difficultyPillActive : ""}`}
+                  onClick={() => props.onSelectDifficulty(d)}
+                >
+                  {d.charAt(0).toUpperCase() + d.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {!props.isConnected && (
           <div className={styles.connectPrompt}>
             <div className={styles.connectIcon}>🔌</div>
@@ -68,6 +119,12 @@ export function ArcadeLobby(props: Props) {
             />
           ))}
         </div>
+
+        {props.playerAddress && props.playerStats && props.playerStats.gamesPlayed > 0 && (
+          <div className={styles.practiceWrap}>
+            <PlayerCard address={props.playerAddress} stats={props.playerStats} />
+          </div>
+        )}
 
         <div className={styles.practiceWrap}>
           <Button variant="ghost" size="lg" onClick={props.onPractice}>
@@ -138,9 +195,13 @@ function ArcadeCard(props: CardProps) {
       <div className={styles.info}>
         <div className={`${styles.name} ${props.isActive ? styles.nameActive : styles.nameInactive}`}>
           {props.tournament.name}
+          <span className={`${styles.modeBadge} ${props.tournament.mode === "kamikaze" ? styles.modeBadgeKamikaze : styles.modeBadgeClassic}`}>
+            {props.tournament.mode === "kamikaze" ? "KAMIKAZE" : "CLASSIC"}
+          </span>
         </div>
         <div className={styles.meta}>
-          Entry: {props.tournament.entryFee || "1 MUSD"} · Prize: {props.tournament.prizePool || "50 MUSD"}
+          {props.tournament.entryFee ? `Entry: ${props.tournament.entryFee}` : "Free entry"}
+          {props.tournament.prizePool ? ` · ${props.tournament.prizePool}` : ""}
         </div>
       </div>
 

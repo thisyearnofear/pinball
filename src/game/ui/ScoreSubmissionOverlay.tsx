@@ -1,6 +1,7 @@
 import React from "react";
 import { Modal } from "./Modal";
 import { Button } from "./Button";
+import { formatGameScore, scoreUnit } from "@/utils/score-format";
 import styles from "./ScoreSubmissionOverlay.module.scss";
 
 export type SubmissionStep = "validating" | "signing" | "ready" | "error" | "skipped";
@@ -26,6 +27,7 @@ const steps = ["validating", "signing", "ready"] as const;
 type Props = {
   score: number;
   step: SubmissionStep;
+  kamikaze?: boolean;
   errorMessage?: string;
   onRetry?: () => void;
   onClose: () => void;
@@ -33,20 +35,23 @@ type Props = {
 
 export function ScoreSubmissionOverlay(props: Props) {
   const currentIdx = steps.indexOf(props.step as (typeof steps)[number]);
+  const kamikaze = Boolean(props.kamikaze);
 
   return (
     <Modal title={stepTitles[props.step]} onClose={props.onClose}>
       <div className={styles.content}>
         <div className={styles.scoreDisplay}>
           <div className={styles.scoreValue}>
-            {props.score.toLocaleString()}
+            {formatGameScore(props.score, kamikaze)}
           </div>
-          <div className={styles.scoreUnit}>pts</div>
+          <div className={styles.scoreUnit}>{scoreUnit(kamikaze)}</div>
         </div>
 
         {props.step !== "error" && (
           <p className={styles.stepMessage}>
-            {stepMessages[props.step]}
+            {props.step === "skipped" && kamikaze
+              ? "Your previous drain time is faster, so this run won't replace it."
+              : stepMessages[props.step]}
           </p>
         )}
 

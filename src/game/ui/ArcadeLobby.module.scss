@@ -40,6 +40,149 @@
   line-height: 1.6;
 }
 
+/* Mode selector */
+.modeSelector {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+@media (max-width: 560px) {
+  .modeSelector {
+    grid-template-columns: 1fr;
+  }
+}
+
+.modeCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  padding: var(--space-lg);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-secondary);
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.modeCard:hover {
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
+.modeCardKamikaze {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(0, 0, 0, 0.3) 100%);
+}
+
+.modeCardSelected {
+  border: 2px solid var(--world-primary, #6366f1);
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.15) 0%, rgba(0, 0, 0, 0.3) 100%);
+  color: var(--text-primary);
+}
+
+.modeCardKamikaze.modeCardSelected {
+  border-color: #ef4444;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(0, 0, 0, 0.3) 100%);
+}
+
+.modeName {
+  font-size: var(--text-md);
+  font-weight: var(--font-semibold);
+  font-family: var(--font-family-display);
+  letter-spacing: 0.05em;
+}
+
+.modeDesc {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.modeBadgeFlagship {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 10px;
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.1em;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+}
+
+/* Difficulty picker */
+.difficultyRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+  flex-wrap: wrap;
+}
+
+.difficultyLabel {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+}
+
+.difficultyPills {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.difficultyPill {
+  padding: var(--space-xs) var(--space-md);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.difficultyPill:hover {
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.difficultyPillActive {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: #ef4444;
+  color: var(--text-primary);
+}
+
+/* Per-card mode badge */
+.modeBadge {
+  margin-left: var(--space-sm);
+  font-size: 10px;
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.1em;
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  vertical-align: middle;
+}
+
+.modeBadgeKamikaze {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.modeBadgeClassic {
+  color: #6366f1;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
 .connectPrompt {
   display: flex;
   flex-direction: column;

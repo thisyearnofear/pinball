@@ -8,6 +8,8 @@ const EnvSchema = z.object({
   SCORE_SIGNER_ADDR: z.string().startsWith('0x').length(42).optional(),
   ALLOWED_ORIGINS: z.string().default('*'),
   RATE_LIMIT: z.coerce.number().default(120),
+  // Bearer token for /admin/* endpoints. When unset, admin endpoints return 404.
+  ADMIN_TOKEN: z.string().min(16).optional(),
   // Must match the chain where the TournamentManager is deployed.
   CHAIN_ID: z.coerce.number().int().positive(),
   // Signature protocol prefix (must match the contract).
@@ -15,10 +17,15 @@ const EnvSchema = z.object({
   // RPC used by the backend when it needs to broadcast transactions (e.g. Sponsored Missions payouts).
   MEZO_RPC_URL: z.string().default('https://rpc.test.mezo.org'),
 
+  // TournamentManager address (used by the finalize script).
+  TOURNAMENT_MANAGER_ADDRESS: z.string().startsWith('0x').length(42).optional(),
+
   // Optional differentiator: Sponsored Missions contract address (MissionPool)
   MISSION_POOL_ADDRESS: z.string().startsWith('0x').length(42).optional(),
   // Optional: minimum score required to trigger a mission award (hackathon-simple rule).
   MISSION_SCORE_THRESHOLD: z.coerce.number().int().nonnegative().default(250000),
+  // When true, mission threshold is inverted (kamikaze: award when score <= threshold).
+  MISSION_INVERTED: z.coerce.boolean().default(false),
   // Optional: require multiball flag in metadata to award mission (enables "Jackpot Multiball").
   MISSION_REQUIRE_MULTIBALL: z.coerce.boolean().default(false),
   // Optional Redis URL. When set, rate limiter and nonce tracker use Redis.

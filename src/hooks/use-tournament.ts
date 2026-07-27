@@ -20,6 +20,7 @@ export type TournamentState = {
   endTime: number | null;
   topN: number | null;
   finalized: boolean;
+  invertedWinCondition: boolean;
   winners: string[];
   entered: boolean;
   leaderboard: { address: string; score: number }[];
@@ -34,6 +35,7 @@ const INITIAL_STATE: TournamentState = {
   endTime: null,
   topN: null,
   finalized: false,
+  invertedWinCondition: false,
   winners: [],
   entered: false,
   leaderboard: [],
@@ -54,7 +56,7 @@ export function useTournament(address: string | undefined, walletPort: WalletPor
         getWinners(tournamentId),
       ]);
 
-      const leaderboard = await fetchLeaderboard(tournamentId, 0, 50);
+      const leaderboard = await fetchLeaderboard(tournamentId, 0, 50, info.invertedWinCondition);
 
       let entered = false;
       if (address) {
@@ -79,6 +81,7 @@ export function useTournament(address: string | undefined, walletPort: WalletPor
         endTime: info.endTime,
         topN: info.topN,
         finalized: info.finalized,
+        invertedWinCondition: info.invertedWinCondition,
         winners,
         entered,
         leaderboard,

@@ -27,6 +27,13 @@ import type Flipper from "@/model/flipper";
 import { radToDeg } from "@/utils/math-util";
 import SpriteCache from "@/utils/sprite-cache";
 
+// Kamikaze Ball: flippers are AI-controlled (the machine's defense).
+// Tinted red so players read them as "enemy". Set by game.ts.
+let kamikazeMode = false;
+export function setKamikazeMode(enabled: boolean): void {
+    kamikazeMode = enabled;
+}
+
 export default class FlipperRenderer extends Sprite {
     private pivot: Point = { x: 0, y: 0 };
 
@@ -62,5 +69,13 @@ export default class FlipperRenderer extends Sprite {
             left - viewport.left, top - viewport.top, width, height,
             this.getDrawProps(),
         );
+
+        // Kamikaze Ball: red overlay marks these as AI-controlled defenders
+        if ( kamikazeMode ) {
+            renderer.drawRect(
+                left - viewport.left, top - viewport.top, width, height,
+                "rgba(255, 68, 68, 0.28)", undefined, this.getDrawProps(),
+            );
+        }
     }
 };

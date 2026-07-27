@@ -32,6 +32,18 @@ export function setKamikazeMode(enabled: boolean): void {
     kamikazeMode = enabled;
 }
 
+// Ghost Ball active (player power-up): bumpers render faded, ball phases through.
+let ghostMode = false;
+export function setGhostMode(enabled: boolean): void {
+    ghostMode = enabled;
+}
+
+// Bumper Frenzy active (machine power-up): bumpers pulse fast and bright.
+let frenzyMode = false;
+export function setFrenzyMode(enabled: boolean): void {
+    frenzyMode = enabled;
+}
+
 export default class BumperRenderer extends Sprite {
     protected collisionAnimation = false;
     protected collisionIterations = 0;
@@ -66,10 +78,13 @@ export default class BumperRenderer extends Sprite {
 
         // Kamikaze Ball: bumpers are red/hostile (enemies that keep ball alive)
         // Normal mode: bumpers are blue/inviting (hit them for points)
+        const strokeAlpha = ghostMode ? 0.25 : 1;
         const fillColor = kamikazeMode
             ? (collided ? "#ff3333" : "transparent")
             : (collided ? "#00AEEF" : "transparent");
-        const strokeColor = kamikazeMode ? "#ff4444" : "#00AEEF";
+        const strokeColor = kamikazeMode
+            ? (ghostMode ? `rgba(255, 68, 68, ${strokeAlpha})` : "#ff4444")
+            : "#00AEEF";
         const stroke = !collided ? { color: strokeColor, size: 2 } : undefined;
 
         renderer.drawCircle(
@@ -80,13 +95,16 @@ export default class BumperRenderer extends Sprite {
         );
 
         // Kamikaze Ball: pulsing red glow ring around bumpers
-        if (kamikazeMode && !collided) {
-            const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 300);
+        // (faster + brighter during Bumper Frenzy, suppressed while Ghost Ball phases through)
+        if (kamikazeMode && !collided && !ghostMode) {
+            const pulseSpeed = frenzyMode ? 100 : 300;
+            const pulse = 0.5 + 0.5 * Math.sin(Date.now() / pulseSpeed);
+            const baseAlpha = frenzyMode ? 0.5 : 0.3;
             renderer.drawCircle(
                 left - viewport.left, top - viewport.top,
-                radius + 4 + pulse * 3,
+                radius + 4 + pulse * (frenzyMode ? 6 : 3),
                 "transparent",
-                { color: `rgba(255, 50, 50, ${0.3 + pulse * 0.3})`, size: 1 },
+                { color: `rgba(255, 50, 50, ${baseAlpha + pulse * 0.3})`, size: frenzyMode ? 2 : 1 },
             );
         }
 

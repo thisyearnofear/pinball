@@ -50,14 +50,16 @@ export async function getNextPlayerNonce(tournamentId: number, address: string):
 
 export async function getPlayerInfo(tournamentId: number, address: string): Promise<{
   entered: boolean;
+  hasScore: boolean;
   bestScore: bigint;
   rewardClaimed: boolean;
 }> {
-  if (!isConfigured()) return { entered: false, bestScore: 0n, rewardClaimed: false };
+  if (!isConfigured()) return { entered: false, hasScore: false, bestScore: 0n, rewardClaimed: false };
   const c = getPublicContract();
   const p = await c.playerInfo(tournamentId, address);
   return {
     entered: Boolean(p.entered),
+    hasScore: Boolean(p.hasScore),
     bestScore: BigInt(p.bestScore ?? 0),
     rewardClaimed: Boolean(p.rewardClaimed),
   };
@@ -320,11 +322,12 @@ export async function submitScoreWithSignature(
 export async function fetchLeaderboard(
   tournamentId: number,
   offset = 0,
-  limit = 100
+  limit = 100,
+  inverted = false
 ): Promise<{ address: string; score: number }[]> {
   if (!isConfigured()) return [];
   const c = getPublicContract();
-  return await _fetchLeaderboard(c, tournamentId, offset, limit);
+  return await _fetchLeaderboard(c, tournamentId, offset, limit, inverted);
 }
 
 // Enhanced version with retry logic for better reliability after score submission
@@ -333,13 +336,14 @@ export async function fetchLeaderboardWithRetry(
   offset = 0,
   limit = 100,
   maxRetries = 3,
-  delayMs = 2000
+  delayMs = 2000,
+  inverted = false
 ): Promise<{ address: string; score: number }[]> {
   let lastError;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const result = await fetchLeaderboard(tournamentId, offset, limit);
+      const result = await fetchLeaderboard(tournamentId, offset, limit, inverted);
       // If successful, return the result
       return result;
     } catch (error) {
@@ -364,12 +368,19 @@ async function _fetchLeaderboard(
   contract: ethers.Contract,
   tournamentId: number,
   offset = 0,
-  limit = 100
+  limit = 100,
+  inverted = false
 ): Promise<{ address: string; score: number }[]> {
   const [addrs, scores]: [string[], bigint[]] = await contract.viewLeaderboard(tournamentId, offset, limit);
-  const rows = addrs.map((a, i) => ({ address: a, score: Number(scores[i] || 0n) }));
-  // client-side sort desc to avoid on-chain sort costs
-  rows.sort((a, b) => b.score - a.score);
+  let rows = addrs.map((a, i) => ({ address: a, score: Number(scores[i] || 0n) }));
+  // client-side sort to avoid on-chain sort costs
+  if (inverted) {
+    // Kamikaze: lower drain time wins; score 0 means "no score yet" (real drains are >= MIN_DRAIN_MS)
+    rows = rows.filter((r) => r.score > 0);
+    rows.sort((a, b) => a.score - b.score);
+  } else {
+    rows.sort((a, b) => b.score - a.score);
+  }
   return rows;
 }
 
@@ -379,18 +390,18 @@ export async function getEntryFee(): Promise<bigint> {
   return await c.entryFee();
 }
 
-export async function getTournamentInfo(tournamentId: number, retries = 3): Promise<{ startTime: number; endTime: number; topN: number; finalized: boolean; totalPot: bigint; }> {
-  if (!isConfigured()) return { startTime: 0, endTime: 0, topN: 0, finalized: false, totalPot: 0n };
+export async function getTournamentInfo(tournamentId: number, retries = 3): Promise<{ startTime: number; endTime: number; topN: number; finalized: boolean; invertedWinCondition: boolean; totalPot: bigint; }> {
+  if (!isConfigured()) return { startTime: 0, endTime: 0, topN: 0, finalized: false, invertedWinCondition: false, totalPot: 0n };
   const c = getPublicContract();
   return await _getTournamentInfo(c, tournamentId, retries);
 }
 
-async function _getTournamentInfo(contract: ethers.Contract, tournamentId: number, retries = 3): Promise<{ startTime: number; endTime: number; topN: number; finalized: boolean; totalPot: bigint; }> {
+async function _getTournamentInfo(contract: ethers.Contract, tournamentId: number, retries = 3): Promise<{ startTime: number; endTime: number; topN: number; finalized: boolean; invertedWinCondition: boolean; totalPot: bigint; }> {
   let lastError: any;
 
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      // Result is now: [id, startTime, endTime, topN, finalized, prizeBps, totalPot]
+      // Result is: [id, startTime, endTime, topN, finalized, invertedWinCondition, totalPot]
       const t = await contract.tournaments(tournamentId);
 
       return {
@@ -398,6 +409,7 @@ async function _getTournamentInfo(contract: ethers.Contract, tournamentId: numbe
         endTime: Number(t.endTime),
         topN: Number(t.topN),
         finalized: Boolean(t.finalized),
+        invertedWinCondition: Boolean(t.invertedWinCondition),
         totalPot: BigInt(t.totalPot),
       };
     } catch (error: any) {

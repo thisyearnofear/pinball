@@ -52,6 +52,11 @@ const SOUND_EFFECTS = [
     { key: GameSounds.FLIPPER,   file: "sfx_flipper.mp3" },
     { key: GameSounds.POPPER,    file: "sfx_popper.mp3" },
     { key: GameSounds.TRIGGER,   file: "sfx_trigger.mp3" },
+    // Kamikaze Ball sounds (reuse base samples; the effects bus randomizes pitch per play)
+    { key: GameSounds.POWERUP_ROULETTE, file: "sfx_trigger.mp3" },
+    { key: GameSounds.POWERUP_ACTIVATE, file: "sfx_event.mp3" },
+    { key: GameSounds.DRAIN_VICTORY,    file: "sfx_popper.mp3" },
+    { key: GameSounds.AI_SAVE,          file: "sfx_flipper.mp3" },
 ];
 
 const soundEffects: Map<GameSounds, HTMLMediaElement> = new Map();

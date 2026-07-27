@@ -8,7 +8,7 @@ import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
  *
  * The contract computes:
  *   innerHash = keccak256(abi.encodePacked(
- *     "PINBALL_FINALIZE:v1", id, chainId, topN, ...winnerAddrs
+ *     "PINBALL_FINALIZE:v1", id, chainId, topN, invertedWinCondition, ...winnerAddrs
  *   ))
  *   digest    = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", innerHash))
  *
@@ -16,18 +16,21 @@ import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
  *   - string  → raw UTF-8 bytes
  *   - uint256 → 32 bytes
  *   - uint16  → 2 bytes (types < 32 bytes are NOT padded)
+ *   - bool    → 1 byte
  *   - address[] elements → 32 bytes each (array elements ARE padded per Solidity spec)
  */
 function buildFinalizeInnerHash(
   tournamentId: bigint,
   chainId: bigint,
   topN: number,
+  inverted: boolean,
   winnerAddrs: string[],
 ): string {
   const PREFIX = ethers.toUtf8Bytes("PINBALL_FINALIZE:v1"); // 19 bytes
   const idBytes = ethers.zeroPadValue(ethers.toBeHex(tournamentId), 32);
   const chainIdBytes = ethers.zeroPadValue(ethers.toBeHex(chainId), 32);
   const topNBytes = ethers.zeroPadValue(ethers.toBeHex(topN), 2); // uint16 → 2 bytes
+  const invertedByte = Uint8Array.of(inverted ? 1 : 0); // bool → 1 byte
 
   // Array elements are zero-padded to 32 bytes per abi.encodePacked rules
   const winnerPacked = ethers.concat(
@@ -39,6 +42,7 @@ function buildFinalizeInnerHash(
     idBytes,
     chainIdBytes,
     topNBytes,
+    invertedByte,
     winnerPacked,
   ]);
   return ethers.keccak256(innerMessage);
@@ -55,11 +59,13 @@ async function signFinalize(
   chainId: bigint,
   topN: number,
   winnerAddrs: string[],
+  inverted = false,
 ): Promise<string> {
   const innerHash = buildFinalizeInnerHash(
     tournamentId,
     chainId,
     topN,
+    inverted,
     winnerAddrs,
   );
   return signer.signMessage(ethers.getBytes(innerHash));
@@ -113,13 +119,13 @@ describe("TournamentManager – finalizeWithSignedWinners", () => {
    * Helper: create a tournament that has already ended.
    * Uses future timestamps and evm_increaseTime to safely fast-forward.
    */
-  async function createEndedTournament(topN = 3) {
+  async function createEndedTournament(topN = 3, inverted = false) {
     const now = (await ethers.provider.getBlock("latest"))!.timestamp;
     const start = now + 100;
     const end = now + 200;
     const prizeBps = makePrizeBps(topN);
 
-    const tx = await tm.createTournament(start, end, topN, prizeBps);
+    const tx = await tm.createTournament(start, end, topN, prizeBps, inverted);
     const receipt = await tx.wait();
     const event = receipt!.logs.find((l: any) => {
       try { return tm.interface.parseLog(l)?.name === "TournamentCreated"; }
@@ -228,7 +234,7 @@ describe("TournamentManager – finalizeWithSignedWinners", () => {
     const topN = 2;
     const prizeBps = [6000, 4000];
 
-    const tx = await tm.createTournament(start, end, topN, prizeBps);
+    const tx = await tm.createTournament(start, end, topN, prizeBps, false);
     const receipt = await tx.wait();
     const event = receipt!.logs.find((l: any) => {
       try { return tm.interface.parseLog(l)?.name === "TournamentCreated"; }
@@ -292,7 +298,7 @@ describe("TournamentManager – finalizeWithSignedWinners", () => {
     const topN = 2;
     const prizeBps = [6000, 4000];
 
-    const tx = await tm.createTournament(start, end, topN, prizeBps);
+    const tx = await tm.createTournament(start, end, topN, prizeBps, false);
     const receipt = await tx.wait();
     const event = receipt!.logs.find((l: any) => {
       try { return tm.interface.parseLog(l)?.name === "TournamentCreated"; }
@@ -355,7 +361,7 @@ describe("TournamentManager – finalizeWithSignedWinners", () => {
     const topN = 2;
     const prizeBps = [6000, 4000];
 
-    const tx = await tm.createTournament(start, end, topN, prizeBps);
+    const tx = await tm.createTournament(start, end, topN, prizeBps, false);
     const receipt = await tx.wait();
     const event = receipt!.logs.find((l: any) => {
       try { return tm.interface.parseLog(l)?.name === "TournamentCreated"; }
@@ -413,7 +419,7 @@ describe("TournamentManager – finalizeWithSignedWinners", () => {
     const winners = [player1.address, player2.address, player3.address];
 
     // Build the inner hash the same way the contract does
-    const innerHash = buildFinalizeInnerHash(id, chainId, 3, winners);
+    const innerHash = buildFinalizeInnerHash(id, chainId, 3, false, winners);
 
     // Compute the EIP-191 digest the contract would use
     const expectedDigest = ethers.keccak256(
@@ -487,6 +493,187 @@ describe("TournamentManager – finalizeWithSignedWinners", () => {
     await expect(
       tm.finalizeWithSignedWinners(id, tamperedWinners, sig),
     ).to.be.revertedWith("BAD_FINALIZE_SIG");
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Inverted win condition (Kamikaze mode: lower score = better)
+  // ────────────────────────────────────────────────────────────────────────────
+
+  /** Helper: create an active tournament and enter the given players */
+  async function createActiveTournament(
+    topN: number,
+    inverted: boolean,
+    players: HardhatEthersSigner[],
+  ) {
+    const now = (await ethers.provider.getBlock("latest"))!.timestamp;
+    const start = now + 100;
+    const end = now + 3700;
+    const prizeBps = makePrizeBps(topN);
+
+    const tx = await tm.createTournament(start, end, topN, prizeBps, inverted);
+    const receipt = await tx.wait();
+    const event = receipt!.logs.find((l: any) => {
+      try { return tm.interface.parseLog(l)?.name === "TournamentCreated"; }
+      catch { return false; }
+    });
+    const parsed = tm.interface.parseLog(event!);
+    const id = parsed!.args[0] as bigint;
+
+    await ethers.provider.send("evm_increaseTime", [200]);
+    await ethers.provider.send("evm_mine", []);
+
+    for (const p of players) {
+      await fundAndApprove(p, ENTRY_FEE);
+      await tm.connect(p).enterTournament(id);
+    }
+    return { id, prizeBps };
+  }
+
+  async function endTournament() {
+    await ethers.provider.send("evm_increaseTime", [3700]);
+    await ethers.provider.send("evm_mine", []);
+  }
+
+  it("emits invertedWinCondition in TournamentCreated and stores it", async () => {
+    const now = (await ethers.provider.getBlock("latest"))!.timestamp;
+    const tx = await tm.createTournament(now + 100, now + 200, 1, [10000], true);
+    const receipt = await tx.wait();
+    const event = receipt!.logs.find((l: any) => {
+      try { return tm.interface.parseLog(l)?.name === "TournamentCreated"; }
+      catch { return false; }
+    });
+    const parsed = tm.interface.parseLog(event!);
+    expect(parsed!.args[5]).to.equal(true);
+
+    const t = await tm.tournaments(parsed!.args[0]);
+    expect(t.invertedWinCondition).to.equal(true);
+  });
+
+  it("inverted: keeps the LOWER score on subsequent submissions", async () => {
+    const { id } = await createActiveTournament(1, true, [player1]);
+    const chainId = BigInt((await ethers.provider.getNetwork()).chainId);
+
+    // First submission: 5000ms drain
+    await submitScore(player1, id, 5000n, 1n, chainId, "P1", "");
+    let info = await tm.playerInfo(id, player1.address);
+    expect(info.hasScore).to.equal(true);
+    expect(info.bestScore).to.equal(5000n);
+
+    // Better (lower) score replaces it
+    await submitScore(player1, id, 3000n, 2n, chainId, "P1", "");
+    info = await tm.playerInfo(id, player1.address);
+    expect(info.bestScore).to.equal(3000n);
+
+    // Worse (higher) score is ignored
+    await submitScore(player1, id, 9000n, 3n, chainId, "P1", "");
+    info = await tm.playerInfo(id, player1.address);
+    expect(info.bestScore).to.equal(3000n);
+  });
+
+  it("classic: still keeps the HIGHER score", async () => {
+    const { id } = await createActiveTournament(1, false, [player1]);
+    const chainId = BigInt((await ethers.provider.getNetwork()).chainId);
+
+    await submitScore(player1, id, 1000n, 1n, chainId, "P1", "");
+    await submitScore(player1, id, 500n, 2n, chainId, "P1", "");
+    let info = await tm.playerInfo(id, player1.address);
+    expect(info.bestScore).to.equal(1000n);
+
+    await submitScore(player1, id, 2000n, 3n, chainId, "P1", "");
+    info = await tm.playerInfo(id, player1.address);
+    expect(info.bestScore).to.equal(2000n);
+  });
+
+  it("inverted: score 0 is a genuine best score (hasScore sentinel)", async () => {
+    const { id } = await createActiveTournament(1, true, [player1]);
+    const chainId = BigInt((await ethers.provider.getNetwork()).chainId);
+
+    await submitScore(player1, id, 0n, 1n, chainId, "P1", "");
+    const info = await tm.playerInfo(id, player1.address);
+    expect(info.hasScore).to.equal(true);
+    expect(info.bestScore).to.equal(0n);
+  });
+
+  it("inverted: legacy finalize() ranks ascending (lowest drain time wins)", async () => {
+    const { id } = await createActiveTournament(3, true, [player1, player2, player3]);
+    const chainId = BigInt((await ethers.provider.getNetwork()).chainId);
+
+    // player2 has the fastest drain, then player3, then player1
+    await submitScore(player1, id, 9000n, 1n, chainId, "P1", "");
+    await submitScore(player2, id, 2000n, 1n, chainId, "P2", "");
+    await submitScore(player3, id, 5000n, 1n, chainId, "P3", "");
+
+    await endTournament();
+    await tm.finalize(id);
+
+    const winners = await tm.getWinners(id);
+    expect(winners[0]).to.equal(player2.address);
+    expect(winners[1]).to.equal(player3.address);
+    expect(winners[2]).to.equal(player1.address);
+  });
+
+  it("inverted: entrants with no score never outrank scored players", async () => {
+    // player3 enters but never submits a score
+    const { id } = await createActiveTournament(3, true, [player1, player2, player3]);
+    const chainId = BigInt((await ethers.provider.getNetwork()).chainId);
+
+    await submitScore(player1, id, 8000n, 1n, chainId, "P1", "");
+    await submitScore(player2, id, 4000n, 1n, chainId, "P2", "");
+
+    await endTournament();
+    await tm.finalize(id);
+
+    const winners = await tm.getWinners(id);
+    expect(winners[0]).to.equal(player2.address);
+    expect(winners[1]).to.equal(player1.address);
+    // no-score player sorts last
+    expect(winners[2]).to.equal(player3.address);
+  });
+
+  it("inverted: finalizeWithSignedWinners requires the inverted flag in the digest", async () => {
+    const { id } = await createEndedTournament(2, true);
+    const chainId = BigInt((await ethers.provider.getNetwork()).chainId);
+    const winners = [player1.address, player2.address];
+
+    // Signature over the WRONG flag (inverted=false) must be rejected
+    const wrongFlagSig = await signFinalize(
+      scoreSignerWallet, id, chainId, 2, winners, false,
+    );
+    await expect(
+      tm.finalizeWithSignedWinners(id, winners, wrongFlagSig),
+    ).to.be.revertedWith("BAD_FINALIZE_SIG");
+
+    // Signature over inverted=true succeeds
+    const sig = await signFinalize(
+      scoreSignerWallet, id, chainId, 2, winners, true,
+    );
+    await expect(tm.finalizeWithSignedWinners(id, winners, sig))
+      .to.emit(tm, "Finalized")
+      .withArgs(id, winners);
+  });
+
+  it("inverted: winners claim payouts ranked by fastest drain", async () => {
+    const { id, prizeBps } = await createActiveTournament(2, true, [player1, player2]);
+    const chainId = BigInt((await ethers.provider.getNetwork()).chainId);
+
+    // player2 drains faster (lower ms) → rank 1
+    await submitScore(player1, id, 7000n, 1n, chainId, "P1", "");
+    await submitScore(player2, id, 3000n, 1n, chainId, "P2", "");
+
+    await endTournament();
+    await tm.finalize(id);
+
+    const totalPot = ENTRY_FEE * 2n;
+    const expectedP2 = (totalPot * BigInt(prizeBps[0])) / 10000n; // rank 1
+    const expectedP1 = (totalPot * BigInt(prizeBps[1])) / 10000n; // rank 2
+
+    const p2Before = await musd.balanceOf(player2.address);
+    await tm.connect(player2).claimReward(id);
+    expect((await musd.balanceOf(player2.address)) - p2Before).to.equal(expectedP2);
+
+    const p1Before = await musd.balanceOf(player1.address);
+    await tm.connect(player1).claimReward(id);
+    expect((await musd.balanceOf(player1.address)) - p1Before).to.equal(expectedP1);
   });
 
   // ────────────────────────────────────────────────────────────────────────────

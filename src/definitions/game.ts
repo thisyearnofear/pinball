@@ -44,6 +44,13 @@ export const BUMP_TIMEOUT = 2000;
 export const BALLS_PER_GAME = 3;
 export const RETRY_TIMEOUT  = 3000; // if a Ball is lost within this period, player gets a free retry
 
+// Kamikaze Ball scoring (score = time alive in ms, lower = better)
+
+export const KAMIKAZE_BUMPER_PENALTY_MS  = 500;  // penalty per bumper hit (kept ball alive)
+export const KAMIKAZE_TRIGGER_PENALTY_MS = 2500; // penalty per completed trigger group
+export const MIN_DRAIN_MS = 800; // fastest physically plausible drain, shared with backend validation
+export const AI_FLIPPER_HOLD_MS = 200; // how long AI holds a flipper up
+
 export const AwardablePoints = {
     BUMPER: 500,
     TRIGGER: 100,
@@ -68,6 +75,7 @@ export enum GameMessages {
     KAMIKAZE_START,
     DRAINED,
     SAVED,
+    POWERUP_ROULETTE,
     POWERUP_PLAYER,
     POWERUP_MACHINE,
     AI_TAUNT,
@@ -137,11 +145,15 @@ export type KamikazeState = {
     aiAccuracy: number;              // 0-1, probability AI saves the ball
     aiReactionMs: number;            // AI check interval
     aiLastCheck: number;             // last AI check timestamp
+    aiFlipperReleaseAt: number[];    // per-flipper scheduled release timestamps (simulation time)
     activePowerUps: ActivePowerUp[]; // currently active effects
     crateCooldownMs: number;         // time between crate respawns
     lastCrateSpawn: number;          // last crate activation timestamp
-    totalBumperHits: number;         // penalty tracking
+    totalBumperHits: number;         // penalty tracking (current ball)
+    totalTriggerGroupCompletions: number; // penalty tracking (current ball)
     rubberBandBias: number;          // current rubber-band probability (0-1, 0.5 = neutral)
+    completedBallScores: number[];   // final score per drained ball; game score = best (lowest)
+    scoreFrozen: boolean;            // true between drain and next ball launch
 };
 
 /**
@@ -158,6 +170,8 @@ export type GameDef = {
     multiplier: number;  // bonus multiplier for each awarded point
     underworld: boolean; // whether underworld is accessible below the table
     kamikaze?: KamikazeState; // optional Kamikaze Ball mode state
+    rngSeed?: number;    // seed for deterministic gameplay rolls (recorded in replays)
+    rng?: () => number;  // seeded PRNG; falls back to Math.random when absent
 };
 
 export type FlipperType = ActorTypes.LEFT_FLIPPER | ActorTypes.RIGHT_FLIPPER;

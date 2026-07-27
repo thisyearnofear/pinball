@@ -63,8 +63,8 @@ See [docs/MEZO_SETUP.md](docs/MEZO_SETUP.md) for full deployment guide.
 | Contract | Address |
 |---|---|
 | MockERC20 (test USDT) | `0xD391D6131F92E0A9717a98aD69BAeCfcA4c23A66` |
-| TournamentManager | `0x711aB8af92bA35C3ce910468e45b3B0097C6C860` |
-| MissionPool | `0xf0Fc8d4Ad5b00AF6aAb4E74Cd59B67c4eEB2FD49` |
+| TournamentManager | `0xF6A372cB188636691cC6f0eF952210285100B5C9` |
+| MissionPool | `0x1F7f7fBd49957d8175e7c9DC44643deF7f89405C` |
 
 See [docs/NIMIQ_SETUP.md](docs/NIMIQ_SETUP.md) for the Nimiq/Polygon
 deployment guide and Nimiq Pay Mini App testing instructions.

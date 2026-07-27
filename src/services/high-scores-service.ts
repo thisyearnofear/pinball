@@ -7,10 +7,11 @@
 // Contract-backed high score service (no REST, no mocks)
 // Keeps the same public API (startGame, stopGame, getHighScores)
 
-import { getActiveTournamentId, fetchLeaderboard, submitScoreWithSignature, getNextPlayerNonce, getPlayerInfo } from './contracts/tournament-client';
+import { getActiveTournamentId, fetchLeaderboard, submitScoreWithSignature, getPlayerInfo } from './contracts/tournament-client';
 import { requestScoreSignature } from './backend-scores-client';
 import { getContractsConfig } from '../config/contracts';
 import { getAppConfig } from '../config/app-config';
+import { isInvertedTournament } from '../config/tournaments';
 import { getPaymentTokenSymbol } from './contracts/payment-token-client';
 import { showToast } from './toast';
 import { getFromStorage, setInStorage } from '../utils/local-storage';
@@ -117,11 +118,14 @@ export const stopGame = async (
             metadata
         });
 
-        // Prevent duplicate or lower-score resubmissions when user already has equal/higher score
+        // Prevent duplicate or non-improving resubmissions (direction-aware:
+        // kamikaze/inverted tournaments improve by going LOWER)
+        const inverted = isInvertedTournament(tournamentId);
         try {
-            const existing = await fetchLeaderboard(tournamentId, 0, 100);
+            const existing = await fetchLeaderboard(tournamentId, 0, 100, inverted);
             const mine = existing.find(r => r.address.toLowerCase() === address.toLowerCase());
-            if (mine && mine.score >= score) {
+            const notImproved = mine && (inverted ? mine.score <= score : mine.score >= score);
+            if (notImproved) {
                 throw new Error('SCORE_NOT_IMPROVED');
             }
         } catch (leaderboardError: any) {
@@ -149,31 +153,13 @@ export const stopGame = async (
         let signature: string;
         let nonce: string;
 
-        // Fetch current nonce from contract to ensure synchronization
-        let nextNonce: string | undefined;
         try {
-            nextNonce = await getNextPlayerNonce(tournamentId, address);
-            console.log('Fetched next nonce from contract:', nextNonce);
-        } catch (nonceErr) {
-            console.warn('Could not fetch nonce from contract, relying on backend:', nonceErr);
-        }
-
-        try {
-            console.log('Requesting score signature from backend with params:', {
-                tournamentId,
-                address,
-                score,
-                name: playerName || '',
-                metadata,
-                nonce: nextNonce
-            });
             const response = await requestScoreSignature({
                 tournamentId,
                 address,
                 score,
                 name: playerName || '',
                 metadata,
-                nonce: nextNonce,
                 missionId: (() => {
                     try {
                         const cfg = getAppConfig();
@@ -294,7 +280,7 @@ export const stopGame = async (
         }
 
         // Return updated leaderboard top slice
-        const rows = await fetchLeaderboard(tournamentId, 0, 100);
+        const rows = await fetchLeaderboard(tournamentId, 0, 100, inverted);
         const scores: HighScoreDef[] = rows.map(r => ({ name: '', score: r.score, duration: 0 }));
         return scores;
     } catch (e) {
@@ -334,7 +320,7 @@ function getChainName(chainId: number): string {
 export const getHighScores = async (): Promise<HighScoreDef[]> => {
     try {
         const id = await getActiveTournamentId();
-        const rows = await fetchLeaderboard(id, 0, 100);
+        const rows = await fetchLeaderboard(id, 0, 100, isInvertedTournament(id));
         const scores: HighScoreDef[] = rows.map(r => ({
             name: `${r.address.slice(0, 6)}...${r.address.slice(-4)}`,
             score: r.score,

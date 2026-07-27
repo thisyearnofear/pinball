@@ -6,18 +6,18 @@
   },
   "frame": {
     "version": "1",
-    "name": "Mezo Pinball Arcade",
+    "name": "Kamikaze Ball",
     "iconUrl": "https://arbipinball.netlify.app/assets/sprites/logo.png",
     "homeUrl": "https://arbipinball.netlify.app",
     "imageUrl": "https://arbipinball.netlify.app/assets/sprites/logo.png",
-    "buttonTitle": "Play Pinball!",
+    "buttonTitle": "Play Kamikaze Ball!",
     "splashImageUrl": "https://arbipinball.netlify.app/assets/sprites/logo.png",
     "splashBackgroundColor": "#1b1922"
   },
   "miniApp": {
     "addToFavorites": {
       "enabled": true,
-      "title": "Add Mezo Pinball Arcade to Favorites",
+      "title": "Add Kamikaze Ball to Favorites",
       "description": "Get notified about new tournaments and updates!",
       "icon": "https://arbipinball.netlify.app/assets/sprites/logo.png"
     },

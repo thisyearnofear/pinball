@@ -11,14 +11,14 @@ export const TOURNAMENT_MANAGER_ABI = [
   "function entryFee() view returns (uint256)",
   "function musd() view returns (address)",
   "function scoreSigner() view returns (address)",
-  "function tournaments(uint256) view returns (uint256 id, uint64 startTime, uint64 endTime, uint16 topN, bool finalized, uint256 totalPot)",
+  "function tournaments(uint256) view returns (uint256 id, uint64 startTime, uint64 endTime, uint16 topN, bool finalized, bool invertedWinCondition, uint256 totalPot)",
   "function lastTournamentId() view returns (uint256)",
   "function getPrizeBps(uint256 id) view returns (uint16[])",
   "function getWinners(uint256 id) view returns (address[])",
   "function viewLeaderboard(uint256 id, uint256 offset, uint256 limit) view returns (address[] addrs, uint256[] scores)",
 
   // Player state
-  "function playerInfo(uint256,address) view returns (bool entered, uint256 bestScore, bool rewardClaimed)",
+  "function playerInfo(uint256,address) view returns (bool entered, bool hasScore, uint256 bestScore, bool rewardClaimed)",
   "function playerNonces(uint256,address) view returns (uint256)",
 
   // Write functions

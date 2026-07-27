@@ -26,12 +26,14 @@ contract TournamentManager {
         uint64 endTime;
         uint16 topN;
         bool finalized;
+        bool invertedWinCondition; // true = lower score wins (Kamikaze: fastest drain)
         uint16[] prizeBps; // sum == 10000
         uint256 totalPot;  // in MUSD base units
     }
 
     struct PlayerInfo {
         bool entered;
+        bool hasScore; // distinguishes "no submission" from a genuine 0 score
         uint256 bestScore;
         bool rewardClaimed;
     }
@@ -52,7 +54,7 @@ contract TournamentManager {
     event OwnerUpdated(address indexed newOwner);
     event ScoreSignerUpdated(address indexed signer);
     event EntryFeeUpdated(uint256 fee);
-    event TournamentCreated(uint256 indexed id, uint64 startTime, uint64 endTime, uint16 topN, uint16[] prizeBps);
+    event TournamentCreated(uint256 indexed id, uint64 startTime, uint64 endTime, uint16 topN, uint16[] prizeBps, bool invertedWinCondition);
     event Entered(uint256 indexed id, address indexed player, uint256 feePaid);
     event ScoreSubmitted(uint256 indexed id, address indexed player, uint256 score);
     event Finalized(uint256 indexed id, address[] winners);
@@ -96,7 +98,8 @@ contract TournamentManager {
         uint64 startTime,
         uint64 endTime,
         uint16 topN,
-        uint16[] calldata prizeBps
+        uint16[] calldata prizeBps,
+        bool invertedWinCondition
     ) external onlyOwner returns (uint256) {
         require(startTime < endTime, "BAD_TIME");
         require(topN > 0, "BAD_TOPN");
@@ -113,12 +116,13 @@ contract TournamentManager {
         t.endTime = endTime;
         t.topN = topN;
         t.finalized = false;
+        t.invertedWinCondition = invertedWinCondition;
         t.totalPot = 0;
         for (uint256 i = 0; i < prizeBps.length; i++) {
             t.prizeBps.push(prizeBps[i]);
         }
 
-        emit TournamentCreated(id, startTime, endTime, topN, prizeBps);
+        emit TournamentCreated(id, startTime, endTime, topN, prizeBps, invertedWinCondition);
         return id;
     }
 
@@ -189,7 +193,17 @@ contract TournamentManager {
 
         playerNonces[id][msg.sender] = nonce;
 
-        if (score > p.bestScore) {
+        bool improved;
+        if (!p.hasScore) {
+            improved = true;
+        } else if (t.invertedWinCondition) {
+            improved = score < p.bestScore;
+        } else {
+            improved = score > p.bestScore;
+        }
+
+        if (improved) {
+            p.hasScore = true;
             p.bestScore = score;
             emit ScoreSubmitted(id, msg.sender, score);
         }
@@ -209,19 +223,25 @@ contract TournamentManager {
         uint256 n = participants[id].length;
         uint16 topN = t.topN;
         address[] memory arr = participants[id];
+        bool inverted = t.invertedWinCondition;
 
         // selection sort for topN (OK for hackathon-scale tournaments)
+        // players without a score sort last in both directions
         for (uint16 i = 0; i < topN && i < n; i++) {
-            uint256 maxIdx = i;
+            uint256 bestIdx = i;
+            uint256 bestVal = _sortValue(id, arr[bestIdx], inverted);
             for (uint256 j = i + 1; j < n; j++) {
-                if (playerInfo[id][arr[j]].bestScore > playerInfo[id][arr[maxIdx]].bestScore) {
-                    maxIdx = j;
+                uint256 jVal = _sortValue(id, arr[j], inverted);
+                bool better = inverted ? jVal < bestVal : jVal > bestVal;
+                if (better) {
+                    bestIdx = j;
+                    bestVal = jVal;
                 }
             }
-            if (maxIdx != i) {
+            if (bestIdx != i) {
                 address tmp = arr[i];
-                arr[i] = arr[maxIdx];
-                arr[maxIdx] = tmp;
+                arr[i] = arr[bestIdx];
+                arr[bestIdx] = tmp;
             }
         }
 
@@ -237,8 +257,8 @@ contract TournamentManager {
     /**
      * Gas-efficient finalize: owner submits pre-sorted winners signed by scoreSigner.
      *
-     * The off-chain backend sorts the leaderboard and signs:
-     *   keccak256(abi.encodePacked("PINBALL_FINALIZE:v1", id, chainId, topN, ...winnerAddresses))
+     * The off-chain backend sorts the leaderboard (direction-aware) and signs:
+     *   keccak256(abi.encodePacked("PINBALL_FINALIZE:v1", id, chainId, topN, invertedWinCondition, ...winnerAddresses))
      *
      * This replaces the O(n^2) on-chain sort with O(topN) storage writes,
      * scaling to thousands of participants without hitting gas limits.
@@ -264,6 +284,7 @@ contract TournamentManager {
                         id,
                         block.chainid,
                         t.topN,
+                        t.invertedWinCondition,
                         winnerAddrs
                     )
                 )
@@ -333,6 +354,19 @@ contract TournamentManager {
             if (w[i] == player) return i + 1;
         }
         return 0;
+    }
+
+    /**
+     * Sort key for finalize(): players without a score always sort last,
+     * regardless of win-condition direction (a stored 0 would otherwise be
+     * "perfect" under inverted scoring).
+     */
+    function _sortValue(uint256 id, address player, bool inverted) internal view returns (uint256) {
+        PlayerInfo storage p = playerInfo[id][player];
+        if (!p.hasScore) {
+            return inverted ? type(uint256).max : 0;
+        }
+        return p.bestScore;
     }
 
     function _recoverSigner(bytes32 digest, bytes memory sig) internal pure returns (address) {

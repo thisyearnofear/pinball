@@ -16,13 +16,13 @@ type TouchStartState = {
 const SWIPE_THRESHOLD = 100;
 const SWIPE_TIME = 400;
 
-export function createInputController(cb: Callbacks) {
+export function createInputController(cb: Callbacks, nudgeTarget?: HTMLElement) {
   const touchStart: TouchStartState = { y: 0, time: 0 };
 
-  // Kamikaze Ball: tap anywhere to nudge ball toward tap location
-  function handleKamikazeTap(clientX: number, clientY: number) {
+  // Kamikaze Ball: tap the play area to nudge ball toward tap location
+  function handleClick(e: MouseEvent) {
     if (!cb.isKamikaze?.()) return;
-    cb.onNudge?.(clientX, clientY);
+    cb.onNudge?.(e.clientX, e.clientY);
   }
 
   function handleKey(event: KeyboardEvent) {
@@ -86,15 +86,14 @@ export function createInputController(cb: Callbacks) {
   function addListeners() {
     window.addEventListener("keydown", handleKey);
     window.addEventListener("keyup", handleKey);
-    // Kamikaze Ball: tap-to-nudge on click
-    window.addEventListener("click", (e) => {
-      handleKamikazeTap(e.clientX, e.clientY);
-    });
+    // Kamikaze Ball: tap-to-nudge on click, scoped to the play area
+    (nudgeTarget ?? window).addEventListener("click", handleClick as EventListener);
   }
 
   function removeListeners() {
     window.removeEventListener("keydown", handleKey);
     window.removeEventListener("keyup", handleKey);
+    (nudgeTarget ?? window).removeEventListener("click", handleClick as EventListener);
   }
 
   return {

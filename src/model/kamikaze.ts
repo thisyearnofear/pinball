@@ -12,6 +12,7 @@
 import type { GameDef, KamikazeState, PowerUpSide, ActivePowerUp } from "@/definitions/game";
 import {
     GameMessages, GameSounds, PowerUpType,
+    KAMIKAZE_BUMPER_PENALTY_MS, KAMIKAZE_TRIGGER_PENALTY_MS, AI_FLIPPER_HOLD_MS,
 } from "@/definitions/game";
 import type Flipper from "@/model/flipper";
 import type { IPhysicsEngine } from "@/model/physics/engine";
@@ -36,11 +37,15 @@ export function createKamikazeState(difficulty: AIDifficulty = "medium"): Kamika
         aiAccuracy: params.accuracy,
         aiReactionMs: params.reactionMs,
         aiLastCheck: 0,
+        aiFlipperReleaseAt: [],
         activePowerUps: [],
         crateCooldownMs: 10000, // 8-12s between crates
         lastCrateSpawn: 0,
         totalBumperHits: 0,
+        totalTriggerGroupCompletions: 0,
         rubberBandBias: 0.5, // neutral start
+        completedBallScores: [],
+        scoreFrozen: false,
     };
 }
 
@@ -48,13 +53,24 @@ export function createKamikazeState(difficulty: AIDifficulty = "medium"): Kamika
 
 /**
  * In Kamikaze Ball, the "score" is time alive in ms (lower = better).
- * Bumper hits add a penalty (the ball stayed alive longer).
+ * Bumper hits and completed trigger groups add penalties (the ball
+ * stayed alive longer / fed the machine).
  * This is stored in game.score and submitted to the contract.
  */
 export function getKamikazeScore(state: KamikazeState, now: number): number {
     const timeAlive = now - state.roundStartTime;
-    const bumperPenalty = state.totalBumperHits * 500; // 500ms per bumper hit
-    return Math.floor(timeAlive + bumperPenalty);
+    const bumperPenalty = state.totalBumperHits * KAMIKAZE_BUMPER_PENALTY_MS;
+    const triggerPenalty = state.totalTriggerGroupCompletions * KAMIKAZE_TRIGGER_PENALTY_MS;
+    return Math.max(0, Math.floor(timeAlive + bumperPenalty + triggerPenalty));
+}
+
+/**
+ * The final game score: the best (lowest) of all drained balls.
+ */
+export function getBestKamikazeScore(state: KamikazeState): number {
+    return state.completedBallScores.length > 0
+        ? Math.min(...state.completedBallScores)
+        : 0;
 }
 
 // ── AI flipper heuristic ────────────────────────────────────────
@@ -62,18 +78,27 @@ export function getKamikazeScore(state: KamikazeState, now: number): number {
 /**
  * Called every engine tick. Controls AI flippers to save the ball.
  *
- * The AI tracks the ball's position and activates the nearest flipper
- * when the ball is approaching. It "misses" based on aiAccuracy to
- * create fairness and drama.
+ * The AI tracks every ball and activates a flipper when any ball is
+ * approaching it. It "misses" based on aiAccuracy to create fairness
+ * and drama. Releases are scheduled in simulation time (pause-safe).
  */
 export function updateAIFlippers(
     state: KamikazeState,
     flippers: Flipper[],
-    ballPos: { x: number; y: number } | null,
-    ballVel: { x: number; y: number } | null,
-    now: number
+    ballStates: { pos: { x: number; y: number }; vel: { x: number; y: number } }[],
+    now: number,
+    rng: () => number = Math.random
 ): void {
-    if (!ballPos || !ballVel) return;
+    // Process scheduled releases first, regardless of reaction throttle
+    for (let i = 0; i < flippers.length; i++) {
+        const releaseAt = state.aiFlipperReleaseAt[i];
+        if (releaseAt && now >= releaseAt) {
+            flippers[i].trigger(false);
+            state.aiFlipperReleaseAt[i] = 0;
+        }
+    }
+
+    if (ballStates.length === 0) return;
 
     // Throttle AI checks to reactionMs
     if (now - state.aiLastCheck < state.aiReactionMs) return;
@@ -85,17 +110,26 @@ export function updateAIFlippers(
     const ironDome = hasPowerUp(state, PowerUpType.IRON_DOME, now);
     const accuracy = ironDome ? 1.0 : state.aiAccuracy; // Iron Dome = perfect
 
-    for (const flipper of flippers) {
+    for (let i = 0; i < flippers.length; i++) {
+        const flipper = flippers[i];
         const flipperPos = flipper.bounds;
-        const ballApproaching = ballPos.y > flipperPos.top - 100 && ballVel.y > 0;
-        const horizontalDistance = Math.abs(ballPos.x - (flipperPos.left + flipperPos.width / 2));
+        const flipperCenterX = flipperPos.left + flipperPos.width / 2;
 
-        // Activate flipper if ball is close enough and approaching
-        if (ballApproaching && horizontalDistance < 120) {
-            if (Math.random() < accuracy) {
+        // Defend against the nearest approaching ball (multiball-aware)
+        let threatened = false;
+        for (const { pos, vel } of ballStates) {
+            const ballApproaching = pos.y > flipperPos.top - 100 && vel.y > 0;
+            const horizontalDistance = Math.abs(pos.x - flipperCenterX);
+            if (ballApproaching && horizontalDistance < 120) {
+                threatened = true;
+                break;
+            }
+        }
+
+        if (threatened && !state.aiFlipperReleaseAt[i]) {
+            if (rng() < accuracy) {
                 flipper.trigger(true);
-                // Release shortly after
-                setTimeout(() => flipper.trigger(false), 200);
+                state.aiFlipperReleaseAt[i] = now + AI_FLIPPER_HOLD_MS;
             }
         }
     }
@@ -124,6 +158,15 @@ const POWERUP_DURATION_MS: Record<PowerUpType, number> = {
     [PowerUpType.BUMPER_FRENZY]: 4000,
 };
 
+export const POWERUP_NAMES: Record<PowerUpType, string> = {
+    [PowerUpType.HOMING_WARHEAD]: "Homing Warhead",
+    [PowerUpType.FLIPPER_JAM]: "Flipper Jam",
+    [PowerUpType.GHOST_BALL]: "Ghost Ball",
+    [PowerUpType.IRON_DOME]: "Iron Dome",
+    [PowerUpType.FORCE_FIELD]: "Force Field",
+    [PowerUpType.BUMPER_FRENZY]: "Bumper Frenzy",
+};
+
 /**
  * Update rubber-band bias based on ball-alive time.
  * If the ball has been alive >15s, bias toward player power-ups.
@@ -144,10 +187,10 @@ export function updateRubberBand(state: KamikazeState, now: number): void {
  * Roll for a power-up when ball hits a munitions crate.
  * Returns the power-up type and which side it benefits.
  */
-export function rollPowerUp(state: KamikazeState): { type: PowerUpType; side: PowerUpSide } {
-    const isPlayer = Math.random() < state.rubberBandBias;
+export function rollPowerUp(state: KamikazeState, rng: () => number = Math.random): { type: PowerUpType; side: PowerUpSide } {
+    const isPlayer = rng() < state.rubberBandBias;
     const pool = isPlayer ? PLAYER_POWERUPS : MACHINE_POWERUPS;
-    const type = pool[Math.floor(Math.random() * pool.length)];
+    const type = pool[Math.floor(rng() * pool.length)];
     return { type, side: isPlayer ? "player" : "machine" };
 }
 
@@ -229,10 +272,10 @@ export function shouldSpawnCrate(state: KamikazeState, now: number): boolean {
 /**
  * Record that a crate was activated.
  */
-export function recordCrateSpawn(state: KamikazeState, now: number): void {
+export function recordCrateSpawn(state: KamikazeState, now: number, rng: () => number = Math.random): void {
     state.lastCrateSpawn = now;
     // Randomize next cooldown between 8-12s
-    state.crateCooldownMs = 8000 + Math.random() * 4000;
+    state.crateCooldownMs = 8000 + rng() * 4000;
 }
 
 // ── Machine taunts ──────────────────────────────────────────────
@@ -240,9 +283,9 @@ export function recordCrateSpawn(state: KamikazeState, now: number): void {
 const AI_TAUNTS_SAVE = ["SAVED!", "NICE TRY", "I WILL NOT LET YOU LOSE", "PATHETIC"];
 const AI_TAUNTS_DRAIN = ["NOOO", "HOW?", "REKT", "IMPOSSIBLE"];
 
-export function getRandomTaunt(drain: boolean): string {
+export function getRandomTaunt(drain: boolean, rng: () => number = Math.random): string {
     const pool = drain ? AI_TAUNTS_DRAIN : AI_TAUNTS_SAVE;
-    return pool[Math.floor(Math.random() * pool.length)];
+    return pool[Math.floor(rng() * pool.length)];
 }
 
 // ── Tap-to-nudge ────────────────────────────────────────────────
