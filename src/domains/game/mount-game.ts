@@ -43,6 +43,7 @@ export type MountedGame = {
   destroy: () => void;
   getBallPosition: () => { x: number; y: number } | null;
   getBallCount: () => number;
+  getTableHeight: () => number;
 };
 
 /**
@@ -277,5 +278,6 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     destroy,
     getBallPosition,
     getBallCount,
+    getTableHeight: () => tableSize?.height ?? 0,
   };
 }

@@ -4,6 +4,7 @@ import { getTournamentWorld } from "@/config/tournaments";
 import type { AIDifficulty } from "@/model/kamikaze";
 
 import { Button, Skeleton, NeonTitle, CRTOverlay, PlayerCard } from "@/game/ui";
+import { burstOnElement } from "@/utils/burst-fx";
 import { AttractMode } from "./AttractMode";
 import styles from "./ArcadeLobby.module.scss";
 
@@ -66,7 +67,7 @@ export function ArcadeLobby(props: Props) {
           <button
             type="button"
             className={`${styles.modeCard} ${styles.modeCardKamikaze} ${props.gameMode === "kamikaze" ? styles.modeCardSelected : ""}`}
-            onClick={() => props.onSelectGameMode("kamikaze")}
+            onClick={(e) => { burstOnElement(e.currentTarget, { count: 10, colors: ["#ef4444", "#f87171", "#fbbf24"] }); props.onSelectGameMode("kamikaze"); }}
           >
             <span className={styles.modeBadgeFlagship}>FLAGSHIP</span>
             <span className={styles.modeName}>Kamikaze</span>
@@ -75,7 +76,7 @@ export function ArcadeLobby(props: Props) {
           <button
             type="button"
             className={`${styles.modeCard} ${props.gameMode === "classic" ? styles.modeCardSelected : ""}`}
-            onClick={() => props.onSelectGameMode("classic")}
+            onClick={(e) => { burstOnElement(e.currentTarget, { count: 10, colors: ["#6366f1", "#818cf8", "#a78bfa"] }); props.onSelectGameMode("classic"); }}
           >
             <span className={styles.modeName}>Classic</span>
             <span className={styles.modeDesc}>Traditional pinball. Rack up the highest score.</span>
@@ -91,7 +92,7 @@ export function ArcadeLobby(props: Props) {
                   key={d}
                   type="button"
                   className={`${styles.difficultyPill} ${props.aiDifficulty === d ? styles.difficultyPillActive : ""}`}
-                  onClick={() => props.onSelectDifficulty(d)}
+                  onClick={(e) => { if (props.aiDifficulty !== d) burstOnElement(e.currentTarget, { count: 8, colors: ["#ef4444", "#fbbf24"], distance: [20, 50], size: 4 }); props.onSelectDifficulty(d); }}
                 >
                   {d.charAt(0).toUpperCase() + d.slice(1)}
                 </button>
@@ -181,8 +182,10 @@ function ArcadeCard(props: CardProps) {
       return;
     }
     if (props.isActive && props.entered) {
+      burstOnElement(e.currentTarget as HTMLElement, { count: 14, colors: ["#22c55e", "#6366f1", "#fbbf24"] });
       props.onStart();
     } else if (props.isActive && !props.entered) {
+      burstOnElement(e.currentTarget as HTMLElement, { count: 14, colors: ["#6366f1", "#818cf8", "#a78bfa"] });
       props.onEnter();
     } else {
       props.onSelect();

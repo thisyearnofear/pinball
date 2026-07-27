@@ -38,6 +38,7 @@ pnpm-debug.log*
 *.sln
 *.sw?
 .gemini
+.qoder
 
 # Local Netlify folder
 .netlify

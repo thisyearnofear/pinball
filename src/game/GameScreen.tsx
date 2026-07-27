@@ -21,7 +21,10 @@ import {
   CelebrationParticles,
   OnboardingIntro,
   CRTOverlay, ArcadeLobby, AppHeader,
+  AmbientBackground, ActivityFeedProvider, useActivityFeed,
 } from "@/game/ui";
+import { burstAt } from "@/utils/burst-fx";
+import { ActivityFeedPanel } from "./ui/ActivityFeed";
 import GameMount from "./GameMount";
 import { SettingsModal } from "./ui/SettingsModal";
 import { HowToPlayModal } from "./ui/HowToPlayModal";
@@ -48,8 +51,17 @@ function markOnboardingSeen(): void {
 }
 
 export default function GameScreen() {
+  return (
+    <ActivityFeedProvider>
+      <GameScreenInner />
+    </ActivityFeedProvider>
+  );
+}
+
+function GameScreenInner() {
   const { address, isConnected } = useWalletState();
   const toast = useToast();
+  const activityFeed = useActivityFeed();
   const { stats, recordRun } = usePlayerStats();
   const walletPort = useWalletPort();
   const { tournament, setTournament, isLoading: isLoadingTournament, refresh: refreshTournament, enterTournament: doEnterTournament } = useTournament(address, walletPort);
@@ -225,12 +237,20 @@ export default function GameScreen() {
     setLastScore(score);
     recordRun({ score, mode, gameMode: effectiveGameMode, worldId: activeWorldId, tournamentId: tournament.tournamentId ?? undefined });
     setShowCelebration(true);
-  }, [mode, effectiveGameMode, activeWorldId, tournament.tournamentId, recordRun]);
+    activityFeed.log(
+      effectiveGameMode === "kamikaze" ? "drain" : "score",
+      effectiveGameMode === "kamikaze"
+        ? `Ball drained in ${(score / 1000).toFixed(1)}s`
+        : `Score submitted: ${score.toLocaleString()} pts`,
+    );
+  }, [mode, effectiveGameMode, activeWorldId, tournament.tournamentId, recordRun, activityFeed]);
 
   return (
     <ScreenFxProvider>
       <ScorePopupProvider>
-        <div style={{ minHeight: "100vh", background: colors.background.primary }}>
+        <div style={{ minHeight: "100vh", background: colors.background.primary, position: "relative" }}>
+          <AmbientBackground />
+          <div style={{ position: "relative", zIndex: 1 }}>
           <AppHeader
             view={view}
             gameActive={gameActive}
@@ -258,7 +278,10 @@ export default function GameScreen() {
                 onSelectTournament={(id) => setTournament((prev) => ({ ...prev, tournamentId: id }))}
                 onEnterTournament={(_id: number) => {
                   doEnterTournament()
-                    .then(() => toast.addToast("Entered tournament!", "success"))
+                    .then(() => {
+                      toast.addToast("Entered tournament!", "success");
+                      activityFeed.log("entry", `Player entered tournament #${_id}`);
+                    })
                     .catch((e: any) => toast.addToast(e?.message ?? "Failed to enter tournament.", "error"));
                 }}
                 onStartTournament={(id) => {
@@ -271,6 +294,11 @@ export default function GameScreen() {
                 }}
                 onPractice={startPractice}
               />
+            )}
+            {view === "lobby" && (
+              <div style={{ maxWidth: 900, margin: "0 auto", padding: `0 ${spacing.lg}px` }}>
+                <ActivityFeedPanel />
+              </div>
             )}
 
             {view === "paused" && (
@@ -305,7 +333,10 @@ export default function GameScreen() {
                     onReplayAvailable={setLastReplay}
                     onSubmissionStep={(step, err) => { setSubmissionStep(step); setSubmissionError(err ?? ""); }}
                     onSubmissionAvailable={setSubmission}
-                    onSubmitted={() => refreshTournament()}
+                    onSubmitted={() => {
+                      refreshTournament();
+                      activityFeed.log("score", "Score verified and submitted onchain");
+                    }}
                     onStatus={() => {}}
                     onError={(e) => toast.addToast(e, "error")}
                   />
@@ -374,6 +405,7 @@ export default function GameScreen() {
               onSkip={() => { markOnboardingSeen(); setShowOnboarding(false); }}
             />
           )}
+          </div>
         </div>
       </ScorePopupProvider>
     </ScreenFxProvider>

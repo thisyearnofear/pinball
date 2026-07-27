@@ -13,6 +13,7 @@ import { MARBLE_WORLDS, getWorldById } from "@/config/worlds";
 import { WorldLoadingOverlay, WorldLoadingIndicator } from "./ui/WorldLoadingOverlay";
 import { CelebrationParticles } from "./ui/CelebrationParticles";
 import { GhostRace } from "./ui/GhostRace";
+import { StabilityMeter } from "./ui/StabilityMeter";
 import { type WorldReaction } from "@/presentation/world-reactor";
 import { isKamikazeMode, getLastTaunt, getTickCount } from "@/model/game";
 import { createKamikazeState, POWERUP_NAMES, type AIDifficulty } from "@/model/kamikaze";
@@ -136,6 +137,8 @@ export default function GameMount(props: Props) {
     multiplier: 1,
   });
   const [kamikazeActive, setKamikazeActive] = useState(false);
+  const [stability, setStability] = useState(0);
+  const [machineSaving, setMachineSaving] = useState(false);
   const [kamikazeMessage, setKamikazeMessage] = useState<string | null>(null);
   const [activePowerUps, setActivePowerUps] = useState<{ name: string; side: PowerUpSide; remainingMs: number }[]>([]);
   const [ripples, setRipples] = useState<{ id: number; x: number; y: number }[]>([]);
@@ -374,12 +377,27 @@ export default function GameMount(props: Props) {
         worldHandleRef.current?.updateReactor(g.kamikaze?.enabled ? 0 : g.score, multiballRef.current);
       }
 
-      // Update ball position for camera tracking
+      // Update ball position for camera tracking + stability meter
       if (g.active && mountedRef.current) {
         const ballPos = mountedRef.current.getBallPosition();
         if (ballPos) {
           worldHandleRef.current?.updateBallPosition(ballPos.x, ballPos.y);
           worldHandleRef.current?.updateBallLight(ballPos.x, ballPos.y, 10);
+
+          // Stability meter: how close is the ball to the drain (bottom of table)?
+          if (g.kamikaze?.enabled) {
+            const tableHeight = mountedRef.current.getTableHeight();
+            if (tableHeight > 0) {
+              const proximity = Math.max(0, Math.min(1, ballPos.y / tableHeight));
+              setStability(proximity);
+              // Check if machine is actively saving (force field or save power-up)
+              const now = performance.now();
+              const saving = g.kamikaze.activePowerUps.some(
+                (p) => p.side === "machine" && p.expiresAt > now,
+              );
+              setMachineSaving(saving);
+            }
+          }
         }
       }
 
@@ -698,7 +716,10 @@ export default function GameMount(props: Props) {
               <div style={{ color: "#ff4444", fontWeight: "bold" }}>KAMIKAZE BALL</div>
               <div>Time: {formatGameScore(hud.score, true)}</div>
               <div>Balls: {hud.balls}</div>
-              <div style={{ fontSize: 10, opacity: 0.7 }}>Tap to nudge toward drain</div>
+              <div style={{ marginTop: 6 }}>
+                <StabilityMeter value={stability} machineSaving={machineSaving} />
+              </div>
+              <div style={{ fontSize: 10, opacity: 0.7, marginTop: 4 }}>Tap to nudge toward drain</div>
             </>
           ) : (
             <>

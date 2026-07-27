@@ -28,3 +28,7 @@ export { PinballHUD } from './PinballHUD';
 export { CabinetFrame } from './CabinetFrame';
 export { ArcadeLobby } from './ArcadeLobby';
 export { AppHeader } from './AppHeader';
+export { AmbientBackground } from './AmbientBackground';
+export { ActivityFeedProvider, ActivityFeedPanel, useActivityFeed } from './ActivityFeed';
+export type { ActivityKind } from './ActivityFeed';
+export { StabilityMeter } from './StabilityMeter';
