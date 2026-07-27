@@ -100,8 +100,33 @@ export type AppConfig = {
 
 let cached: AppConfig | null = null;
 
+// Next.js only inlines *static* `process.env.NEXT_PUBLIC_*` accesses at build
+// time; a dynamic `process.env[key]` lookup resolves to undefined in the
+// exported client bundle. Every public env var must be listed here explicitly.
+const PUBLIC_ENV: Record<string, string | undefined> = {
+  NEXT_PUBLIC_ACTIVE_MISSION_ID: process.env.NEXT_PUBLIC_ACTIVE_MISSION_ID,
+  NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL,
+  NEXT_PUBLIC_BLOCK_EXPLORER_URL: process.env.NEXT_PUBLIC_BLOCK_EXPLORER_URL,
+  NEXT_PUBLIC_CHAIN_ID: process.env.NEXT_PUBLIC_CHAIN_ID,
+  NEXT_PUBLIC_CHAIN_NAME: process.env.NEXT_PUBLIC_CHAIN_NAME,
+  NEXT_PUBLIC_ECOSYSTEM_PROFILE: process.env.NEXT_PUBLIC_ECOSYSTEM_PROFILE,
+  NEXT_PUBLIC_MISSION_POOL_ADDRESS: process.env.NEXT_PUBLIC_MISSION_POOL_ADDRESS,
+  NEXT_PUBLIC_MUSD_ADDRESS: process.env.NEXT_PUBLIC_MUSD_ADDRESS,
+  NEXT_PUBLIC_NATIVE_CURRENCY_DECIMALS: process.env.NEXT_PUBLIC_NATIVE_CURRENCY_DECIMALS,
+  NEXT_PUBLIC_NATIVE_CURRENCY_NAME: process.env.NEXT_PUBLIC_NATIVE_CURRENCY_NAME,
+  NEXT_PUBLIC_NATIVE_CURRENCY_SYMBOL: process.env.NEXT_PUBLIC_NATIVE_CURRENCY_SYMBOL,
+  NEXT_PUBLIC_PAYMENT_TOKEN_ADDRESS: process.env.NEXT_PUBLIC_PAYMENT_TOKEN_ADDRESS,
+  NEXT_PUBLIC_PAYMENT_TOKEN_DECIMALS: process.env.NEXT_PUBLIC_PAYMENT_TOKEN_DECIMALS,
+  NEXT_PUBLIC_PAYMENT_TOKEN_SYMBOL: process.env.NEXT_PUBLIC_PAYMENT_TOKEN_SYMBOL,
+  NEXT_PUBLIC_PAYMENT_TOKEN_TYPE: process.env.NEXT_PUBLIC_PAYMENT_TOKEN_TYPE,
+  NEXT_PUBLIC_RPC_URL_PUBLIC: process.env.NEXT_PUBLIC_RPC_URL_PUBLIC,
+  NEXT_PUBLIC_SCORE_PREFIX: process.env.NEXT_PUBLIC_SCORE_PREFIX,
+  NEXT_PUBLIC_TOURNAMENT_MANAGER_ADDRESS: process.env.NEXT_PUBLIC_TOURNAMENT_MANAGER_ADDRESS,
+  NEXT_PUBLIC_WALLET_ADAPTER: process.env.NEXT_PUBLIC_WALLET_ADAPTER,
+};
+
 function env(key: string): string | undefined {
-  const v = process.env[key];
+  const v = PUBLIC_ENV[key] ?? process.env[key];
   return typeof v === "string" && v.trim().length > 0 ? v.trim() : undefined;
 }
 

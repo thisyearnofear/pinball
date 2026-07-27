@@ -18,15 +18,16 @@ import type Flipper from "@/model/flipper";
 import type { IPhysicsEngine } from "@/model/physics/engine";
 import type { Body } from "matter-js";
 import { playSoundEffect } from "@/services/audio-service";
+import * as haptics from "@/utils/haptics";
 
 // ── AI flipper parameters by difficulty ─────────────────────────
 
 export type AIDifficulty = "easy" | "medium" | "hard";
 
-const AI_PARAMS: Record<AIDifficulty, { accuracy: number; reactionMs: number }> = {
-    easy:   { accuracy: 0.5,  reactionMs: 250 },
-    medium: { accuracy: 0.8,  reactionMs: 150 },
-    hard:   { accuracy: 0.95, reactionMs: 80  },
+const AI_PARAMS: Record<AIDifficulty, { accuracy: number; reactionMs: number; saveChance: number; saveFatigue: number }> = {
+    easy:   { accuracy: 0.5,  reactionMs: 250, saveChance: 0.5,  saveFatigue: 0.7  },
+    medium: { accuracy: 0.8,  reactionMs: 150, saveChance: 0.75, saveFatigue: 0.8  },
+    hard:   { accuracy: 0.95, reactionMs: 80,  saveChance: 0.9,  saveFatigue: 0.85 },
 };
 
 export function createKamikazeState(difficulty: AIDifficulty = "medium"): KamikazeState {
@@ -38,6 +39,9 @@ export function createKamikazeState(difficulty: AIDifficulty = "medium"): Kamika
         aiReactionMs: params.reactionMs,
         aiLastCheck: 0,
         aiFlipperReleaseAt: [],
+        aiSaveChance: params.saveChance,
+        aiSaveFatigue: params.saveFatigue,
+        aiSavesUsed: 0,
         activePowerUps: [],
         crateCooldownMs: 10000, // 8-12s between crates
         lastCrateSpawn: 0,
@@ -118,9 +122,9 @@ export function updateAIFlippers(
         // Defend against the nearest approaching ball (multiball-aware)
         let threatened = false;
         for (const { pos, vel } of ballStates) {
-            const ballApproaching = pos.y > flipperPos.top - 100 && vel.y > 0;
+            const ballApproaching = pos.y > flipperPos.top - 250 && vel.y > 0;
             const horizontalDistance = Math.abs(pos.x - flipperCenterX);
-            if (ballApproaching && horizontalDistance < 120) {
+            if (ballApproaching && horizontalDistance < 160) {
                 threatened = true;
                 break;
             }
@@ -213,6 +217,7 @@ export function activatePowerUp(
     });
 
     playSoundEffect(GameSounds.POWERUP_ACTIVATE);
+    if (side === "player") haptics.powerUp();
 }
 
 /**
@@ -326,4 +331,26 @@ export function nudgeBall(
  */
 export function isDrainBlocked(state: KamikazeState, now: number): boolean {
     return hasPowerUp(state, PowerUpType.FORCE_FIELD, now);
+}
+
+/**
+ * The machine's last line of defense: when the ball reaches the drain it may
+ * kick it back into play. Each consecutive save fatigues the machine, so a
+ * ball can never be kept alive forever. A recent player nudge toward the
+ * drain reduces the save chance (skill reward).
+ */
+export function rollEmergencySave(
+    state: KamikazeState,
+    now: number,
+    lastNudgeAt: number,
+    rng: () => number = Math.random
+): boolean {
+    const fatigue = Math.pow(state.aiSaveFatigue, state.aiSavesUsed);
+    // harder machines resist drainward nudges more (easy ~0.7 → hard ~0.85)
+    const nudgeFactor = now - lastNudgeAt < 1000 ? state.aiSaveFatigue : 1;
+    if (rng() < state.aiSaveChance * fatigue * nudgeFactor) {
+        state.aiSavesUsed++;
+        return true;
+    }
+    return false;
 }

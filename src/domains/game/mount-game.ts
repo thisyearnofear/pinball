@@ -27,6 +27,11 @@ export type MountGameOptions = {
    */
   touchscreen?: boolean;
   /**
+   * Attract/demo mode: no player input is wired at all (no keyboard,
+   * touch zones or nudge). The kamikaze AI plays the machine by itself.
+   */
+  attract?: boolean;
+  /**
    * Fired when the engine surfaces high-signal messages (e.g. MULTIBALL).
    */
   onMessage?: (message: GameMessages | null) => void;
@@ -80,15 +85,26 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     onUpdate: update,
     backgroundColor: "#000",
   });
+  // Renderers assume a viewport exists; frames can render during async init()
+  // before resize()/scaleCanvas() runs, so set one up front.
+  canvas.setViewport(600, 800);
   canvas.insertInPage(canvasContainer);
 
   // Preload bitmaps already cached by asset-preloader (if it ran).
+  // zcanvas transfers ImageBitmaps to its render worker (detaching them), so hand
+  // over a clone to keep the shared cache usable across mounts (attract + game).
   // Falls back to loading at runtime if missing.
-  [SpriteCache.BALL, SpriteCache.FLIPPER_LEFT, SpriteCache.FLIPPER_RIGHT].forEach((entry) => {
-    if (entry.bitmap) {
-      canvas.loadResource(entry.resourceId, entry.bitmap);
-    }
-  });
+  await Promise.all(
+    [SpriteCache.BALL, SpriteCache.FLIPPER_LEFT, SpriteCache.FLIPPER_RIGHT].map(async (entry) => {
+      if (!entry.bitmap) return;
+      try {
+        const clone = await createImageBitmap(entry.bitmap);
+        canvas.loadResource(entry.resourceId, clone);
+      } catch {
+        // cached bitmap was already detached; renderer will load at runtime
+      }
+    })
+  );
 
   let gameRef: GameDef = opts.game;
   let tableSize: Size | null = null;
@@ -153,7 +169,7 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
   // or single full-screen tap zone for Kamikaze Ball.
   const touchLeft = document.createElement("div");
   const touchRight = document.createElement("div");
-  if (opts.touchscreen) {
+  if (opts.touchscreen && !opts.attract) {
     const base: Partial<CSSStyleDeclaration> = {
       position: "absolute",
       top: "0",
@@ -223,7 +239,9 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     tableSize = await init(canvas, gameRef, roundEndHandler, messageHandler);
     inited = true;
 
-    inputController.addListeners();
+    if (!opts.attract) {
+      inputController.addListeners();
+    }
     window.addEventListener("resize", resize);
     resize();
   }

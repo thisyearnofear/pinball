@@ -18,6 +18,7 @@ type Props = {
   onPlayAgain: () => void;
   onPlayTournament: () => void;
   onViewLeaderboard: () => void;
+  onWatchReplay?: () => void;
   onBackToLobby?: () => void;
 };
 
@@ -86,6 +87,11 @@ export function CelebrationOverlay(props: Props) {
           <Button fullWidth variant="secondary" onClick={() => setShowShare(true)}>
             Share Result
           </Button>
+          {props.onWatchReplay && (
+            <Button fullWidth variant="secondary" onClick={props.onWatchReplay}>
+              Watch Replay
+            </Button>
+          )}
           {!props.isPractice && (
             <Button fullWidth variant="secondary" onClick={props.onPlayTournament}>
               Play Tournament

@@ -4,10 +4,11 @@ import { Button } from "./Button";
 import { formatGameScore, scoreUnit } from "@/utils/score-format";
 import styles from "./ScoreSubmissionOverlay.module.scss";
 
-export type SubmissionStep = "validating" | "signing" | "ready" | "error" | "skipped";
+export type SubmissionStep = "validating" | "verifying" | "signing" | "ready" | "error" | "skipped";
 
 const stepMessages: Record<SubmissionStep, string> = {
   validating: "Validating score and preparing submission…",
+  verifying: "Verifying replay… uploading your run recording for anti-cheat checks.",
   signing: "Requesting backend signature…",
   ready: "Approve in your wallet to finalize.",
   skipped: "Your previous high score is higher, so this run won't replace it.",
@@ -16,13 +17,14 @@ const stepMessages: Record<SubmissionStep, string> = {
 
 const stepTitles: Record<SubmissionStep, string> = {
   validating: "Validating your score",
+  verifying: "Verifying your replay",
   signing: "Securing your score",
   ready: "Ready to submit",
   skipped: "Personal best maintained",
   error: "Score submission failed",
 };
 
-const steps = ["validating", "signing", "ready"] as const;
+const steps = ["validating", "verifying", "signing", "ready"] as const;
 
 type Props = {
   score: number;

@@ -8,6 +8,8 @@ import { nonceTracker } from '../lib/nonce-tracker.js';
 import { deriveNextNonce } from '../lib/nonce-source.js';
 import { awardMissionWinner } from '../lib/mission-awarder.js';
 import { adminAuth } from '../lib/admin-auth.js';
+import { verifyReplay } from '../lib/replay-verifier.js';
+import { getStoredReplay, maybeStoreBestReplay } from './replays.js';
 
 const SignBody = z.object({
   tournamentId: z.number().int().positive(),
@@ -83,6 +85,39 @@ export async function scoresRoutes(app: FastifyInstance) {
       sanitized: { tournamentId: tid, address: addr, score: s, name: n, metadata: m }
     } = validationResult;
 
+    // Replay verification (plausibility-grade): the signed metadata carries the
+    // replay's keccak hash; the replay itself was uploaded to /api/replays first.
+    let replayVerified: boolean | undefined;
+    let verifiedReplayJson: string | null = null;
+    if (env.REPLAY_VERIFICATION !== 'off') {
+      const mode = m.mode === 'kamikaze' ? 'kamikaze' as const : 'classic' as const;
+      const replayHash = typeof m.replayHash === 'string' ? m.replayHash : undefined;
+      let failures: string[] = [];
+      if (!replayHash) {
+        failures = ['REPLAY_HASH_MISSING'];
+      } else {
+        const stored = await getStoredReplay(tid, addr, replayHash);
+        if (!stored) {
+          failures = ['REPLAY_NOT_FOUND'];
+        } else {
+          const verdict = verifyReplay(stored, { score: s, mode, metadata: m, replayHash });
+          failures = verdict.failures;
+          if (failures.length === 0) verifiedReplayJson = stored;
+        }
+      }
+      replayVerified = failures.length === 0;
+      if (!replayVerified) {
+        app.log.warn({ event: 'REPLAY_VERIFICATION_FAILED', address: addr, tournamentId: tid, score: s, failures });
+        if (env.REPLAY_VERIFICATION === 'strict') {
+          return reply.code(400).send({
+            error: 'REPLAY_VERIFICATION_FAILED',
+            message: `Replay verification failed: ${failures.join(', ')}`,
+            failures
+          });
+        }
+      }
+    }
+
     try {
       // Server-derived nonce only (chain + local tracker) — clients cannot override it
       const nonce = await deriveNextNonce(tid, addr);
@@ -102,6 +137,18 @@ export async function scoresRoutes(app: FastifyInstance) {
       // Persist the issued nonce so the next request gets nonce+1
       await nonceTracker.recordNonce(tid, addr, nonce);
 
+      // Keep the leader's verified replay for ghost racing (non-fatal)
+      if (replayVerified && verifiedReplayJson) {
+        try {
+          const stored = await maybeStoreBestReplay(
+            tid, addr, s, m.mode === 'kamikaze' ? 'kamikaze' : 'classic', verifiedReplayJson
+          );
+          if (stored) app.log.info({ event: 'BEST_REPLAY_UPDATED', tournamentId: tid, address: addr, score: s });
+        } catch (e: any) {
+          app.log.warn({ event: 'BEST_REPLAY_STORE_FAILED', error: e?.message });
+        }
+      }
+
       app.log.info({
         event: 'SCORE_SIGNED',
         address: addr,
@@ -114,6 +161,7 @@ export async function scoresRoutes(app: FastifyInstance) {
       return {
         signature,
         nonce: nonce.toString(),
+        ...(replayVerified !== undefined ? { replayVerified } : {}),
         rateLimitRemaining: rateLimitResult.remaining,
         rateLimitResetAt: rateLimitResult.resetAt,
         ...(await (async () => {

@@ -38,16 +38,17 @@ import Rect from "@/model/rect";
 import TriggerGroup from "@/model/trigger-group";
 import { createEngine } from "@/model/physics/engine";
 import type { IPhysicsEngine, CollisionEvent } from "@/model/physics/engine";
-import { enqueueTrack, setFrequency, playSoundEffect } from "@/services/audio-service";
+import { enqueueTrack, setFrequency, playSoundEffect, duckMusic } from "@/services/audio-service";
+import * as haptics from "@/utils/haptics";
 import {
     createKamikazeState, updateAIFlippers, getKamikazeScore, getBestKamikazeScore, applyPowerUpEffects,
     hasPowerUp, rollPowerUp, activatePowerUp, cleanupPowerUps, shouldSpawnCrate,
-    recordCrateSpawn, getRandomTaunt, nudgeBall, isDrainBlocked,
+    recordCrateSpawn, getRandomTaunt, nudgeBall, isDrainBlocked, rollEmergencySave,
     updateRubberBand,
 } from "@/model/kamikaze";
 import { setKamikazeMode as setBumperKamikazeMode, setGhostMode as setBumperGhostMode, setFrenzyMode as setBumperFrenzyMode } from "@/renderers/bumper-renderer";
 import { setKamikazeMode as setFlipperKamikazeMode } from "@/renderers/flipper-renderer";
-import { recordReplayEvent } from "@/model/replay-recorder";
+import { recordReplayEvent, recordReplayTraceSample } from "@/model/replay-recorder";
 
 type IRoundEndHandler = (readyCallback: () => void, timeout: number) => void;
 type IMessageHandler = (message: GameMessages, optDuration?: number) => void;
@@ -82,12 +83,16 @@ let bumpers: Bumper[] = []; // quick access for Kamikaze Ghost Ball sensor toggl
 let ghostActive = false;
 let frenzyActive = false;
 let lastTauntText = "";
+let lastNudgeAt = -Infinity;
 
 const ENGINE_INCREMENT = 1000 / FRAME_RATE;
 let accumulator = 0;
 let tickCount = 0; // fixed-timestep tick counter (replay keying)
 
 export const getTickCount = (): number => tickCount;
+
+// test/sim hook
+export const getPhysicsEngine = (): IPhysicsEngine => engine;
 
 export const init = async (
     canvasRef: zCanvas, game: GameDef, roundEndHandlerRef: IRoundEndHandler, messageHandlerRef: IMessageHandler
@@ -105,6 +110,7 @@ export const init = async (
     inUnderworld = false;
     accumulator = 0;
     tickCount = 0;
+    lastNudgeAt = -Infinity;
     gameRef = game; // store reference for external access (flipper control, nudge)
 
     // Initialize Kamikaze Ball state if the game has it enabled
@@ -127,6 +133,7 @@ export const init = async (
         actor.dispose(engine);
     }
     actorMap.clear();
+    balls.length = 0; // stale Ball refs (e.g. from a previous attract-mode mount) would freeze the loop
     engine?.destroy();
 
     while (canvas.numChildren() > 0) {
@@ -432,6 +439,8 @@ export const update = (timestamp: DOMHighResTimeStamp, framesSinceLastRender: nu
         ball = balls[0];
     }
 
+    recordReplayTraceSample(tickCount, ball.body.position.x, ball.body.position.y);
+
     const { top } = ball.bounds;
     const { underworld } = table;
     const y = top - panOffset;
@@ -527,16 +536,36 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
         if (top > tableBottom) {
             // Kamikaze Ball: drain is the GOAL. Force Field blocks it.
             if (game.kamikaze?.enabled) {
+                if (ball.body.velocity.y <= 0) {
+                    continue; // just kicked back up by a save — not draining
+                }
                 if (isDrainBlocked(game.kamikaze, now)) {
                     // Force Field active — ball bounces back from drain
                     engine.launchBall(ball.body, { x: 0, y: -LAUNCH_SPEED * 0.5 });
                     playSoundEffect(GameSounds.AI_SAVE);
+                    duckMusic(600, 0.35);
+                    haptics.aiSave();
+                    lastTauntText = getRandomTaunt(false, game.rng ?? Math.random);
+                    messageHandler(GameMessages.AI_TAUNT, 1500);
+                    continue;
+                }
+                if (rollEmergencySave(game.kamikaze, now, lastNudgeAt, game.rng ?? Math.random)) {
+                    // Machine emergency save — kick the ball back up into the playfield
+                    const towardCenter = Math.sign(table.width / 2 - ball.body.position.x);
+                    const sideKick = towardCenter * (2 + (game.rng ?? Math.random)() * 4);
+                    engine.launchBall(ball.body, { x: sideKick, y: -LAUNCH_SPEED * 0.95 });
+                    playSoundEffect(GameSounds.AI_SAVE);
+                    duckMusic(600, 0.35);
+                    haptics.aiSave();
                     lastTauntText = getRandomTaunt(false, game.rng ?? Math.random);
                     messageHandler(GameMessages.AI_TAUNT, 1500);
                     continue;
                 }
                 // Drain successful! Record score and show taunt
                 playSoundEffect(GameSounds.DRAIN_VICTORY);
+                duckMusic(1000, 0.2);
+                haptics.drainVictory();
+                messageHandler(GameMessages.DRAINED);
                 lastTauntText = getRandomTaunt(true, game.rng ?? Math.random);
                 messageHandler(GameMessages.AI_TAUNT, 2000);
                 recordReplayEvent(tickCount, "drain");
@@ -632,6 +661,7 @@ function startRound(game: GameDef): void {
         game.kamikaze.totalTriggerGroupCompletions = 0;
         game.kamikaze.activePowerUps = [];
         game.kamikaze.aiFlipperReleaseAt = [];
+        game.kamikaze.aiSavesUsed = 0;
         game.kamikaze.scoreFrozen = false;
 
         if (ghostActive) {
@@ -670,6 +700,7 @@ export function getBallCount(): number {
 export const nudgeBallToward = (tapX: number, tapY: number): void => {
     if (!gameRef?.kamikaze?.enabled || balls.length === 0) return;
     const ballBody = balls[0].body;
+    lastNudgeAt = window.performance.now();
     recordReplayEvent(tickCount, "nudge", tapX, tapY);
     nudgeBall(engine, ballBody, tapX, tapY);
 };

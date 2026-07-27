@@ -14,7 +14,7 @@ import {
     createKamikazeState, getKamikazeScore, getBestKamikazeScore, updateRubberBand,
     rollPowerUp, activatePowerUp, cleanupPowerUps, hasPowerUp, applyPowerUpEffects,
     isDrainBlocked, shouldSpawnCrate, recordCrateSpawn, getRandomTaunt, nudgeBall,
-    updateAIFlippers,
+    updateAIFlippers, rollEmergencySave,
 } from "@/model/kamikaze";
 import { mulberry32 } from "@/utils/rng";
 import { getMockPhysicsEngine } from "../__mocks";
@@ -269,6 +269,37 @@ describe("Kamikaze Ball", () => {
             const ballBody = { position: { x: 100, y: 100 } } as never;
             nudgeBall(engine, ballBody, 100, 100);
             expect(engine.launchBall).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("emergency saves", () => {
+        it("should save when the roll is below the save chance and count fatigue", () => {
+            const state = getState();
+            expect(rollEmergencySave(state, 5000, -Infinity, () => 0)).toBe(true);
+            expect(state.aiSavesUsed).toEqual(1);
+        });
+
+        it("should drain when the roll is above the save chance", () => {
+            const state = getState();
+            expect(rollEmergencySave(state, 5000, -Infinity, () => 0.99)).toBe(false);
+            expect(state.aiSavesUsed).toEqual(0);
+        });
+
+        it("should fatigue with each consecutive save", () => {
+            const state = getState();
+            const justBelowBase = state.aiSaveChance - 0.01;
+            expect(rollEmergencySave(state, 5000, -Infinity, () => justBelowBase)).toBe(true);
+            // same roll now fails: chance decayed by the fatigue multiplier
+            expect(rollEmergencySave(state, 5000, -Infinity, () => justBelowBase)).toBe(false);
+        });
+
+        it("should reduce the save chance after a recent player nudge", () => {
+            const state = getState();
+            const justBelowBase = state.aiSaveChance - 0.01;
+            // nudged 500ms ago: base chance is scaled down, roll fails
+            expect(rollEmergencySave(state, 5000, 4500, () => justBelowBase)).toBe(false);
+            // stale nudge (>1s): full chance applies
+            expect(rollEmergencySave(state, 5000, 3000, () => justBelowBase)).toBe(true);
         });
     });
 });

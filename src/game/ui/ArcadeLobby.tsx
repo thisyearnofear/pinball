@@ -4,6 +4,7 @@ import { getTournamentWorld } from "@/config/tournaments";
 import type { AIDifficulty } from "@/model/kamikaze";
 
 import { Button, Skeleton, NeonTitle, CRTOverlay, PlayerCard } from "@/game/ui";
+import { AttractMode } from "./AttractMode";
 import styles from "./ArcadeLobby.module.scss";
 
 type Props = {
@@ -58,6 +59,8 @@ export function ArcadeLobby(props: Props) {
             Drain-to-win pinball — the machine fights back
           </p>
         </div>
+
+        <AttractMode />
 
         <div className={styles.modeSelector}>
           <button

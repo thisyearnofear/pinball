@@ -175,6 +175,10 @@ export const stopGame = async (
             nonce = response.nonce;
             console.log('Received signature and nonce from backend:', { nonce });
 
+            if (response.replayVerified === true) {
+                showToast('Replay verified — score is cheat-checked ✓', 'success');
+            }
+
             // Optional: show mission reward feedback (backend broadcasts tx)
             if (response.missionAwarded && response.missionTxHash) {
                 showToast('Mission reward sent!', 'success');

@@ -33,6 +33,54 @@ prizes are denominated in **MUSD** (Bitcoin-backed stablecoin on Mezo).
 
 See [docs/DIFFERENTIATORS.md](docs/DIFFERENTIATORS.md) for the full breakdown.
 
+## For judges: 90-second tour
+
+- **Instant guided demo:** append **`?demo=1`** to the app URL — skips onboarding and launches a narrated Kamikaze run.
+- **No wallet needed:** the lobby attract mode shows the machine playing itself.
+- **Demo script:** [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
+
+```mermaid
+flowchart LR
+  subgraph Client [Next.js static export]
+    G[Game engine<br/>Matter.js + seeded RNG] --> R[Replay recorder<br/>inputs + ball trace]
+    G --> W[3D world stage<br/>Gaussian splats]
+    R --> GH[Ghost viewer +<br/>live ghost racing]
+  end
+  subgraph Backend [Fastify + Redis]
+    V[Replay verifier<br/>physics plausibility] --> S[EIP-191 score signer<br/>nonce + rate limits]
+    B[(Replay store<br/>best-per-tournament)]
+  end
+  subgraph Chain [Polygon Amoy]
+    TM[TournamentManager v2<br/>inverted win condition] --> P[USDT prizes<br/>O topN signed finalize]
+    MP[MissionPool bounties]
+  end
+  R -- "upload replay (hash-bound)" --> B
+  B --> V
+  S -- signature --> Client
+  Client -- submitScore + sig --> TM
+  S -. award .-> MP
+  B -- "leader replay" --> GH
+```
+
+| Feature | Status | Where |
+|---|---|---|
+| Kamikaze mode (machine fights you, drain-time scoring, best-of-3) | ✅ live | `src/model/kamikaze.ts` |
+| AI flippers + rubber-band difficulty + taunts | ✅ live | `src/model/kamikaze.ts` |
+| Dueling power-ups (player munitions vs machine countermeasures) | ✅ live | `src/model/kamikaze.ts` |
+| Deterministic replays (seeded RNG + input recording) | ✅ live | `src/model/replay-recorder.ts` |
+| Server-side replay verification before signing | ✅ live | `backend/src/lib/replay-verifier.ts` |
+| Ghost replay viewer + live ghost racing vs tournament leader | ✅ live | `src/game/ui/GhostRace.tsx` |
+| Inverted-win tournaments on-chain (lower drain time wins) | ✅ deployed | `contracts/contracts/TournamentManager.sol` |
+| O(topN) signed settlement (`finalizeWithSignedWinners`) | ✅ deployed | `backend/src/scripts/finalize-tournament.ts` |
+| Lobby attract mode (machine plays itself) | ✅ live | `src/game/ui/ArcadeLobby.tsx` |
+
+**Verification story:** every run records its RNG seed, all inputs, and a ball
+position trace. The replay ships to the backend, its keccak hash is bound into
+the EIP-191 signed metadata, and the verifier checks physics plausibility
+(bounds, no teleports, drain segments vs claimed time, human input rates)
+before any score is signed. Cheating requires forging a physically plausible
+replay — not just POSTing a number.
+
 ## Ecosystem profiles
 
 The app supports multiple blockchain ecosystems via env-based profiles. Set

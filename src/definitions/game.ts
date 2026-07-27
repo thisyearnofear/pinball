@@ -146,6 +146,9 @@ export type KamikazeState = {
     aiReactionMs: number;            // AI check interval
     aiLastCheck: number;             // last AI check timestamp
     aiFlipperReleaseAt: number[];    // per-flipper scheduled release timestamps (simulation time)
+    aiSaveChance: number;            // base probability of a machine emergency save at the drain
+    aiSaveFatigue: number;           // save-chance decay multiplier per consecutive save
+    aiSavesUsed: number;             // emergency saves performed for the current ball (fatigue)
     activePowerUps: ActivePowerUp[]; // currently active effects
     crateCooldownMs: number;         // time between crate respawns
     lastCrateSpawn: number;          // last crate activation timestamp

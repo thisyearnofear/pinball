@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
     startReplayRecording, recordReplayEvent, isReplayRecording,
-    finishReplayRecording, encodeReplay, decodeReplay,
+    finishReplayRecording, encodeReplay, decodeReplay, recordReplayTraceSample,
 } from "@/model/replay-recorder";
 
 describe("replay recorder", () => {
@@ -73,5 +73,38 @@ describe("replay recorder", () => {
         recordReplayEvent(44, "nudge", 10, 20);
         const digest = finishReplayRecording(1234, 80)!;
         expect(decodeReplay(encodeReplay(digest))).toEqual(digest);
+    });
+
+    it("should downsample the position trace to every 4th tick", () => {
+        startReplayRecording({ seed: 5, table: 0, mode: "kamikaze" });
+        for (let tick = 0; tick < 10; tick++) {
+            recordReplayTraceSample(tick, 100.4 + tick, 200.6 + tick);
+        }
+        const digest = finishReplayRecording(9000, 10)!;
+        expect(digest.trace).toEqual([0, 100, 201, 4, 104, 205, 8, 108, 209]);
+    });
+
+    it("should omit the trace field when no samples were recorded", () => {
+        startReplayRecording({ seed: 5, table: 0, mode: "classic" });
+        const digest = finishReplayRecording(100, 1)!;
+        expect("trace" in digest).toBe(false);
+    });
+
+    it("should ignore trace samples when not recording", () => {
+        finishReplayRecording(0, 0);
+        recordReplayTraceSample(0, 1, 2);
+        startReplayRecording({ seed: 5, table: 0, mode: "classic" });
+        const digest = finishReplayRecording(100, 1)!;
+        expect(digest.trace).toBeUndefined();
+    });
+
+    it("should cap trace samples without corrupting triples", () => {
+        startReplayRecording({ seed: 5, table: 0, mode: "classic" });
+        for (let tick = 0; tick < 30000; tick += 4) {
+            recordReplayTraceSample(tick, tick, tick);
+        }
+        const digest = finishReplayRecording(1, 30000)!;
+        expect(digest.trace!.length).toBeLessThanOrEqual(4500 * 3);
+        expect(digest.trace!.length % 3).toBe(0);
     });
 });

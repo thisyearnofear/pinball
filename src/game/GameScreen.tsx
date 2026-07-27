@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { getAppConfig } from "@/config/app-config";
 import type { WalletPort } from "@/domains/wallet/wallet-port";
@@ -30,7 +30,12 @@ import { LeaderboardModal } from "./ui/LeaderboardModal";
 import { TutorialOverlay, hasSeenTutorial, markTutorialSeen } from "./ui/TutorialOverlay";
 import { ScoreSubmissionOverlay, type SubmissionStep } from "./ui/ScoreSubmissionOverlay";
 import { CelebrationOverlay } from "./ui/CelebrationOverlay";
+import { ReplayViewer } from "./ui/ReplayViewer";
 import { PauseMenu } from "./ui/PauseMenu";
+import { InstallPrompt } from "./ui/InstallPrompt";
+import type { ReplayDigest } from "@/model/replay-recorder";
+import { decodeReplay } from "@/model/replay-recorder";
+import { fetchBestReplay } from "@/services/backend-scores-client";
 
 type View = "lobby" | "game" | "paused";
 type ActiveModal = "settings" | "how" | "about" | "leaderboard" | null;
@@ -61,6 +66,9 @@ export default function GameScreen() {
   const [showTutorial, setShowTutorial] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [lastScore, setLastScore] = useState<number>(0);
+  const [lastReplay, setLastReplay] = useState<ReplayDigest | null>(null);
+  const [showReplay, setShowReplay] = useState(false);
+  const [ghost, setGhost] = useState<{ digest: ReplayDigest; score: number; address: string } | null>(null);
   const [submission, setSubmission] = useState<{
     tournamentId: number; score: number; playerName: string; metaData: string; walletPort: WalletPort;
   } | null>(null);
@@ -69,6 +77,45 @@ export default function GameScreen() {
   const [showOnboarding, setShowOnboarding] = useState(() => {
     try { return !localStorage.getItem("pinball_onboarding_seen"); } catch { return true; }
   });
+
+  // Judge demo mode (?demo=1): skip onboarding/tutorial and launch a guided
+  // kamikaze practice run with narrated step toasts.
+  const isDemo = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    try { return new URLSearchParams(window.location.search).get("demo") === "1"; } catch { return false; }
+  }, []);
+  const demoStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (!isDemo || demoStartedRef.current) return;
+    demoStartedRef.current = true;
+    try { localStorage.setItem("pinball_onboarding_seen", "true"); } catch {}
+    setShowOnboarding(false);
+    markTutorialSeen();
+    selectGameMode("kamikaze");
+    const t = window.setTimeout(() => {
+      setMode("practice");
+      setShowCelebration(false);
+      setRunKey((k) => k + 1);
+      setView("game");
+    }, 600);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDemo]);
+
+  useEffect(() => {
+    if (!isDemo || view !== "game") return;
+    const script: Array<[number, string]> = [
+      [1_500, "KAMIKAZE MODE — you want to DRAIN the ball; the machine fights to save it"],
+      [7_000, "Tap anywhere on the table to nudge the ball toward the drain"],
+      [14_000, "Grab munition crates for power-ups — the machine rolls its own countermeasures"],
+      [22_000, "Every run is recorded: replays are verified server-side before a score can be signed"],
+      [30_000, "Drain fast, beat the ghost of the tournament leader, win USDT on Polygon"],
+    ];
+    const timers = script.map(([ms, text]) => window.setTimeout(() => toast.addToast(text, "info"), ms));
+    return () => timers.forEach((t) => window.clearTimeout(t));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDemo, view, runKey]);
 
   const activeWorldId = useMemo(() => {
     if (mode === "tournament" && tournament.worldId) return tournament.worldId;
@@ -129,7 +176,29 @@ export default function GameScreen() {
     return gameMode;
   }, [mode, tournament.tournamentId, gameMode]);
 
-  const pausedEffective = view === "paused" || activeModal !== null || showTutorial || showCelebration || submissionStep !== null;
+  const pausedEffective = view === "paused" || activeModal !== null || showTutorial || showCelebration || showReplay || submissionStep !== null;
+
+  // Ghost racing: fetch the tournament leader's replay for each run. Skip when
+  // the leader's replay is for a different mode or the leader is the player.
+  useEffect(() => {
+    if (view !== "game" || !tournament.tournamentId) return;
+    let cancelled = false;
+    setGhost(null);
+    fetchBestReplay(tournament.tournamentId)
+      .then((best) => {
+        if (cancelled || !best) return;
+        if (address && best.address.toLowerCase() === address.toLowerCase()) return;
+        try {
+          const digest = decodeReplay(best.replay);
+          if (digest.v !== 1 || digest.mode !== effectiveGameMode || !digest.trace?.length) return;
+          setGhost({ digest, score: best.score, address: best.address });
+        } catch {
+          // corrupt replay payload: no ghost
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [view, runKey, tournament.tournamentId, effectiveGameMode, address]);
 
   useEffect(() => {
     const cb = (step: LegacySubmissionStep, errorMessage?: string) => {
@@ -165,6 +234,7 @@ export default function GameScreen() {
           />
 
           <main style={{ padding: spacing.lg }}>
+            {view === "lobby" && <InstallPrompt />}
             {view === "lobby" && (
               <ArcadeLobby
                 tournaments={getAllTournaments()}
@@ -222,8 +292,10 @@ export default function GameScreen() {
                     playerName={playerName}
                     tableIndex={tableIndex}
                     paused={pausedEffective}
+                    ghost={ghost}
                     onActiveChange={setGameActive}
                     onRunEnd={handleRunEnd}
+                    onReplayAvailable={setLastReplay}
                     onSubmissionStep={(step, err) => { setSubmissionStep(step); setSubmissionError(err ?? ""); }}
                     onSubmissionAvailable={setSubmission}
                     onSubmitted={() => refreshTournament()}
@@ -278,8 +350,13 @@ export default function GameScreen() {
               onPlayAgain={() => { setShowCelebration(false); if (mode === "practice") startPractice(); else startTournament(); }}
               onPlayTournament={() => { setShowCelebration(false); startTournament(); }}
               onViewLeaderboard={() => { setShowCelebration(false); setActiveModal("leaderboard"); }}
+              onWatchReplay={lastReplay ? () => setShowReplay(true) : undefined}
               onBackToLobby={() => { setShowCelebration(false); setView("lobby"); }}
             />
+          )}
+
+          {showReplay && lastReplay && (
+            <ReplayViewer replay={lastReplay} onClose={() => setShowReplay(false)} />
           )}
 
           <CelebrationParticles active={showCelebration} />

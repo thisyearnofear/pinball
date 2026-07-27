@@ -14,6 +14,8 @@ const API_BASE = (() => {
 export type ScoreSignatureResponse = {
   signature: string;
   nonce: string; // Nonce is returned as a string from the backend
+  // Anti-cheat: whether the backend verified the uploaded replay for this score.
+  replayVerified?: boolean;
   // Optional differentiator: Sponsored Mission award result
   missionAwarded?: boolean;
   missionTxHash?: string;
@@ -35,6 +37,7 @@ export async function requestScoreSignature(params: {
   return {
     signature: data.signature as string,
     nonce: String(data.nonce),
+    replayVerified: data.replayVerified as boolean | undefined,
     missionAwarded: data.missionAwarded as boolean | undefined,
     missionTxHash: data.missionTxHash as string | undefined,
     missionError: data.missionError as string | undefined,
@@ -56,4 +59,28 @@ export async function uploadReplay(params: {
     headers: { 'Content-Type': 'application/json' },
   });
   return { ok: Boolean(data.ok), hash: data.hash as string | undefined };
+}
+
+export type BestReplay = {
+  score: number;
+  address: string;
+  mode: string;
+  replay: string; // encoded ReplayDigest JSON
+};
+
+/** Fetch the tournament leader's replay for ghost racing. Null when none exists. */
+export async function fetchBestReplay(tournamentId: number): Promise<BestReplay | null> {
+  if (!API_BASE) return null;
+  try {
+    const { data } = await axios.get(`${API_BASE}/api/replays/best/${tournamentId}`);
+    if (!data || typeof data.replay !== 'string') return null;
+    return {
+      score: Number(data.score),
+      address: String(data.address),
+      mode: String(data.mode),
+      replay: data.replay as string,
+    };
+  } catch {
+    return null;
+  }
 }

@@ -12,7 +12,7 @@ import { getRedis } from '../lib/redis-client.js';
  * when available (30-day TTL), otherwise a bounded in-memory map.
  */
 
-const MAX_REPLAY_LENGTH = 100_000; // ~2x the recorder's 50KB cap
+const MAX_REPLAY_LENGTH = 150_000; // events (~50KB) + ghost position trace (~70KB) + headroom
 const REPLAY_TTL_SECONDS = 60 * 60 * 24 * 30;
 const MAX_MEM_REPLAYS = 1_000;
 
@@ -23,6 +23,76 @@ const ReplayBody = z.object({
 });
 
 const memStore = new Map<string, string>();
+
+/** Look up a stored replay by its signed-metadata hash. */
+export async function getStoredReplay(
+  tournamentId: number,
+  address: string,
+  hash: string
+): Promise<string | null> {
+  const key = `replay:${tournamentId}:${address.toLowerCase()}:${hash}`;
+  const redis = getRedis();
+  if (redis) {
+    return (await redis.get(key)) ?? null;
+  }
+  return memStore.get(key) ?? null;
+}
+
+// --- Best replay per tournament (ghost racing) ---
+
+const BEST_TTL_SECONDS = 60 * 60 * 24 * 90;
+
+export type BestReplay = { score: number; address: string; mode: string; replay: string };
+
+const bestMemStore = new Map<number, BestReplay>();
+
+/**
+ * Keep the tournament leader's replay for ghost racing. Direction-aware:
+ * kamikaze scores are drain times, so lower is better.
+ */
+export async function maybeStoreBestReplay(
+  tournamentId: number,
+  address: string,
+  score: number,
+  mode: 'classic' | 'kamikaze',
+  replay: string
+): Promise<boolean> {
+  const improves = (next: number, cur: number) => (mode === 'kamikaze' ? next < cur : next > cur);
+  const entry: BestReplay = { score, address, mode, replay };
+  const redis = getRedis();
+  if (redis) {
+    const key = `replay:best:${tournamentId}`;
+    const existing = await redis.get(key);
+    if (existing) {
+      try {
+        const cur = JSON.parse(existing) as BestReplay;
+        if (!improves(score, cur.score)) return false;
+      } catch {
+        // corrupt entry: overwrite
+      }
+    }
+    await redis.set(key, JSON.stringify(entry), 'EX', BEST_TTL_SECONDS);
+    return true;
+  }
+  const cur = bestMemStore.get(tournamentId);
+  if (cur && !improves(score, cur.score)) return false;
+  bestMemStore.set(tournamentId, entry);
+  return true;
+}
+
+export async function getBestReplay(tournamentId: number): Promise<BestReplay | null> {
+  const redis = getRedis();
+  if (redis) {
+    const raw = await redis.get(`replay:best:${tournamentId}`);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as BestReplay;
+    } catch {
+      return null;
+    }
+  }
+  return bestMemStore.get(tournamentId) ?? null;
+}
 
 export async function replaysRoutes(app: FastifyInstance) {
   app.post('/api/replays', async (req, reply) => {
@@ -63,5 +133,18 @@ export async function replaysRoutes(app: FastifyInstance) {
 
     app.log.info({ event: 'REPLAY_STORED', tournamentId, address, hash, bytes: replay.length });
     return { ok: true, hash };
+  });
+
+  // Leader's replay for ghost racing (public, no auth: replays are not secret)
+  app.get<{ Params: { tournamentId: string } }>('/api/replays/best/:tournamentId', async (req, reply) => {
+    const tid = parseInt(req.params.tournamentId, 10);
+    if (isNaN(tid) || tid <= 0) {
+      return reply.code(400).send({ error: 'INVALID_TOURNAMENT_ID' });
+    }
+    const best = await getBestReplay(tid);
+    if (!best) {
+      return reply.code(404).send({ error: 'NO_BEST_REPLAY' });
+    }
+    return best;
   });
 }

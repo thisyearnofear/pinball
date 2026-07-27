@@ -30,7 +30,9 @@ import Trigger from "@/model/trigger";
 export default class TriggerGroup extends Actor {
     public triggerTarget: TriggerTarget;
     public triggerType: TriggerTypes;
-    public triggers: Trigger[];
+    // assigned in register() during the Actor super() call; `declare` prevents
+    // ES class-field define semantics from resetting it to undefined after super()
+    declare public triggers: Trigger[];
     public completeMessage: GameMessages;
     public completions = 0;
 

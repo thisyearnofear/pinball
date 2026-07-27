@@ -30,6 +30,14 @@ Matter.Common.setDecomp( PolyDecomp );
 // SVG parsing can be expensive, maintain a cache for previously parsed files
 const vertexCache: Map<string, Vector[][]> = new Map();
 
+/**
+ * Pre-seed the vertex cache with externally computed vertices. Used by the
+ * headless simulation harness where browser SVG geometry APIs are unavailable.
+ */
+export const seedVertexCache = ( filePath: string, vertices: Vector[][] ): void => {
+    vertexCache.set( filePath, vertices );
+};
+
 export const loadVertices = async ( filePath: string ): Promise<Vector[][]> => {
     if ( vertexCache.has( filePath )) {
         return vertexCache.get( filePath );

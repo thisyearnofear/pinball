@@ -11,12 +11,15 @@ import type { SubmissionStep } from "./ui/ScoreSubmissionOverlay";
 import { mountWorld, isSplatSupported, prefersReducedMotion, type WorldHandle } from "@/presentation";
 import { MARBLE_WORLDS, getWorldById } from "@/config/worlds";
 import { WorldLoadingOverlay, WorldLoadingIndicator } from "./ui/WorldLoadingOverlay";
+import { CelebrationParticles } from "./ui/CelebrationParticles";
+import { GhostRace } from "./ui/GhostRace";
 import { type WorldReaction } from "@/presentation/world-reactor";
 import { isKamikazeMode, getLastTaunt, getTickCount } from "@/model/game";
 import { createKamikazeState, POWERUP_NAMES, type AIDifficulty } from "@/model/kamikaze";
 import type { PowerUpSide } from "@/definitions/game";
 import { mulberry32, createRunSeed } from "@/utils/rng";
-import { startReplayRecording, finishReplayRecording, encodeReplay } from "@/model/replay-recorder";
+import * as haptics from "@/utils/haptics";
+import { startReplayRecording, finishReplayRecording, encodeReplay, type ReplayDigest } from "@/model/replay-recorder";
 import { uploadReplay } from "@/services/backend-scores-client";
 import { keccak256, toUtf8Bytes } from "ethers";
 
@@ -68,8 +71,11 @@ type Props = {
   tableIndex: number;
   worldId?: string; // Optional world override (for themed tournaments)
   paused: boolean;
+  /** Tournament leader's replay for live ghost racing. */
+  ghost?: { digest: ReplayDigest; score: number; address: string } | null;
   onActiveChange?: (active: boolean) => void;
   onRunEnd?: (score: number) => void;
+  onReplayAvailable?: (replay: ReplayDigest) => void;
   onSubmissionStep?: (step: SubmissionStep, errorMessage?: string) => void;
   onSubmissionAvailable?: (submission: {
     tournamentId: number;
@@ -99,9 +105,44 @@ export default function GameMount(props: Props) {
   const [activePowerUps, setActivePowerUps] = useState<{ name: string; side: PowerUpSide; remainingMs: number }[]>([]);
   const [ripples, setRipples] = useState<{ id: number; x: number; y: number }[]>([]);
   const rippleIdRef = useRef(0);
+  // Victory FX: incrementing id keys the flash/shake/punch animations; confetti auto-clears.
+  const [victoryFx, setVictoryFx] = useState(0);
+  const [victoryConfetti, setVictoryConfetti] = useState(false);
+  const [victoryTimeText, setVictoryTimeText] = useState<string | null>(null);
+  const victoryClearRef = useRef(0);
+  // Shake is applied imperatively: re-keying the wrapper would remount (and kill) the canvas.
+  const shakeRef = useRef<HTMLDivElement | null>(null);
+
+  function fireVictoryFx() {
+    const g = gameRef.current;
+    setVictoryFx((v) => v + 1);
+    setVictoryConfetti(true);
+    setVictoryTimeText(g ? `${(g.score / 1000).toFixed(1)}s` : null);
+    const shakeEl = shakeRef.current;
+    if (shakeEl) {
+      shakeEl.style.animation = "none";
+      void shakeEl.offsetWidth; // restart the CSS animation
+      shakeEl.style.animation = "victoryShake 0.5s ease-out";
+    }
+    window.clearTimeout(victoryClearRef.current);
+    victoryClearRef.current = window.setTimeout(() => {
+      setVictoryConfetti(false);
+      setVictoryTimeText(null);
+    }, 2200);
+
+    const world = worldHandleRef.current;
+    world?.triggerImpact(1.0);
+    world?.duckAmbience(800);
+    world?.pauseBallTracking(true);
+    world?.flyToPreset("drain", {
+      duration: 500,
+      onComplete: () => world?.pauseBallTracking(false),
+    });
+  }
 
   function spawnRipple(e: React.MouseEvent<HTMLDivElement>) {
     if (!isKamikazeMode()) return;
+    haptics.nudge();
     const rect = e.currentTarget.getBoundingClientRect();
     const id = ++rippleIdRef.current;
     setRipples((prev) => [...prev.slice(-4), { id, x: e.clientX - rect.left, y: e.clientY - rect.top }]);
@@ -183,9 +224,13 @@ export default function GameMount(props: Props) {
           setMessage(String(msg));
 
           // Kamikaze Ball messages
+          if (msg === GameMessages.DRAINED) {
+            // The winning drain: full victory spectacle (the AI_TAUNT banner follows)
+            fireVictoryFx();
+            return;
+          }
           const kamikazeMessages: Record<number, string> = {
             [GameMessages.KAMIKAZE_START]: "KAMIKAZE BALL — DRAIN IT!",
-            [GameMessages.DRAINED]: "REKT! The machine is disappointed.",
             [GameMessages.SAVED]: "SAVED! The machine won't let you lose.",
             [GameMessages.POWERUP_ROULETTE]: "MUNITIONS CRATE! Rolling…",
             [GameMessages.POWERUP_PLAYER]: "MUNITION ACTIVATED!",
@@ -207,6 +252,16 @@ export default function GameMount(props: Props) {
       });
 
       gameRef.current = initialGame;
+
+      // The runKey effect can't record the first run (it bails while the mount
+      // is still in flight), so start recording for the initial game here.
+      startReplayRecording({
+        seed: initialGame.rngSeed!,
+        table: initialGame.table,
+        mode: props.gameMode,
+        aiDifficulty: props.gameMode === "kamikaze" ? props.aiDifficulty ?? "medium" : undefined,
+      });
+      runStartRef.current = performance.now();
 
       // Enable ball-following camera when world is loaded
       worldHandleRef.current?.setBallTracking(true);
@@ -337,12 +392,11 @@ export default function GameMount(props: Props) {
 
       // Ball drain detection - fly camera on ball loss
       if (prevBallsRef.current > g.balls && g.balls > 0) {
-        // Kamikaze: draining is a WIN — celebrate with a world flash
-        if (g.kamikaze?.enabled) {
-          worldHandleRef.current?.triggerImpact(0.9);
-        }
+        // Kamikaze: the drain fly already happened at the DRAINED message; a new
+        // ball is spawning now, so fly to the plunger instead.
+        const preset = g.kamikaze?.enabled ? 'plunger' : 'drain';
         worldHandleRef.current?.pauseBallTracking(true);
-        worldHandleRef.current?.flyToPreset('drain', { duration: 600, onComplete: () => {
+        worldHandleRef.current?.flyToPreset(preset, { duration: 600, onComplete: () => {
           worldHandleRef.current?.pauseBallTracking(false);
         }});
       }
@@ -365,6 +419,7 @@ export default function GameMount(props: Props) {
 
       if (wasActive && !isActive && g.score > 0) {
         const replay = finishReplayRecording(g.score, getTickCount());
+        if (replay) props.onReplayAvailable?.(replay);
         const replayJson = replay ? encodeReplay(replay) : null;
         const replayHash = replayJson ? keccak256(toUtf8Bytes(replayJson)) : undefined;
         const duration = Math.min(
@@ -391,12 +446,8 @@ export default function GameMount(props: Props) {
           ...(props.gameMode === "kamikaze" ? { aiDifficulty: props.aiDifficulty ?? "medium" } : {}),
         });
 
-        // Ship the full replay to the backend (fire-and-forget); its hash is
-        // bound into the signed metadata for later verification.
-        if (replayJson) {
-          uploadReplay({ tournamentId, address, replay: replayJson }).catch(() => {});
-        }
-
+        // Ship the full replay to the backend BEFORE requesting the signature:
+        // the backend looks the replay up by its hash to verify it pre-signing.
         try {
           props.onStatus?.("Submitting score…");
           props.onSubmissionStep?.("validating");
@@ -405,6 +456,11 @@ export default function GameMount(props: Props) {
           if (!p.entered) {
             props.onSubmissionStep?.("error", "You are not entered in the active tournament.");
             return;
+          }
+
+          if (replayJson) {
+            props.onSubmissionStep?.("verifying");
+            await uploadReplay({ tournamentId, address, replay: replayJson }).catch(() => {});
           }
 
           const name = (props.playerName || "").trim();
@@ -459,8 +515,90 @@ export default function GameMount(props: Props) {
       {message ? (
         <div style={{ fontSize: 12, opacity: 0.9, marginBottom: 8 }}>Event: {message}</div>
       ) : null}
-      <div style={{ position: "relative" }} onClick={spawnRipple}>
-        <style>{`@keyframes kamikazeRipple { from { transform: translate(-50%, -50%) scale(0.3); opacity: 0.8; } to { transform: translate(-50%, -50%) scale(2); opacity: 0; } }`}</style>
+      <div
+        ref={shakeRef}
+        style={{ position: "relative" }}
+        onClick={spawnRipple}
+      >
+        <style>{`
+          @keyframes kamikazeRipple { from { transform: translate(-50%, -50%) scale(0.3); opacity: 0.8; } to { transform: translate(-50%, -50%) scale(2); opacity: 0; } }
+          @keyframes victoryShake {
+            0%, 100% { transform: translate(0, 0); }
+            10% { transform: translate(-8px, 4px); }
+            20% { transform: translate(9px, -3px); }
+            30% { transform: translate(-7px, -5px); }
+            40% { transform: translate(6px, 4px); }
+            50% { transform: translate(-5px, 3px); }
+            60% { transform: translate(4px, -3px); }
+            70% { transform: translate(-3px, 2px); }
+            80% { transform: translate(2px, -1px); }
+            90% { transform: translate(-1px, 1px); }
+          }
+          @keyframes victoryFlash {
+            0% { opacity: 0.9; }
+            100% { opacity: 0; }
+          }
+          @keyframes victoryPunch {
+            0% { transform: translate(-50%, -50%) scale(0.2); opacity: 0; }
+            30% { transform: translate(-50%, -50%) scale(1.25); opacity: 1; }
+            45% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+            80% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(1.1); opacity: 0; }
+          }
+        `}</style>
+        {victoryFx > 0 && victoryTimeText && (
+          <>
+            <div
+              key={`flash-${victoryFx}`}
+              style={{
+                position: "absolute",
+                inset: 0,
+                background:
+                  "radial-gradient(circle at 50% 80%, rgba(255,255,255,0.95) 0%, rgba(255,68,68,0.5) 40%, transparent 75%)",
+                pointerEvents: "none",
+                zIndex: 11,
+                animation: "victoryFlash 0.7s ease-out forwards",
+                borderRadius: 8,
+              }}
+            />
+            <div
+              key={`punch-${victoryFx}`}
+              style={{
+                position: "absolute",
+                top: "55%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+                pointerEvents: "none",
+                zIndex: 12,
+                textAlign: "center",
+                animation: "victoryPunch 2s ease-out forwards",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 52,
+                  fontWeight: 900,
+                  letterSpacing: 4,
+                  color: "#fff",
+                  textShadow: "0 0 24px rgba(255,68,68,0.9), 0 0 60px rgba(255,68,68,0.6)",
+                }}
+              >
+                DRAINED!
+              </div>
+              <div
+                style={{
+                  fontSize: 26,
+                  fontWeight: 800,
+                  color: "#22c55e",
+                  textShadow: "0 0 16px rgba(34,197,94,0.8)",
+                }}
+              >
+                {victoryTimeText}
+              </div>
+            </div>
+          </>
+        )}
+        <CelebrationParticles active={victoryConfetti} />
         {ripples.map((r) => (
           <div
             key={r.id}
@@ -616,6 +754,13 @@ export default function GameMount(props: Props) {
         )}
 
         {/* Kamikaze Ball message overlay (taunts, power-ups) */}
+        {props.ghost && (
+          <GhostRace
+            replay={props.ghost.digest}
+            leaderScore={props.ghost.score}
+            leaderAddress={props.ghost.address}
+          />
+        )}
         {kamikazeMessage && (
           <div
             style={{

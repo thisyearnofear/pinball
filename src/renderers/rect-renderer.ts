@@ -39,7 +39,8 @@ export default class RectRenderer extends Sprite {
         // when unsupported, remove radius from Actor (should only have a minor effect, radius is cosmetic for Rects)
 
         const parser = Bowser.getParser( window.navigator.userAgent );
-        const majorVersion = parser.getBrowserVersion().split(".").map( parseInt )[ 0 ];
+        const version = parser.getBrowserVersion();
+        const majorVersion = version ? parseInt( version.split( "." )[ 0 ], 10 ) : Infinity;
         actor.radius = ( parser.getBrowserName() === "safari" && majorVersion < 16 ) ? 0 : actor.radius;
     }
 

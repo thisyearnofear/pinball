@@ -28,6 +28,8 @@ const EnvSchema = z.object({
   MISSION_INVERTED: z.coerce.boolean().default(false),
   // Optional: require multiball flag in metadata to award mission (enables "Jackpot Multiball").
   MISSION_REQUIRE_MULTIBALL: z.coerce.boolean().default(false),
+  // Replay verification: strict = reject failing submissions, warn = log only, off = skip.
+  REPLAY_VERIFICATION: z.enum(['strict', 'warn', 'off']).default('warn'),
   // Optional Redis URL. When set, rate limiter and nonce tracker use Redis.
   // Falls back to in-memory stores when unset (fine for local dev).
   REDIS_URL: z.string().optional(),

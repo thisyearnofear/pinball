@@ -26,6 +26,7 @@ import { getFromStorage, setInStorage } from "@/utils/local-storage";
 
 let inited  = false;
 let playing = false;
+let suppressed = false;
 let fxMuted = getFromStorage( STORED_MUTED_FX_SETTING ) === "true";
 let musicMuted = getFromStorage( STORED_MUTED_MUSIC_SETTING ) === "true";
 let queuedTrackId: string | null = null;
@@ -36,6 +37,7 @@ let audioContext: AudioContext;
 let filter: BiquadFilterNode;
 let effectsBus: BiquadFilterNode;
 let masterBus: AudioNode;
+let masterGain: GainNode;
 let sound: HTMLMediaElement | undefined;
 let acSound: MediaElementAudioSourceNode | undefined;
 
@@ -52,12 +54,21 @@ const SOUND_EFFECTS = [
     { key: GameSounds.FLIPPER,   file: "sfx_flipper.mp3" },
     { key: GameSounds.POPPER,    file: "sfx_popper.mp3" },
     { key: GameSounds.TRIGGER,   file: "sfx_trigger.mp3" },
-    // Kamikaze Ball sounds (reuse base samples; the effects bus randomizes pitch per play)
+    // Kamikaze Ball sounds (reuse base samples; per-effect character below)
     { key: GameSounds.POWERUP_ROULETTE, file: "sfx_trigger.mp3" },
     { key: GameSounds.POWERUP_ACTIVATE, file: "sfx_event.mp3" },
     { key: GameSounds.DRAIN_VICTORY,    file: "sfx_popper.mp3" },
     { key: GameSounds.AI_SAVE,          file: "sfx_flipper.mp3" },
 ];
+
+// Distinct sonic identity for kamikaze events: fixed detune/rate (small jitter)
+// instead of the fully random pitch used for generic table sounds.
+const FX_CHARACTER = new Map<GameSounds, { detune: number; rate: number }>([
+    [ GameSounds.POWERUP_ROULETTE, { detune: 700,  rate: 1.35 }],
+    [ GameSounds.POWERUP_ACTIVATE, { detune: 450,  rate: 1.15 }],
+    [ GameSounds.DRAIN_VICTORY,    { detune: -500, rate: 0.8 }],
+    [ GameSounds.AI_SAVE,          { detune: -900, rate: 0.65 }],
+]);
 
 const soundEffects: Map<GameSounds, HTMLMediaElement> = new Map();
 
@@ -82,8 +93,19 @@ export const init = (): void => {
     }
 };
 
+/**
+ * Attract/demo mode: silence everything without touching the user's
+ * persisted mute settings.
+ */
+export const setAudioSuppressed = ( value: boolean ): void => {
+    suppressed = value;
+    if ( suppressed && playing ) {
+        stop();
+    }
+};
+
 export const playSoundEffect = ( effect: GameSounds ): void => {
-    if ( !inited || fxMuted ) {
+    if ( !inited || fxMuted || suppressed ) {
         return;
     }
 
@@ -93,15 +115,30 @@ export const playSoundEffect = ( effect: GameSounds ): void => {
 
     const soundEffect = soundEffects.get( effect );
     if ( soundEffect ) {
-        _playSoundFX( soundEffect );
+        _playSoundFX( soundEffect, effect );
     }
+};
+
+/**
+ * Briefly dip the music/FX volume so a key moment (drain, AI save) punches
+ * through the mix, then ramp back to full.
+ */
+export const duckMusic = ( durationMs = 700, level = 0.25 ): void => {
+    if ( !audioContext || !masterGain ) {
+        return;
+    }
+    const now = audioContext.currentTime;
+    masterGain.gain.cancelScheduledValues( now );
+    masterGain.gain.setValueAtTime( masterGain.gain.value, now );
+    masterGain.gain.linearRampToValueAtTime( level, now + 0.05 );
+    masterGain.gain.linearRampToValueAtTime( 1, now + Math.max( 0.1, durationMs / 1000 ));
 };
 
 /**
  * enqueue a track from the available pool for playing
  */
 export const enqueueTrack = async( trackId: string ): Promise<void> => {
-    if ( !inited || musicMuted ) {
+    if ( !inited || musicMuted || suppressed ) {
         queuedTrackId = trackId;
         return;
     }
@@ -208,15 +245,22 @@ function createAudioElement( source: string, loop = false, bus?: AudioNode ): HT
     return element;
 }
 
-function _playSoundFX( audioElement: HTMLMediaElement ): void {
+function _playSoundFX( audioElement: HTMLMediaElement, effect?: GameSounds ): void {
     if ( audioElement.currentTime > 0 && !audioElement.ended ) {
         return;
     }
     audioElement.currentTime = 0;
-    // randomize pitch to prevent BOREDOM
+    const character = effect !== undefined ? FX_CHARACTER.get( effect ) : undefined;
     if ( effectsBus ) {
-        effectsBus.detune.value = -1200 + ( Math.random() * 2400 ); // in -1200 to +1200 range
+        if ( character ) {
+            // fixed identity + slight jitter so repeats don't sound robotic
+            effectsBus.detune.value = character.detune - 100 + ( Math.random() * 200 );
+        } else {
+            // randomize pitch to prevent BOREDOM
+            effectsBus.detune.value = -1200 + ( Math.random() * 2400 ); // in -1200 to +1200 range
+        }
     }
+    audioElement.playbackRate = character?.rate ?? 1;
     if ( !audioElement.paused || audioElement.currentTime ) {
         audioElement.currentTime = 0; // audio was paused/stopped
     } else {
@@ -230,7 +274,8 @@ function setupWebAudioAPI(): void {
     if ( typeof acConstructor !== "undefined" ) {
         audioContext = new acConstructor();
         // a "channel strip" to connect all audio nodes to
-        masterBus = audioContext.createGain();
+        masterGain = audioContext.createGain();
+        masterBus = masterGain;
         // a bus for all sound effects (biquad filter allows detuning)
         effectsBus = audioContext.createBiquadFilter();
         effectsBus.connect( masterBus );

@@ -32,11 +32,18 @@ export type ReplayDigest = {
     finalScore: number;
     truncated: boolean;
     events: ReplayEvent[];
+    /** Flat [tick, x, y, ...] ball position samples for ghost playback. */
+    trace?: number[];
 };
 
 // ~50KB cap: events are ~20 bytes serialized; hard stop instead of dropping
 // oldest (a replay with a hole at the start is useless for verification).
 const MAX_EVENTS = 2500;
+
+// Position samples every 4 engine ticks (~15Hz) — smooth enough for ghost
+// playback with interpolation; ~10 bytes/sample keeps 5-minute runs < 50KB.
+const TRACE_INTERVAL_TICKS = 4;
+const MAX_TRACE_SAMPLES = 4500;
 
 let recording = false;
 let truncated = false;
@@ -45,6 +52,8 @@ let table = 0;
 let mode: "classic" | "kamikaze" = "classic";
 let aiDifficulty: string | undefined;
 let events: ReplayEvent[] = [];
+let trace: number[] = [];
+let lastTraceTick = -Infinity;
 
 export function startReplayRecording(opts: {
     seed: number;
@@ -59,6 +68,8 @@ export function startReplayRecording(opts: {
     mode = opts.mode;
     aiDifficulty = opts.aiDifficulty;
     events = [];
+    trace = [];
+    lastTraceTick = -Infinity;
 }
 
 export function recordReplayEvent(tick: number, e: ReplayEventType, x?: number, y?: number): void {
@@ -78,6 +89,18 @@ export function isReplayRecording(): boolean {
 }
 
 /**
+ * Sample the main ball position for ghost playback. Call every engine tick;
+ * the recorder downsamples internally.
+ */
+export function recordReplayTraceSample(tick: number, x: number, y: number): void {
+    if (!recording) return;
+    if (tick - lastTraceTick < TRACE_INTERVAL_TICKS) return;
+    if (trace.length >= MAX_TRACE_SAMPLES * 3) return;
+    lastTraceTick = tick;
+    trace.push(tick, Math.round(x), Math.round(y));
+}
+
+/**
  * Finish the recording and return the digest. Returns null when nothing
  * was being recorded (e.g. practice run started before recording existed).
  */
@@ -94,6 +117,7 @@ export function finishReplayRecording(finalScore: number, tickCount: number): Re
         finalScore,
         truncated,
         events,
+        ...(trace.length ? { trace } : {}),
     };
 }
 
