@@ -2,11 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "./Modal";
 import { Button } from "./index";
 import type { ReplayDigest, ReplayEvent } from "@/model/replay-recorder";
+import { TICK_MS, parseTrace, positionAt, traceViewHeight } from "@/model/replay-trace";
 import tables from "@/definitions/tables";
 import { formatGameScore } from "@/utils/score-format";
 import { colors, spacing, typography } from "@/theme/tokens";
 
-const TICK_MS = 1000 / 60;
 const TRAIL_MS = 550;
 const EVENT_FX_MS = 450;
 
@@ -14,36 +14,6 @@ type Props = {
   replay: ReplayDigest;
   onClose: () => void;
 };
-
-type TraceSample = { t: number; x: number; y: number };
-
-function parseTrace(trace: number[] | undefined): TraceSample[] {
-  if (!trace || trace.length < 3) return [];
-  const out: TraceSample[] = [];
-  for (let i = 0; i + 2 < trace.length; i += 3) {
-    out.push({ t: trace[i], x: trace[i + 1], y: trace[i + 2] });
-  }
-  return out;
-}
-
-function positionAt(samples: TraceSample[], tick: number): { x: number; y: number } | null {
-  if (samples.length === 0) return null;
-  if (tick <= samples[0].t) return samples[0];
-  const last = samples[samples.length - 1];
-  if (tick >= last.t) return last;
-
-  // binary search for the surrounding pair
-  let lo = 0;
-  let hi = samples.length - 1;
-  while (lo + 1 < hi) {
-    const mid = (lo + hi) >> 1;
-    if (samples[mid].t <= tick) lo = mid; else hi = mid;
-  }
-  const a = samples[lo];
-  const b = samples[hi];
-  const f = b.t === a.t ? 0 : (tick - a.t) / (b.t - a.t);
-  return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
-}
 
 export function ReplayViewer({ replay, onClose }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -61,11 +31,7 @@ export function ReplayViewer({ replay, onClose }: Props) {
   const totalMs = Math.max(1, replay.tickCount * TICK_MS);
 
   // Visible playfield: main table unless the trace dips into the underworld.
-  const viewHeight = useMemo(() => {
-    const uw = table.underworld ?? table.height;
-    const maxY = samples.reduce((m, s) => Math.max(m, s.y), 0);
-    return maxY > uw ? table.height : uw;
-  }, [table, samples]);
+  const viewHeight = useMemo(() => traceViewHeight(table, samples), [table, samples]);
 
   const drainEvents = useMemo(
     () => replay.events.filter((e) => e.e === "drain"),
@@ -90,10 +56,25 @@ export function ReplayViewer({ replay, onClose }: Props) {
     canvas.style.height = `${cssH}px`;
 
     const scale = (cssW * dpr) / table.width;
-    const accentDrain = kamikaze ? "#22c55e" : "#ff4444";
+
+    // static per-effect resources — no need to rebuild every frame
+    const bgGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    bgGrad.addColorStop(0, "#0d0d1f");
+    bgGrad.addColorStop(1, "#1a0a2e");
+    const drainY = viewHeight * scale - 2 * dpr;
+    const dGrad = ctx.createLinearGradient(0, drainY - 24 * dpr, 0, drainY);
+    dGrad.addColorStop(0, "transparent");
+    dGrad.addColorStop(1, kamikaze ? "rgba(34,197,94,0.45)" : "rgba(255,68,68,0.35)");
 
     let raf = 0;
     let lastFrame = performance.now();
+    let lastPaintedMs = -1;
+    let lastSliderMs = -1;
+
+    // incremental flipper-state cursor over the sorted event stream
+    let eventCursor = 0;
+    let leftHeld = false;
+    let rightHeld = false;
 
     function drawFlipper(fx: number, fy: number, angleDeg: number, isLeft: boolean, lit: boolean) {
       ctx!.save();
@@ -117,20 +98,32 @@ export function ReplayViewer({ replay, onClose }: Props) {
 
       if (playingRef.current) {
         playheadRef.current = Math.min(totalMs, playheadRef.current + dt * speedRef.current);
-        if (playheadRef.current >= totalMs) playingRef.current = false;
-        setTimeMs(playheadRef.current);
-        setPlaying(playingRef.current);
+        if (playheadRef.current >= totalMs) {
+          playingRef.current = false;
+          setPlaying(false);
+        }
       }
 
       const t = playheadRef.current;
+
+      // skip repaint entirely when the playhead hasn't moved (paused / finished)
+      if (t === lastPaintedMs) {
+        raf = requestAnimationFrame(render);
+        return;
+      }
+      lastPaintedMs = t;
+
+      // throttle the React slider update to ~10Hz (plus final frame)
+      if (Math.abs(t - lastSliderMs) > 100 || t >= totalMs || t === 0) {
+        lastSliderMs = t;
+        setTimeMs(t);
+      }
+
       const tick = t / TICK_MS;
 
       // background
       ctx!.clearRect(0, 0, canvas!.width, canvas!.height);
-      const grad = ctx!.createLinearGradient(0, 0, 0, canvas!.height);
-      grad.addColorStop(0, "#0d0d1f");
-      grad.addColorStop(1, "#1a0a2e");
-      ctx!.fillStyle = grad;
+      ctx!.fillStyle = bgGrad;
       ctx!.fillRect(0, 0, canvas!.width, canvas!.height);
 
       // bumpers (only those inside the visible view)
@@ -147,10 +140,14 @@ export function ReplayViewer({ replay, onClose }: Props) {
       }
 
       // flippers — lit while held (between +/- events on that side)
-      let leftHeld = false;
-      let rightHeld = false;
-      for (const e of replay.events) {
-        if (e.t > tick) break;
+      if (eventCursor > 0 && replay.events[eventCursor - 1].t > tick) {
+        // seeked backwards: rewind the cursor
+        eventCursor = 0;
+        leftHeld = false;
+        rightHeld = false;
+      }
+      while (eventCursor < replay.events.length && replay.events[eventCursor].t <= tick) {
+        const e = replay.events[eventCursor++];
         if (e.e === "L+") leftHeld = true;
         else if (e.e === "L-") leftHeld = false;
         else if (e.e === "R+") rightHeld = true;
@@ -163,10 +160,6 @@ export function ReplayViewer({ replay, onClose }: Props) {
       }
 
       // drain zone
-      const drainY = viewHeight * scale - 2 * dpr;
-      const dGrad = ctx!.createLinearGradient(0, drainY - 24 * dpr, 0, drainY);
-      dGrad.addColorStop(0, "transparent");
-      dGrad.addColorStop(1, kamikaze ? "rgba(34,197,94,0.45)" : "rgba(255,68,68,0.35)");
       ctx!.fillStyle = dGrad;
       ctx!.fillRect(0, drainY - 24 * dpr, canvas!.width, 24 * dpr);
 
@@ -200,11 +193,12 @@ export function ReplayViewer({ replay, onClose }: Props) {
         ctx!.shadowBlur = 0;
       }
 
-      // recent event FX (nudges + drains)
+      // recent event FX (nudges + drains); events are sorted by tick
       for (const e of replay.events) {
         const eMs = e.t * TICK_MS;
         const age = t - eMs;
-        if (age < 0 || age > EVENT_FX_MS) continue;
+        if (age < 0) break;
+        if (age > EVENT_FX_MS) continue;
         const f = age / EVENT_FX_MS;
         if (e.e === "nudge" && e.x !== undefined && e.y !== undefined) {
           ctx!.beginPath();
@@ -236,7 +230,7 @@ export function ReplayViewer({ replay, onClose }: Props) {
     setTimeMs(playheadRef.current);
   }
 
-  const fmt = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
+  const fmt = (ms: number) => formatGameScore(ms, true);
 
   return (
     <Modal title="Replay" onClose={onClose}>

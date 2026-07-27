@@ -19,9 +19,44 @@ import { createKamikazeState, POWERUP_NAMES, type AIDifficulty } from "@/model/k
 import type { PowerUpSide } from "@/definitions/game";
 import { mulberry32, createRunSeed } from "@/utils/rng";
 import * as haptics from "@/utils/haptics";
+import { formatGameScore } from "@/utils/score-format";
 import { startReplayRecording, finishReplayRecording, encodeReplay, type ReplayDigest } from "@/model/replay-recorder";
 import { uploadReplay } from "@/services/backend-scores-client";
 import { keccak256, toUtf8Bytes } from "ethers";
+
+type GameMode = "classic" | "kamikaze";
+
+function createRunGame(opts: {
+  id: string;
+  table: number;
+  paused: boolean;
+  gameMode: GameMode;
+  aiDifficulty?: AIDifficulty;
+}): GameDef {
+  const rngSeed = createRunSeed();
+  return {
+    id: opts.id,
+    active: false,
+    paused: opts.paused,
+    table: opts.table,
+    score: 0,
+    balls: BALLS_PER_GAME,
+    multiplier: 1,
+    underworld: false,
+    kamikaze: opts.gameMode === "kamikaze" ? createKamikazeState(opts.aiDifficulty) : undefined,
+    rngSeed,
+    rng: mulberry32(rngSeed),
+  };
+}
+
+function beginRunRecording(g: GameDef, gameMode: GameMode, aiDifficulty?: AIDifficulty): void {
+  startReplayRecording({
+    seed: g.rngSeed!,
+    table: g.table,
+    mode: gameMode,
+    aiDifficulty: gameMode === "kamikaze" ? aiDifficulty ?? "medium" : undefined,
+  });
+}
 
 function applyWorldReaction(reaction: WorldReaction): void {
   const { type, intensity, data } = reaction;
@@ -117,7 +152,7 @@ export default function GameMount(props: Props) {
     const g = gameRef.current;
     setVictoryFx((v) => v + 1);
     setVictoryConfetti(true);
-    setVictoryTimeText(g ? `${(g.score / 1000).toFixed(1)}s` : null);
+    setVictoryTimeText(g ? formatGameScore(g.score, true) : null);
     const shakeEl = shakeRef.current;
     if (shakeEl) {
       shakeEl.style.animation = "none";
@@ -162,22 +197,7 @@ export default function GameMount(props: Props) {
   const worldContainerStyleRef = useRef<HTMLDivElement | null>(null);
 
   const initialGame = useMemo<GameDef>(
-    () => {
-      const rngSeed = createRunSeed();
-      return {
-        id: "practice",
-        active: false,
-        paused: false,
-        table: START_TABLE_INDEX,
-        score: 0,
-        balls: BALLS_PER_GAME,
-        multiplier: 1,
-        underworld: false,
-        kamikaze: props.gameMode === "kamikaze" ? createKamikazeState(props.aiDifficulty) : undefined,
-        rngSeed,
-        rng: mulberry32(rngSeed),
-      };
-    },
+    () => createRunGame({ id: "practice", table: START_TABLE_INDEX, paused: false, gameMode: props.gameMode, aiDifficulty: props.aiDifficulty }),
     [props.gameMode, props.aiDifficulty],
   );
 
@@ -255,12 +275,7 @@ export default function GameMount(props: Props) {
 
       // The runKey effect can't record the first run (it bails while the mount
       // is still in flight), so start recording for the initial game here.
-      startReplayRecording({
-        seed: initialGame.rngSeed!,
-        table: initialGame.table,
-        mode: props.gameMode,
-        aiDifficulty: props.gameMode === "kamikaze" ? props.aiDifficulty ?? "medium" : undefined,
-      });
+      beginRunRecording(initialGame, props.gameMode, props.aiDifficulty);
       runStartRef.current = performance.now();
 
       // Enable ball-following camera when world is loaded
@@ -285,27 +300,15 @@ export default function GameMount(props: Props) {
   useEffect(() => {
     if (!mountedRef.current) return;
 
-    const rngSeed = createRunSeed();
-    const g: GameDef = {
+    const g = createRunGame({
       id: props.mode === "tournament" && props.tournamentId ? String(props.tournamentId) : "practice",
-      active: false,
+      table: props.tableIndex,
       paused: props.paused,
-      table: props.tableIndex,
-      score: 0,
-      balls: BALLS_PER_GAME,
-      multiplier: 1,
-      underworld: false,
-      kamikaze: props.gameMode === "kamikaze" ? createKamikazeState(props.aiDifficulty) : undefined,
-      rngSeed,
-      rng: mulberry32(rngSeed),
-    };
-
-    startReplayRecording({
-      seed: rngSeed,
-      table: props.tableIndex,
-      mode: props.gameMode,
-      aiDifficulty: props.gameMode === "kamikaze" ? props.aiDifficulty ?? "medium" : undefined,
+      gameMode: props.gameMode,
+      aiDifficulty: props.aiDifficulty,
     });
+
+    beginRunRecording(g, props.gameMode, props.aiDifficulty);
     runStartRef.current = performance.now();
 
     multiballRef.current = false;
@@ -346,21 +349,23 @@ export default function GameMount(props: Props) {
         props.onActiveChange?.(isActive);
       }
 
-      setHud({
-        score: g.score,
-        balls: g.balls,
-        multiplier: g.multiplier,
-      });
+      // Bail-out compares: this runs at 60fps, only re-render when values change.
+      setHud((prev) =>
+        prev.score === g.score && prev.balls === g.balls && prev.multiplier === g.multiplier
+          ? prev
+          : { score: g.score, balls: g.balls, multiplier: g.multiplier },
+      );
       setKamikazeActive(isKamikazeMode());
 
       // Kamikaze power-up HUD: active effects per side with countdown
       if (g.kamikaze?.enabled) {
         const now = performance.now();
-        setActivePowerUps(
-          g.kamikaze.activePowerUps
+        setActivePowerUps((prev) => {
+          const next = g.kamikaze!.activePowerUps
             .filter((p) => p.expiresAt > now)
-            .map((p) => ({ name: POWERUP_NAMES[p.type], side: p.side, remainingMs: p.expiresAt - now })),
-        );
+            .map((p) => ({ name: POWERUP_NAMES[p.type], side: p.side, remainingMs: p.expiresAt - now }));
+          return prev.length === 0 && next.length === 0 ? prev : next;
+        });
       }
 
       // Update world reactor with game state.
@@ -451,16 +456,19 @@ export default function GameMount(props: Props) {
         try {
           props.onStatus?.("Submitting score…");
           props.onSubmissionStep?.("validating");
+          if (replayJson) props.onSubmissionStep?.("verifying");
 
-          const p = await getPlayerInfo(tournamentId, address);
+          const [p] = await Promise.all([
+            getPlayerInfo(tournamentId, address),
+            replayJson
+              ? uploadReplay({ tournamentId, address, replay: replayJson }).catch((e) =>
+                  console.warn("Replay upload failed:", e),
+                )
+              : Promise.resolve(),
+          ]);
           if (!p.entered) {
             props.onSubmissionStep?.("error", "You are not entered in the active tournament.");
             return;
-          }
-
-          if (replayJson) {
-            props.onSubmissionStep?.("verifying");
-            await uploadReplay({ tournamentId, address, replay: replayJson }).catch(() => {});
           }
 
           const name = (props.playerName || "").trim();
@@ -688,7 +696,7 @@ export default function GameMount(props: Props) {
           {kamikazeActive ? (
             <>
               <div style={{ color: "#ff4444", fontWeight: "bold" }}>KAMIKAZE BALL</div>
-              <div>Time: {(hud.score / 1000).toFixed(1)}s</div>
+              <div>Time: {formatGameScore(hud.score, true)}</div>
               <div>Balls: {hud.balls}</div>
               <div style={{ fontSize: 10, opacity: 0.7 }}>Tap to nudge toward drain</div>
             </>

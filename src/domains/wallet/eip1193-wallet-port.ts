@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { switchOrAddChain } from "./switch-chain";
 import type { WalletPort } from "./wallet-port";
 
 export class Eip1193WalletPort implements WalletPort {
@@ -25,12 +26,9 @@ export class Eip1193WalletPort implements WalletPort {
   }
 
   async switchChain(chainId: number): Promise<void> {
-    // EIP-1193 chain switch request (works for most wallets if enabled).
-    const hex = "0x" + chainId.toString(16);
-    await this.provider.request({
-      method: "wallet_switchEthereumChain",
-      params: [{ chainId: hex }],
-    });
+    await switchOrAddChain(this.provider, chainId);
+    // ethers BrowserProvider caches the detected network; recreate after a switch
+    this.ethersProvider = new ethers.BrowserProvider(this.provider);
   }
 }
 

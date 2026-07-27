@@ -36,7 +36,6 @@ let scheduledFrequency = 0;
 let audioContext: AudioContext;
 let filter: BiquadFilterNode;
 let effectsBus: BiquadFilterNode;
-let masterBus: AudioNode;
 let masterGain: GainNode;
 let sound: HTMLMediaElement | undefined;
 let acSound: MediaElementAudioSourceNode | undefined;
@@ -153,7 +152,7 @@ export const enqueueTrack = async( trackId: string ): Promise<void> => {
     stop();
 
     // Local-only music
-    sound = createAudioElement( `${SOUND_FX_PATH}music_${trackId}.mp3`, true, masterBus );
+    sound = createAudioElement( `${SOUND_FX_PATH}music_${trackId}.mp3`, true, masterGain );
     _startPlayingEnqueuedTrack( trackId );
 };
 
@@ -275,14 +274,13 @@ function setupWebAudioAPI(): void {
         audioContext = new acConstructor();
         // a "channel strip" to connect all audio nodes to
         masterGain = audioContext.createGain();
-        masterBus = masterGain;
         // a bus for all sound effects (biquad filter allows detuning)
         effectsBus = audioContext.createBiquadFilter();
-        effectsBus.connect( masterBus );
+        effectsBus.connect( masterGain );
         // a low-pass filter to apply onto the master bus
         filter = audioContext.createBiquadFilter();
         filter.type = "lowpass";
-        masterBus.connect( filter );
+        masterGain.connect( filter );
         // filter connects to the output so we can actually hear stuff
         filter.connect( audioContext.destination );
         // set default frequency of filter

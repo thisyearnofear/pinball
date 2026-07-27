@@ -7,14 +7,14 @@
 // Contract-backed high score service (no REST, no mocks)
 // Keeps the same public API (startGame, stopGame, getHighScores)
 
-import { getActiveTournamentId, fetchLeaderboard, submitScoreWithSignature, getPlayerInfo } from './contracts/tournament-client';
+import { getActiveTournamentId, fetchLeaderboard, submitScoreWithSignature, ensureExpectedNetwork } from './contracts/tournament-client';
 import { requestScoreSignature } from './backend-scores-client';
 import { getContractsConfig } from '../config/contracts';
 import { getAppConfig } from '../config/app-config';
 import { isInvertedTournament } from '../config/tournaments';
-import { getPaymentTokenSymbol } from './contracts/payment-token-client';
 import { showToast } from './toast';
 import { getFromStorage, setInStorage } from '../utils/local-storage';
+import { shortenAddress } from '../utils/address';
 import type { WalletPort } from '@/domains/wallet/wallet-port';
 
 // Submission state tracking for UI feedback
@@ -38,6 +38,10 @@ export type HighScoreDef = {
     score: number;
     duration: number; // not tracked on-chain; set to 0 to preserve shape
 };
+
+function readSubmittedScores(): string[] {
+    return JSON.parse(getFromStorage('ps_submitted_scores') || '[]');
+}
 
 export const isSupported = (): boolean => {
     // Supported only when contracts are configured (wallet state is managed by wallet adapter)
@@ -80,21 +84,13 @@ export const stopGame = async (
 
         notifySubmissionState('validating');
 
-        // Verify we're on the correct chain
-        const config = getContractsConfig();
-        const provider = await wallet.getProvider();
-        const currentNetwork = await provider.getNetwork();
-        const currentChainId = Number(currentNetwork.chainId);
-
-        if (currentChainId !== config.chainId) {
-            try {
-                if (!wallet.switchChain) throw new Error('Wallet cannot switch chain');
-                await wallet.switchChain(config.chainId);
-            } catch {
-                showToast(`Please switch to ${getChainName(config.chainId)} to submit scores`, 'error');
-                notifySubmissionState('error', `Please switch to ${getChainName(config.chainId)} network`);
-                throw new Error(`Wrong chain: ${currentChainId}`);
-            }
+        // Verify we're on the correct chain (auto-switch when the wallet allows it)
+        try {
+            await ensureExpectedNetwork(wallet);
+        } catch (networkError: any) {
+            showToast(networkError?.message ?? 'Wrong network', 'error');
+            notifySubmissionState('error', networkError?.message ?? 'Wrong network');
+            throw networkError;
         }
 
         // Expect metaData to contain a JSON string with { signature: string, metadata?: string }
@@ -108,15 +104,6 @@ export const stopGame = async (
             }
         }
         const address = await wallet.getAddress();
-
-        // Log debugging information
-        console.log('Submitting score to tournament:', {
-            tournamentId,
-            score,
-            address,
-            playerName: playerName || '',
-            metadata
-        });
 
         // Prevent duplicate or non-improving resubmissions (direction-aware:
         // kamikaze/inverted tournaments improve by going LOWER)
@@ -138,9 +125,7 @@ export const stopGame = async (
 
         const submissionKey = `${tournamentId}:${address}:${score}`;
         try {
-            const submittedRaw = getFromStorage('ps_submitted_scores') || '[]';
-            const submitted: string[] = JSON.parse(submittedRaw);
-            if (submitted.includes(submissionKey)) {
+            if (readSubmittedScores().includes(submissionKey)) {
                 showToast('This score was already submitted', 'info');
                 return [];
             }
@@ -173,7 +158,6 @@ export const stopGame = async (
             });
             signature = response.signature;
             nonce = response.nonce;
-            console.log('Received signature and nonce from backend:', { nonce });
 
             if (response.replayVerified === true) {
                 showToast('Replay verified — score is cheat-checked ✓', 'success');
@@ -195,42 +179,14 @@ export const stopGame = async (
         try {
             // Wait briefly to ensure the entry transaction has been processed by the blockchain
             // This is important as blockchain state changes need time to propagate
-            console.log('Waiting for potential tournament entry transaction to settle...');
             await new Promise(resolve => setTimeout(resolve, 1000));
 
-            // Convert nonce string to number for the blockchain function
             const nonceAsBigInt = BigInt(nonce);
-            console.log('Submitting score to blockchain contract with params:', {
-                tournamentId,
-                score,
-                nonce: nonceAsBigInt.toString(),
-                playerName: playerName || '',
-                metadata,
-                signatureLength: signature.length,
-                address
-            });
-
-            // Additional validation - try to fetch player info to confirm they're registered
-            try {
-                const playerInfo = await getPlayerInfo(tournamentId, address);
-                console.log('Player info fetched from contract:', {
-                    entered: playerInfo.entered,
-                    bestScore: playerInfo.bestScore.toString()
-                });
-                if (!playerInfo.entered) {
-                    throw new Error('Player not registered in tournament');
-                }
-            } catch (validationErr) {
-                console.warn('Could not validate player registration:', validationErr);
-                // Continue anyway, this is just for debugging
-            }
 
             await submitScoreWithSignature(tournamentId, score, Number(nonceAsBigInt), playerName || '', metadata, signature, wallet);
-            console.log('Score successfully submitted to blockchain');
             showToast('Score submitted!', 'success');
             try {
-                const submittedRaw = getFromStorage('ps_submitted_scores') || '[]';
-                const submitted: string[] = JSON.parse(submittedRaw);
+                const submitted = readSubmittedScores();
                 submitted.push(submissionKey);
                 setInStorage('ps_submitted_scores', JSON.stringify(submitted));
             } catch { }
@@ -293,40 +249,12 @@ export const stopGame = async (
     }
 };
 
-// Helper function to get chain name for error messages
-function getChainName(chainId: number): string {
-    try {
-        const cfg = getAppConfig();
-        if (cfg.chain.chainId === chainId && cfg.chain.chainName) {
-            return cfg.chain.chainName;
-        }
-    } catch {
-        // ignore, fall back to static mapping
-    }
-    switch (chainId) {
-        case 31611:
-            return 'Mezo Testnet';
-        case 31612:
-            return 'Mezo Mainnet';
-        case 137:
-            return 'Polygon';
-        case 80002:
-            return 'Polygon Amoy';
-        case 42161:
-            return 'Arbitrum One';
-        case 8453:
-            return 'Base';
-        default:
-            return `Chain ${chainId}`;
-    }
-}
-
 export const getHighScores = async (): Promise<HighScoreDef[]> => {
     try {
         const id = await getActiveTournamentId();
         const rows = await fetchLeaderboard(id, 0, 100, isInvertedTournament(id));
         const scores: HighScoreDef[] = rows.map(r => ({
-            name: `${r.address.slice(0, 6)}...${r.address.slice(-4)}`,
+            name: shortenAddress(r.address),
             score: r.score,
             duration: 0
         }));

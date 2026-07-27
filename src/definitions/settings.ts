@@ -29,3 +29,5 @@ export const STORED_HAPTICS_ENABLED = "ps_haptics"; // whether to enable haptic 
 export const STORED_QUICK_HINTS = "ps_quick_hints"; // whether to show quick control hints
 export const STORED_TUT_LAST_SEEN = "ps_tut_last"; // last timestamp user saw quick hints
 export const STORED_WORLD_ID = "ps_world_id"; // selected Marble world for practice mode
+export const STORED_GHOST_RACE = "ps_ghost_race"; // whether the ghost-race PiP panel is shown
+export const STORED_INSTALL_DISMISSED = "ps_install_dismissed"; // whether the PWA install chip was dismissed

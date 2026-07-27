@@ -40,6 +40,13 @@ import { fetchBestReplay } from "@/services/backend-scores-client";
 type View = "lobby" | "game" | "paused";
 type ActiveModal = "settings" | "how" | "about" | "leaderboard" | null;
 
+// Raw localStorage key (predates the ps_data blob; migrating would reset user state)
+const ONBOARDING_SEEN_KEY = "pinball_onboarding_seen";
+
+function markOnboardingSeen(): void {
+  try { localStorage.setItem(ONBOARDING_SEEN_KEY, "true"); } catch {}
+}
+
 export default function GameScreen() {
   const { address, isConnected } = useWalletState();
   const toast = useToast();
@@ -75,7 +82,7 @@ export default function GameScreen() {
   const [submissionStep, setSubmissionStep] = useState<SubmissionStep | null>(null);
   const [submissionError, setSubmissionError] = useState<string>("");
   const [showOnboarding, setShowOnboarding] = useState(() => {
-    try { return !localStorage.getItem("pinball_onboarding_seen"); } catch { return true; }
+    try { return !localStorage.getItem(ONBOARDING_SEEN_KEY); } catch { return true; }
   });
 
   // Judge demo mode (?demo=1): skip onboarding/tutorial and launch a guided
@@ -89,7 +96,7 @@ export default function GameScreen() {
   useEffect(() => {
     if (!isDemo || demoStartedRef.current) return;
     demoStartedRef.current = true;
-    try { localStorage.setItem("pinball_onboarding_seen", "true"); } catch {}
+    markOnboardingSeen();
     setShowOnboarding(false);
     markTutorialSeen();
     selectGameMode("kamikaze");
@@ -363,8 +370,8 @@ export default function GameScreen() {
 
           {showOnboarding && (
             <OnboardingIntro
-              onComplete={() => { try { localStorage.setItem("pinball_onboarding_seen", "true"); } catch {} setShowOnboarding(false); }}
-              onSkip={() => { try { localStorage.setItem("pinball_onboarding_seen", "true"); } catch {} setShowOnboarding(false); }}
+              onComplete={() => { markOnboardingSeen(); setShowOnboarding(false); }}
+              onSkip={() => { markOnboardingSeen(); setShowOnboarding(false); }}
             />
           )}
         </div>

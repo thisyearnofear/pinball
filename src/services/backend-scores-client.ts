@@ -64,23 +64,32 @@ export async function uploadReplay(params: {
 export type BestReplay = {
   score: number;
   address: string;
-  mode: string;
+  mode: 'classic' | 'kamikaze';
   replay: string; // encoded ReplayDigest JSON
 };
+
+const BEST_REPLAY_TTL_MS = 30_000;
+const bestReplayCache = new Map<number, { at: number; value: BestReplay | null }>();
 
 /** Fetch the tournament leader's replay for ghost racing. Null when none exists. */
 export async function fetchBestReplay(tournamentId: number): Promise<BestReplay | null> {
   if (!API_BASE) return null;
+  const cached = bestReplayCache.get(tournamentId);
+  if (cached && Date.now() - cached.at < BEST_REPLAY_TTL_MS) return cached.value;
+  let value: BestReplay | null = null;
   try {
     const { data } = await axios.get(`${API_BASE}/api/replays/best/${tournamentId}`);
-    if (!data || typeof data.replay !== 'string') return null;
-    return {
-      score: Number(data.score),
-      address: String(data.address),
-      mode: String(data.mode),
-      replay: data.replay as string,
-    };
+    if (data && typeof data.replay === 'string') {
+      value = {
+        score: Number(data.score),
+        address: String(data.address),
+        mode: data.mode === 'kamikaze' ? 'kamikaze' : 'classic',
+        replay: data.replay as string,
+      };
+    }
   } catch {
-    return null;
+    return cached?.value ?? null;
   }
+  bestReplayCache.set(tournamentId, { at: Date.now(), value });
+  return value;
 }

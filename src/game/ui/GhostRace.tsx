@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { ReplayDigest } from "@/model/replay-recorder";
+import { TICK_MS, parseTrace, positionAt, traceViewHeight } from "@/model/replay-trace";
 import { getTickCount } from "@/model/game";
 import tables from "@/definitions/tables";
 import { formatGameScore } from "@/utils/score-format";
+import { shortenAddress } from "@/utils/address";
+import { getFromStorage, setInStorage } from "@/utils/local-storage";
+import { STORED_GHOST_RACE } from "@/definitions/settings";
 
-const TICK_MS = 1000 / 60;
 const TRAIL_MS = 450;
-const STORAGE_KEY = "pinball_ghost_race";
 
 type Props = {
   replay: ReplayDigest;
@@ -14,58 +16,24 @@ type Props = {
   leaderAddress: string;
 };
 
-type TraceSample = { t: number; x: number; y: number };
-
-function parseTrace(trace: number[] | undefined): TraceSample[] {
-  if (!trace || trace.length < 3) return [];
-  const out: TraceSample[] = [];
-  for (let i = 0; i + 2 < trace.length; i += 3) {
-    out.push({ t: trace[i], x: trace[i + 1], y: trace[i + 2] });
-  }
-  return out;
-}
-
-function positionAt(samples: TraceSample[], tick: number): { x: number; y: number } | null {
-  if (samples.length === 0) return null;
-  if (tick <= samples[0].t) return samples[0];
-  const last = samples[samples.length - 1];
-  if (tick >= last.t) return last;
-  let lo = 0;
-  let hi = samples.length - 1;
-  while (lo + 1 < hi) {
-    const mid = (lo + hi) >> 1;
-    if (samples[mid].t <= tick) lo = mid; else hi = mid;
-  }
-  const a = samples[lo];
-  const b = samples[hi];
-  const f = b.t === a.t ? 0 : (tick - a.t) / (b.t - a.t);
-  return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
-}
-
 /**
  * Live picture-in-picture ghost of the tournament leader's run, synced to the
  * running game's engine tick so pauses freeze the ghost too.
  */
 export function GhostRace({ replay, leaderScore, leaderAddress }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [enabled, setEnabled] = useState(() => {
-    try { return localStorage.getItem(STORAGE_KEY) !== "off"; } catch { return true; }
-  });
+  const [enabled, setEnabled] = useState(() => getFromStorage(STORED_GHOST_RACE) !== "off");
 
   const table = tables[replay.table] ?? tables[0];
   const samples = useMemo(() => parseTrace(replay.trace), [replay.trace]);
   const kamikaze = replay.mode === "kamikaze";
   const lastTick = samples.length ? samples[samples.length - 1].t : replay.tickCount;
 
-  const viewHeight = useMemo(() => {
-    const uw = table.underworld ?? table.height;
-    const maxY = samples.reduce((m, s) => Math.max(m, s.y), 0);
-    return maxY > uw ? table.height : uw;
-  }, [table, samples]);
+  const viewHeight = useMemo(() => traceViewHeight(table, samples), [table, samples]);
 
   function toggle(next: boolean) {
     setEnabled(next);
-    try { localStorage.setItem(STORAGE_KEY, next ? "on" : "off"); } catch {}
+    setInStorage(STORED_GHOST_RACE, next ? "on" : "off");
   }
 
   useEffect(() => {
@@ -84,10 +52,22 @@ export function GhostRace({ replay, leaderScore, leaderAddress }: Props) {
     canvas.style.height = `${cssH}px`;
     const scale = (cssW * dpr) / table.width;
 
+    // static per-effect resources — no need to rebuild every frame
+    const drainY = viewHeight * scale;
+    const dGrad = ctx.createLinearGradient(0, drainY - 14 * dpr, 0, drainY);
+    dGrad.addColorStop(0, "transparent");
+    dGrad.addColorStop(1, kamikaze ? "rgba(34,197,94,0.5)" : "rgba(255,68,68,0.4)");
+
     let raf = 0;
+    let lastRenderedTick = -1;
 
     function render() {
       const tick = getTickCount();
+      if (tick === lastRenderedTick) {
+        raf = requestAnimationFrame(render);
+        return;
+      }
+      lastRenderedTick = tick;
       const finished = tick >= lastTick;
 
       ctx!.clearRect(0, 0, canvas!.width, canvas!.height);
@@ -95,10 +75,6 @@ export function GhostRace({ replay, leaderScore, leaderAddress }: Props) {
       ctx!.fillRect(0, 0, canvas!.width, canvas!.height);
 
       // drain zone
-      const drainY = viewHeight * scale;
-      const dGrad = ctx!.createLinearGradient(0, drainY - 14 * dpr, 0, drainY);
-      dGrad.addColorStop(0, "transparent");
-      dGrad.addColorStop(1, kamikaze ? "rgba(34,197,94,0.5)" : "rgba(255,68,68,0.4)");
       ctx!.fillStyle = dGrad;
       ctx!.fillRect(0, drainY - 14 * dpr, canvas!.width, 14 * dpr);
 
@@ -139,7 +115,7 @@ export function GhostRace({ replay, leaderScore, leaderAddress }: Props) {
     return () => cancelAnimationFrame(raf);
   }, [enabled, samples, table, viewHeight, kamikaze, lastTick]);
 
-  const shortAddr = `${leaderAddress.slice(0, 6)}…${leaderAddress.slice(-4)}`;
+  const shortAddr = shortenAddress(leaderAddress);
 
   if (samples.length === 0) return null;
 

@@ -536,29 +536,29 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
         if (top > tableBottom) {
             // Kamikaze Ball: drain is the GOAL. Force Field blocks it.
             if (game.kamikaze?.enabled) {
+                const rng = game.rng ?? Math.random;
+                const aiSaveFeedback = () => {
+                    playSoundEffect(GameSounds.AI_SAVE);
+                    duckMusic(600, 0.35);
+                    haptics.aiSave();
+                    lastTauntText = getRandomTaunt(false, rng);
+                    messageHandler(GameMessages.AI_TAUNT, 1500);
+                };
                 if (ball.body.velocity.y <= 0) {
                     continue; // just kicked back up by a save — not draining
                 }
                 if (isDrainBlocked(game.kamikaze, now)) {
                     // Force Field active — ball bounces back from drain
                     engine.launchBall(ball.body, { x: 0, y: -LAUNCH_SPEED * 0.5 });
-                    playSoundEffect(GameSounds.AI_SAVE);
-                    duckMusic(600, 0.35);
-                    haptics.aiSave();
-                    lastTauntText = getRandomTaunt(false, game.rng ?? Math.random);
-                    messageHandler(GameMessages.AI_TAUNT, 1500);
+                    aiSaveFeedback();
                     continue;
                 }
-                if (rollEmergencySave(game.kamikaze, now, lastNudgeAt, game.rng ?? Math.random)) {
+                if (rollEmergencySave(game.kamikaze, now, lastNudgeAt, rng)) {
                     // Machine emergency save — kick the ball back up into the playfield
                     const towardCenter = Math.sign(table.width / 2 - ball.body.position.x);
-                    const sideKick = towardCenter * (2 + (game.rng ?? Math.random)() * 4);
+                    const sideKick = towardCenter * (2 + rng() * 4);
                     engine.launchBall(ball.body, { x: sideKick, y: -LAUNCH_SPEED * 0.95 });
-                    playSoundEffect(GameSounds.AI_SAVE);
-                    duckMusic(600, 0.35);
-                    haptics.aiSave();
-                    lastTauntText = getRandomTaunt(false, game.rng ?? Math.random);
-                    messageHandler(GameMessages.AI_TAUNT, 1500);
+                    aiSaveFeedback();
                     continue;
                 }
                 // Drain successful! Record score and show taunt
@@ -566,7 +566,7 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
                 duckMusic(1000, 0.2);
                 haptics.drainVictory();
                 messageHandler(GameMessages.DRAINED);
-                lastTauntText = getRandomTaunt(true, game.rng ?? Math.random);
+                lastTauntText = getRandomTaunt(true, rng);
                 messageHandler(GameMessages.AI_TAUNT, 2000);
                 recordReplayEvent(tickCount, "drain");
                 removeBall(ball);

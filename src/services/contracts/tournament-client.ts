@@ -1,5 +1,6 @@
 import { ethers } from 'ethers';
 import { getContractsConfig } from '../../config/contracts';
+import { getAppConfig } from '../../config/app-config';
 import { approvePaymentToken, getPaymentTokenAllowance, getPaymentTokenBalance, getPaymentTokenSymbol, isNativePaymentToken } from './payment-token-client';
 import { TOURNAMENT_MANAGER_ABI } from './abi';
 import {
@@ -29,6 +30,41 @@ async function getContract(wallet: WalletPort): Promise<ethers.Contract> {
 function getPublicContract(): ethers.Contract {
   const { tournamentManager } = getContractsConfig();
   return getPublicEthersContract(tournamentManager.address, TOURNAMENT_MANAGER_ABI);
+}
+
+function expectedChainName(chainId: number): string {
+  try {
+    const name = getAppConfig().chain.chainName;
+    if (name) return name;
+  } catch { /* fall through */ }
+  return `network ${chainId}`;
+}
+
+/**
+ * Make sure the wallet is on the tournament chain. Tries to switch (and add)
+ * the network automatically; only throws when the wallet refuses or can't.
+ */
+export async function ensureExpectedNetwork(wallet: WalletPort): Promise<void> {
+  const { chainId: expectedChainId } = getContractsConfig();
+
+  const readChainId = async (): Promise<number> => {
+    const provider = await wallet.getProvider();
+    const hex: string = await provider.send('eth_chainId', []);
+    return Number(BigInt(hex));
+  };
+
+  if (await readChainId() === expectedChainId) return;
+
+  const chainName = expectedChainName(expectedChainId);
+  if (wallet.switchChain) {
+    try {
+      await wallet.switchChain(expectedChainId);
+      if (await readChainId() === expectedChainId) return;
+    } catch {
+      throw new Error(`Please approve the switch to ${chainName} in your wallet, then try again.`);
+    }
+  }
+  throw new Error(`Your wallet is connected to the wrong network. Please switch to ${chainName} and try again.`);
 }
 
 export async function getActiveTournamentId(): Promise<number> {
@@ -79,193 +115,68 @@ async function _getActiveTournamentId(contract: ethers.Contract): Promise<number
 
 export async function enterTournament(tournamentId: number, wallet: WalletPort): Promise<string> {
   const w = wallet;
+
+  // Auto-switch the wallet to the tournament network before anything else
+  await ensureExpectedNetwork(w);
+
   const c = await getContract(w);
+  const publicContract = getPublicContract();
 
   try {
-    // Pre-flight checks
-    const signer = await w.getSigner();
     const address = await w.getAddress();
-    console.log('=== ENTER TOURNAMENT DEBUG ===');
-    console.log('Tournament ID:', tournamentId);
-    console.log('Player address:', address);
-
-    // Log provider details
-    if (!signer.provider) throw new Error('No provider available on signer');
-    const network = await signer.provider.getNetwork();
-    console.log('Network:', {
-      chainId: Number(network.chainId),
-      name: network.name
-    });
-
-    // CRITICAL: Verify we're on the correct network before attempting transaction
-    const { chainId: expectedChainId } = getContractsConfig();
-    if (Number(network.chainId) !== expectedChainId) {
-      throw new Error(`Wrong network. Please switch to chain ID ${expectedChainId} before entering the tournament. Currently on chain ID ${Number(network.chainId)}.`);
-    }
-
-    // Check provider type (Farcaster vs MetaMask)
-    const provider = await w.getProvider();
-    console.log('Provider type:', provider.constructor.name);
-    // @ts-ignore - accessing internal property for debugging
-    const underlyingProvider = provider._getConnection?.()?.url || 'unknown';
-    console.log('Underlying provider:', underlyingProvider);
-
-    // Check player's current status (for logging only - pay-per-play model allows multiple entries)
-    const publicContract = getPublicContract();
-    try {
-      const playerInfo = await publicContract.playerInfo(tournamentId, address);
-      console.log('Player info:', {
-        entered: playerInfo.entered,
-        bestScore: playerInfo.bestScore.toString(),
-        playCount: 'Pay-per-play model - each entry adds to pot'
-      });
-    } catch (checkError) {
-      console.warn('Could not check player info:', checkError);
-    }
-
-    const fee: bigint = await publicContract.entryFee();
     const tokenSymbol = getPaymentTokenSymbol();
-    console.log('Entry fee:', ethers.formatUnits(fee, 18), tokenSymbol);
+    const { tournamentManager } = getContractsConfig();
 
-    // Validate tournament is active before attempting transaction
-    console.log('Validating tournament status...');
-    try {
-      const tournamentInfo = await getTournamentInfo(tournamentId);
-      const nowSec = Math.floor(Date.now() / 1000);
+    const [fee, tournamentInfo, balance] = await Promise.all([
+      publicContract.entryFee() as Promise<bigint>,
+      getTournamentInfo(tournamentId),
+      getPaymentTokenBalance(address),
+    ]);
 
-      console.log('Tournament validation:', {
-        tournamentId,
-        startTime: tournamentInfo.startTime,
-        endTime: tournamentInfo.endTime,
-        currentTime: nowSec,
-        finalized: tournamentInfo.finalized,
-        isActive: nowSec >= tournamentInfo.startTime && nowSec <= tournamentInfo.endTime && !tournamentInfo.finalized,
-        totalPot: ethers.formatUnits(tournamentInfo.totalPot, 18) + ' ' + getPaymentTokenSymbol()
-      });
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (nowSec < tournamentInfo.startTime) throw new Error('Tournament has not started yet');
+    if (nowSec > tournamentInfo.endTime) throw new Error('Tournament has ended');
+    if (tournamentInfo.finalized) throw new Error('Tournament is already finalized');
 
-      if (nowSec < tournamentInfo.startTime) {
-        throw new Error('Tournament has not started yet');
-      }
-      if (nowSec > tournamentInfo.endTime) {
-        throw new Error('Tournament has ended');
-      }
-      if (tournamentInfo.finalized) {
-        throw new Error('Tournament is already finalized');
-      }
-
-      console.log('✓ Tournament is active and accepting entries');
-    } catch (validationError: any) {
-      console.error('❌ Tournament validation failed:', validationError);
-      throw validationError;
-    }
-
-    // Ensure player has enough payment token and allowance for entry.
-    const balance = await getPaymentTokenBalance(address);
     if (balance < fee) {
       throw new Error(`Insufficient ${tokenSymbol} balance. Need ${ethers.formatUnits(fee, 18)} ${tokenSymbol}`);
     }
 
-    const { tournamentManager } = getContractsConfig();
     const allowance = await getPaymentTokenAllowance(address, tournamentManager.address);
     if (allowance < fee) {
-      console.log(`Approving ${tokenSymbol} for tournament entry...`);
       await approvePaymentToken(tournamentManager.address, ethers.MaxUint256, w);
     }
 
-    // Estimate gas using PUBLIC RPC
-    // This avoids "missing revert data" errors from Farcaster provider
-    console.log('Estimating gas via Public RPC...');
+    // Estimate gas via public RPC — the Farcaster provider throws "missing revert data"
     const gasLimit = await estimateGasWithBuffer(
       () => publicContract.enterTournament.estimateGas(tournamentId, { from: address }),
       { fallback: 500000n, bufferBps: 5000n } // +50%
     );
-    console.log('Gas limit (buffered):', gasLimit.toString());
 
-    console.log('Submitting enterTournament transaction...');
-    console.log('Params:', { tournamentId, gasLimit: gasLimit.toString() });
-
-    // Send transaction using Wallet Signer
-    // We explicitly provide gasLimit so Farcaster provider doesn't try to estimate (and fail)
+    // Explicit gasLimit so the wallet provider doesn't try (and fail) to estimate
     const tx = await c.enterTournament(tournamentId, { gasLimit });
-
-    console.log('Transaction submitted:', tx.hash);
-    console.log('Waiting for confirmation via Public RPC...');
 
     const receiptPublic: ethers.TransactionReceipt | null = await waitForTxPublic(tx.hash).catch(() => null);
     const receipt: ethers.TransactionReceipt = receiptPublic ?? (await tx.wait());
 
-    console.log('Transaction confirmed:', {
-      hash: receipt?.hash,
-      status: receipt?.status,
-      gasUsed: receipt?.gasUsed?.toString()
-    });
-
-    // Verify entry using PUBLIC RPC
-    console.log('Verifying tournament entry...');
-    try {
-      // Wait a bit for state to update
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      const playerInfo = await publicContract.playerInfo(tournamentId, address);
-      console.log('Post-entry player info:', {
-        entered: playerInfo.entered,
-        bestScore: playerInfo.bestScore.toString()
-      });
-
-      if (!playerInfo.entered) {
-        console.error('❌ Transaction succeeded but player is NOT entered!');
-        throw new Error('Entry transaction succeeded but player was not registered. Please try again.');
-      }
-
-      console.log('✓ Entry verified successfully');
-    } catch (verifyError) {
-      console.error('Entry verification failed:', verifyError);
-      // Don't throw here, the tx succeeded so we should probably let them proceed
-      // or at least return the hash
-    }
-
-    console.log('=== END DEBUG ===');
-
     return receipt?.hash as string;
   } catch (error: any) {
-    console.error('=== ENTER TOURNAMENT ERROR ===');
-    console.error('Error code:', error.code);
-    console.error('Error message:', error.message);
-    console.error('Error data:', error.data);
-    console.error('Error reason:', error.reason);
-    console.error('Full error:', error);
-    console.error('=== END ERROR ===');
+    console.error('enterTournament failed:', error);
 
-    // Enhanced error messages
     if (error.code === 'CALL_EXCEPTION') {
       if (error.message?.includes('insufficient funds')) {
         throw new Error('Insufficient funds for entry fee and gas');
       }
 
-      // Check if tournament is active
+      // Re-check timing: the tournament may have ended between preflight and tx
       try {
         const info = await getTournamentInfo(tournamentId);
         const now = Math.floor(Date.now() / 1000);
-        console.log('Tournament timing check:', {
-          now,
-          startTime: info.startTime,
-          endTime: info.endTime,
-          finalized: info.finalized,
-          hasStarted: now >= info.startTime,
-          hasEnded: now > info.endTime
-        });
-
-        if (now < info.startTime) {
-          throw new Error('Tournament has not started yet');
-        }
-        if (now > info.endTime) {
-          throw new Error('Tournament has ended');
-        }
-        if (info.finalized) {
-          throw new Error('Tournament is finalized');
-        }
-      } catch (infoError) {
-        console.warn('Could not fetch tournament info:', infoError);
+        if (now < info.startTime) throw new Error('Tournament has not started yet');
+        if (now > info.endTime) throw new Error('Tournament has ended');
+        if (info.finalized) throw new Error('Tournament is finalized');
+      } catch (infoError: any) {
+        if (infoError?.message?.startsWith('Tournament')) throw infoError;
       }
 
       throw new Error('Transaction failed - tournament may not be active');
@@ -460,6 +371,7 @@ export async function getPrizeBps(tournamentId: number, wallet?: WalletPort): Pr
 }
 
 export async function claimReward(tournamentId: number, wallet?: WalletPort): Promise<string> {
+  if (wallet) await ensureExpectedNetwork(wallet);
   const c = await getContract(wallet);
   const tx = await c.claimReward(tournamentId);
   const receipt = await tx.wait();

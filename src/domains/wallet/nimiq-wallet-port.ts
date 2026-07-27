@@ -15,6 +15,7 @@
  * See: https://nimiq.dev/mini-apps/
  */
 import { ethers } from "ethers";
+import { switchOrAddChain } from "./switch-chain";
 import type { WalletPort } from "./wallet-port";
 
 export class NimiqWalletPort implements WalletPort {
@@ -47,10 +48,8 @@ export class NimiqWalletPort implements WalletPort {
   }
 
   async switchChain(chainId: number): Promise<void> {
-    const hex = "0x" + chainId.toString(16);
-    await this.rawProvider.request({
-      method: "wallet_switchEthereumChain",
-      params: [{ chainId: hex }],
-    });
+    await switchOrAddChain(this.rawProvider, chainId);
+    // ethers BrowserProvider caches the detected network; recreate after a switch
+    this.ethersProvider = new ethers.BrowserProvider(this.rawProvider);
   }
 }

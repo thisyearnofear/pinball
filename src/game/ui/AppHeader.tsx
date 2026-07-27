@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 
 import { getAppConfig } from "@/config/app-config";
+import { shortenAddress } from "@/utils/address";
 import { useWalletState } from "@/hooks/use-wallet-state";
 import { useIsSmallScreen } from "@/hooks/use-media-query";
 import type { WorldAccent } from "@/hooks/use-world-theme";
@@ -61,7 +62,7 @@ export function AppHeader({ view, gameActive, tournamentName, worldAccent, onOpe
     if (isConnected && address) {
       return (
         <span className={styles.liveBadge} style={{ opacity: 0.8 }}>
-          {address.slice(0, 6)}...{address.slice(-4)}
+          {shortenAddress(address)}
         </span>
       );
     }

@@ -1,5 +1,7 @@
 import React from "react";
 import { Modal, Skeleton } from "./index";
+import { shortenAddress } from "@/utils/address";
+import { formatGameScore } from "@/utils/score-format";
 
 import { colors, spacing, typography, radius } from "@/theme/tokens";
 
@@ -15,15 +17,6 @@ type Props = {
 };
 
 const rankBadges = ["🥇", "🥈", "🥉"];
-
-function formatAddress(addr: string): string {
-  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-}
-
-function formatScore(score: number, inverted: boolean): string {
-  if (inverted) return `${(score / 1000).toFixed(1)}s`;
-  return score.toLocaleString();
-}
 
 export function LeaderboardModal(props: Props) {
   const inverted = Boolean(props.inverted);
@@ -94,7 +87,7 @@ export function LeaderboardModal(props: Props) {
                   fontFamily: typography.fontFamilyMono,
                   color: isMe ? colors.accent.primary : colors.text.secondary,
                 }}>
-                  {formatAddress(r.address)}
+                  {shortenAddress(r.address)}
                   {isMe && <span style={{ marginLeft: spacing.xs, fontSize: typography.size.xs }}>(you)</span>}
                 </div>
                 <div style={{
@@ -103,7 +96,7 @@ export function LeaderboardModal(props: Props) {
                   color: colors.text.primary,
                   fontVariantNumeric: "tabular-nums",
                 }}>
-                  {formatScore(r.score, inverted)}
+                  {formatGameScore(r.score, inverted)}
                 </div>
               </div>
             );

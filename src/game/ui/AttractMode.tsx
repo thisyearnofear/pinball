@@ -32,6 +32,18 @@ export function AttractMode({ height = 240 }: { height?: number }) {
     let sawActive = false;
     let unsuppressAudio: (() => void) | null = null;
 
+    // On failure the component renders null, but the effect stays mounted —
+    // tear the engine/interval/audio-suppression down explicitly.
+    function fail() {
+      window.clearInterval(poll);
+      window.clearTimeout(restartTimer);
+      mounted?.destroy();
+      mounted = null;
+      unsuppressAudio?.();
+      unsuppressAudio = null;
+      setFailed(true);
+    }
+
     async function run() {
       if (!containerRef.current) return;
       try {
@@ -91,13 +103,13 @@ export function AttractMode({ height = 240 }: { height?: number }) {
               sawActive = false;
               if (cancelled || !mounted) return;
               game = makeDemoGame();
-              mounted.start(game).catch(() => setFailed(true));
+              mounted.start(game).catch(() => fail());
             }, 1500);
           }
         }, 500);
       } catch (e) {
         console.warn("Attract mode unavailable:", e);
-        setFailed(true);
+        fail();
       }
     }
 

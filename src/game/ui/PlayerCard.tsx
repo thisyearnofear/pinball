@@ -2,6 +2,7 @@ import React from "react";
 import { PlayerAvatar } from "./PlayerAvatar";
 import { Card } from "./Card";
 import { formatGameScore } from "@/utils/score-format";
+import { shortenAddress } from "@/utils/address";
 
 import { colors, spacing, typography, radius } from "@/theme/tokens";
 
@@ -18,7 +19,7 @@ type Props = {
 export function PlayerCard(props: Props) {
   if (!props.address) return null;
 
-  const shortAddr = `${props.address.slice(0, 6)}...${props.address.slice(-4)}`;
+  const shortAddr = shortenAddress(props.address);
 
   return (
     <Card padding={spacing.lg}>

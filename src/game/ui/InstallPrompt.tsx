@@ -1,20 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getFromStorage, setInStorage } from "@/utils/local-storage";
+import { STORED_INSTALL_DISMISSED } from "@/definitions/settings";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 };
 
-const DISMISSED_KEY = "pinball_install_dismissed";
-
 export function InstallPrompt() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (localStorage.getItem(DISMISSED_KEY) === "1") return;
+    if (getFromStorage(STORED_INSTALL_DISMISSED) === "1") return;
 
     const onPrompt = (e: Event) => {
       e.preventDefault();
@@ -66,7 +66,7 @@ export function InstallPrompt() {
       </button>
       <button
         onClick={() => {
-          localStorage.setItem(DISMISSED_KEY, "1");
+          setInStorage(STORED_INSTALL_DISMISSED, "1");
           setDeferred(null);
         }}
         aria-label="Dismiss install prompt"
