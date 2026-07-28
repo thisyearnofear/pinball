@@ -12,22 +12,22 @@ const slides = [
   {
     icon: "🌸",
     title: "Kamikaze Ball",
-    body: "神風 — the divine wind. Like a falling cherry blossom, the ball's noble end is the win: in Kamikaze mode the machine fights to keep it aloft, and you win by draining it fast. Tap to nudge, collect power-ups, and outsmart the table.",
+    body: "神風 — the divine wind. In most pinball you lose the ball. Here the blossom's fall IS the win: the machine fights to keep it aloft, and you win by draining it fast. No wallet needed — just play.",
   },
   {
-    icon: "🕹️",
-    title: "Two Ways to Play",
-    body: "Kamikaze is the flagship: AI flippers, munition crates, fastest drain wins. Prefer tradition? Classic mode is pure high-score pinball. Every tournament is tied to one mode.",
+    icon: "🎮",
+    title: "Your Hands on the Table",
+    body: "TAP to nudge the ball. HOLD to charge a power nudge (up to 3×). SWIPE DOWN to dive — a deliberate drain the machine can't save. DOUBLE-TAP to fire a banked munition. Every verb matters.",
+  },
+  {
+    icon: "🏯",
+    title: "A New Challenge Daily",
+    body: "Each day the wind shifts: a fresh seeded challenge with its own table, mode, and machine. Chase your personal best, build drain streaks, and climb the daily board. Something to come back to.",
   },
   {
     icon: "⛓️",
-    title: "Onchain Tournaments",
-    body: "Enter tournaments with crypto entry fees. Every score is cryptographically signed and settled onchain. Verifiable, permanent, and auditable — no black-box leaderboards.",
-  },
-  {
-    icon: "💰",
-    title: "Win Real Prizes",
-    body: "Top players split the prize pot. Entry fees fund the rewards, and payouts are automatic via smart contracts. Lower time = higher rank in Kamikaze mode.",
+    title: "Play for Real (Optional)",
+    body: "When you're ready, connect a wallet to enter onchain tournaments — entry fees fund the pot, scores are signed and settled on Polygon Amoy, payouts are automatic. Totally optional; practice is free.",
   },
 ];
 
@@ -110,7 +110,7 @@ export function OnboardingIntro(props: Props) {
             }}
             style={{ flex: 2 }}
           >
-            {slide === slides.length - 1 ? "Let's Go" : "Next"}
+            {slide === slides.length - 1 ? "Start Playing" : "Next"}
           </Button>
         </div>
       </div>

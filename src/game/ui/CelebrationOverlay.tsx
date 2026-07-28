@@ -14,6 +14,7 @@ type Props = {
   aiDifficulty?: string;
   worldId?: string;
   tournamentName?: string;
+  isNewBest?: boolean;
   onDismiss: () => void;
   onPlayAgain: () => void;
   onPlayTournament: () => void;
@@ -53,6 +54,24 @@ export function CelebrationOverlay(props: Props) {
             {kamikaze ? " " : ""}
             {props.isPractice ? "Practice run complete." : "Tournament run complete."}
           </div>
+          {props.isNewBest && (
+            <div style={{
+              marginTop: spacing.sm,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: spacing.xs,
+              padding: `${spacing.xs}px ${spacing.md}px`,
+              borderRadius: radius.full,
+              background: "linear-gradient(135deg, rgba(227, 66, 52, 0.25), rgba(212, 160, 23, 0.25))",
+              border: "1px solid rgba(212, 160, 23, 0.5)",
+              fontSize: typography.size.sm,
+              fontWeight: typography.weight.bold,
+              letterSpacing: "0.08em",
+              color: "#fbbf24",
+            }}>
+              🌸 NEW DAILY BEST
+            </div>
+          )}
         </div>
 
         {props.worldId && (

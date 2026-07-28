@@ -226,6 +226,104 @@
   text-align: center;
 }
 
+/* Instant play — the primary, wallet-free path to the game. */
+.instantPlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xl) var(--space-lg);
+  margin-bottom: var(--space-xl);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(227, 66, 52, 0.45);
+  background: linear-gradient(135deg, rgba(227, 66, 52, 0.18) 0%, rgba(168, 85, 247, 0.12) 100%);
+  text-align: center;
+}
+
+.instantPlayCta {
+  width: 100%;
+  max-width: 360px;
+  padding: var(--space-md) var(--space-lg);
+  font-size: var(--text-md);
+  font-weight: var(--font-bold);
+  font-family: var(--font-family-display);
+  letter-spacing: 0.08em;
+  color: #fff;
+  background: linear-gradient(135deg, #e34234 0%, #c026d3 100%);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  box-shadow: 0 0 20px rgba(227, 66, 52, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.instantPlayCta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 28px rgba(227, 66, 52, 0.5);
+}
+
+.instantPlayHint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+/* Daily challenge — date-seeded retention hook. */
+.daily {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-xl);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(212, 160, 23, 0.35);
+  background: linear-gradient(135deg, rgba(212, 160, 23, 0.1) 0%, rgba(0, 0, 0, 0.3) 100%);
+}
+
+.dailyIcon {
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.dailyBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.dailyLabel {
+  font-size: 11px;
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.14em;
+  color: rgba(212, 160, 23, 0.9);
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.dailyDesc {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.dailyBest {
+  margin-top: var(--space-xs);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-family: var(--font-family-mono);
+}
+
+.dailyAction {
+  flex-shrink: 0;
+}
+
+@media (max-width: 560px) {
+  .daily {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+}
+
 /* ArcadeCard */
 .card {
   display: flex;

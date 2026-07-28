@@ -2,6 +2,8 @@ import React from "react";
 import { getAllTournaments, type TournamentMeta, type GameMode } from "@/config/tournaments";
 import { getTournamentWorld } from "@/config/tournaments";
 import type { AIDifficulty } from "@/model/kamikaze";
+import { getDailyChallenge, getDailyBest, type DailyChallenge } from "@/config/daily-challenge";
+import { getWorldById } from "@/config/worlds";
 
 import { Button, Skeleton, NeonTitle, CRTOverlay, PlayerCard } from "@/game/ui";
 import { burstOnElement } from "@/utils/burst-fx";
@@ -29,6 +31,7 @@ type Props = {
   onEnterTournament: (id: number) => void;
   onStartTournament: (id: number) => void;
   onPractice: () => void;
+  onPlayDaily: (challenge: DailyChallenge) => void;
 };
 
 const DIFFICULTIES: AIDifficulty[] = ["easy", "medium", "hard"];
@@ -120,6 +123,19 @@ export function ArcadeLobby(props: Props) {
           </div>
         )}
 
+        <DailyBanner onPlayDaily={props.onPlayDaily} />
+
+        <div className={styles.instantPlay}>
+          <button
+            type="button"
+            className={styles.instantPlayCta}
+            onClick={(e) => { burstOnElement(e.currentTarget, { count: 16, colors: ["#e34234", "#c026d3", "#fbbf24"] }); props.onPractice(); }}
+          >
+            {props.gameMode === "kamikaze" ? "PLAY NOW — 神風" : "PLAY NOW"}
+          </button>
+          <div className={styles.instantPlayHint}>No wallet needed · {props.gameMode === "kamikaze" ? "drain-to-win practice" : "classic practice"} · free</div>
+        </div>
+
         <div className={styles.tournamentList}>
           {tournaments.map((t) => (
             <ArcadeCard
@@ -160,6 +176,42 @@ type CardProps = {
   onEnter: () => void;
   onStart: () => void;
 };
+
+function formatDailyBest(score: number, kamikaze: boolean): string {
+  if (!score) return "—";
+  return kamikaze ? `${(score / 1000).toFixed(1)}s` : score.toLocaleString();
+}
+
+function DailyBanner(props: { onPlayDaily: (c: DailyChallenge) => void }) {
+  const challenge = React.useMemo(() => getDailyChallenge(), []);
+  const best = getDailyBest(challenge.dayKey);
+  const world = getWorldById(challenge.worldId);
+  const kamikaze = challenge.mode === "kamikaze";
+
+  return (
+    <div className={styles.daily}>
+      <div className={styles.dailyIcon} aria-hidden="true">🏯</div>
+      <div className={styles.dailyBody}>
+        <div className={styles.dailyLabel}>Daily Challenge · {challenge.dayKey}</div>
+        <div className={styles.dailyDesc}>
+          {kamikaze ? "神風 Kamikaze" : "Classic"} · {world?.name ?? challenge.worldId} · Machine {challenge.aiDifficulty}
+        </div>
+        <div className={styles.dailyBest}>
+          Your best today: {formatDailyBest(best, kamikaze)}{best ? "" : " — no run yet"}
+        </div>
+      </div>
+      <div className={styles.dailyAction}>
+        <Button
+          variant="secondary"
+          onClick={(e) => { burstOnElement(e.currentTarget as HTMLElement, { count: 12, colors: ["#d4a017", "#e34234", "#fbbf24"] }); props.onPlayDaily(challenge); }}
+        >
+          Play Daily
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 
 function ArcadeCard(props: CardProps) {
   const world = getTournamentWorld(props.tournament.id);

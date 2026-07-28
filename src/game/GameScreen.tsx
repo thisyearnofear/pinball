@@ -5,6 +5,7 @@ import type { WalletPort } from "@/domains/wallet/wallet-port";
 import { stopGame, setSubmissionStateCallback, type SubmissionStep as LegacySubmissionStep } from "@/services/high-scores-service";
 import { getTournamentMeta, getAllTournaments, type GameMode } from "@/config/tournaments";
 import { getFromStorage } from "@/utils/local-storage";
+import { getDailyChallenge, recordDailyRun } from "@/config/daily-challenge";
 import { STORED_WORLD_ID } from "@/definitions/settings";
 import { START_TABLE_INDEX } from "@/definitions/tables";
 import type { AIDifficulty } from "@/model/kamikaze";
@@ -86,6 +87,7 @@ function GameScreenInner() {
   const [showTutorial, setShowTutorial] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [lastScore, setLastScore] = useState<number>(0);
+  const [dailyResult, setDailyResult] = useState<{ dayKey: string; mode: "classic" | "kamikaze"; best: number; isPB: boolean } | null>(null);
   const [lastReplay, setLastReplay] = useState<ReplayDigest | null>(null);
   const [showReplay, setShowReplay] = useState(false);
   const [ghost, setGhost] = useState<{ digest: ReplayDigest; score: number; address: string } | null>(null);
@@ -168,6 +170,17 @@ function GameScreenInner() {
     setRunKey((k) => k + 1);
     setView("game");
   }
+  function startDailyChallenge(challenge: { worldId: string; mode: GameMode; aiDifficulty: AIDifficulty }) {
+    setSelectedWorldId(challenge.worldId);
+    setGameMode(challenge.mode);
+    setAiDifficulty(challenge.aiDifficulty);
+    setMode("practice");
+    setShowCelebration(false);
+    markTutorialSeen();
+    setRunKey((k) => k + 1);
+    setView("game");
+    activityFeed.log("entry", `Daily challenge started · ${challenge.worldId} · ${challenge.mode}`);
+  }
 
   function startTournament() {
     setMode("tournament");
@@ -249,6 +262,15 @@ function GameScreenInner() {
   const handleRunEnd = useCallback((score: number) => {
     setLastScore(score);
     recordRun({ score, mode, gameMode: effectiveGameMode, worldId: activeWorldId, tournamentId: tournament.tournamentId ?? undefined });
+    // Daily Challenge retention: only runs matching today's mode count toward
+    // the day's PB, so classic scores never pollute a kamikaze drain-time PB.
+    const challenge = getDailyChallenge();
+    if (challenge.mode === effectiveGameMode) {
+      const res = recordDailyRun(challenge, score);
+      setDailyResult({ dayKey: challenge.dayKey, mode: challenge.mode, best: res.best, isPB: res.isPB });
+    } else {
+      setDailyResult(null);
+    }
     setShowCelebration(true);
     activityFeed.log(
       effectiveGameMode === "kamikaze" ? "drain" : "score",
@@ -327,6 +349,7 @@ function GameScreenInner() {
                   setView("game");
                 }}
                 onPractice={startPractice}
+                onPlayDaily={startDailyChallenge}
               />
             )}
             {view === "lobby" && (
@@ -418,6 +441,7 @@ function GameScreenInner() {
               aiDifficulty={effectiveGameMode === "kamikaze" ? aiDifficulty : undefined}
               worldId={mode === "practice" ? selectedWorldId : tournament.worldId || undefined}
               tournamentName={tournamentName || undefined}
+              isNewBest={Boolean(dailyResult?.isPB)}
               onDismiss={() => setShowCelebration(false)}
               onPlayAgain={() => { setShowCelebration(false); if (mode === "practice") startPractice(); else startTournament(); }}
               onPlayTournament={() => { setShowCelebration(false); startTournament(); }}
@@ -435,7 +459,7 @@ function GameScreenInner() {
 
           {showOnboarding && (
             <OnboardingIntro
-              onComplete={() => { markOnboardingSeen(); setShowOnboarding(false); }}
+              onComplete={() => { markOnboardingSeen(); setShowOnboarding(false); startPractice(); }}
               onSkip={() => { markOnboardingSeen(); setShowOnboarding(false); }}
             />
           )}
