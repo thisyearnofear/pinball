@@ -129,7 +129,7 @@ function GameScreenInner() {
       [7_000, "Tap anywhere on the table to nudge the ball toward the drain"],
       [14_000, "Grab munition crates for power-ups — the machine rolls its own countermeasures"],
       [22_000, "Every run is recorded: replays are verified server-side before a score can be signed"],
-      [30_000, "Drain fast, beat the ghost of the tournament leader, win USDT on Polygon"],
+      [30_000, "Drain fast, beat the ghost of the tournament leader, win MATIC on Polygon"],
     ];
     const timers = script.map(([ms, text]) => window.setTimeout(() => toast.addToast(text, "info"), ms));
     return () => timers.forEach((t) => window.clearTimeout(t));

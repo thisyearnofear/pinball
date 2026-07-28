@@ -1,8 +1,8 @@
 import { ethers } from 'ethers';
 import { getContractsConfig } from '../../config/contracts';
 import { getAppConfig } from '../../config/app-config';
-import { approvePaymentToken, getPaymentTokenAllowance, getPaymentTokenBalance, getPaymentTokenSymbol, isNativePaymentToken } from './payment-token-client';
-import { TOURNAMENT_MANAGER_ABI } from './abi';
+import { approvePaymentToken, getPaymentTokenAllowance, getPaymentTokenBalance, getPaymentTokenSymbol, getPaymentTokenDecimals, isNativePaymentToken } from './payment-token-client';
+import { TOURNAMENT_MANAGER_ABI, TOURNAMENT_MANAGER_NATIVE_ABI } from './abi';
 import {
   estimateGasWithBuffer,
   getPublicContract as getPublicEthersContract,
@@ -10,6 +10,11 @@ import {
   waitForTxPublic,
 } from './contract-utils';
 import type { WalletPort } from '@/domains/wallet/wallet-port';
+
+/** Select the right ABI based on whether the payment token is native or ERC-20. */
+function getTournamentABI() {
+  return isNativePaymentToken() ? TOURNAMENT_MANAGER_NATIVE_ABI : TOURNAMENT_MANAGER_ABI;
+}
 
 function isConfigured(): boolean {
   try {
@@ -22,14 +27,14 @@ function isConfigured(): boolean {
 
 async function getContract(wallet: WalletPort): Promise<ethers.Contract> {
   const { tournamentManager } = getContractsConfig();
-  return await getWriteContract(tournamentManager.address, TOURNAMENT_MANAGER_ABI, wallet);
+  return await getWriteContract(tournamentManager.address, getTournamentABI(), wallet);
 }
 
 // Public read-only contract that doesn't require wallet connection
 // Always use public RPC for reads - Farcaster's provider RPC has connectivity issues
 function getPublicContract(): ethers.Contract {
   const { tournamentManager } = getContractsConfig();
-  return getPublicEthersContract(tournamentManager.address, TOURNAMENT_MANAGER_ABI);
+  return getPublicEthersContract(tournamentManager.address, getTournamentABI());
 }
 
 function expectedChainName(chainId: number): string {
@@ -125,6 +130,8 @@ export async function enterTournament(tournamentId: number, wallet: WalletPort):
   try {
     const address = await w.getAddress();
     const tokenSymbol = getPaymentTokenSymbol();
+    const tokenDecimals = getPaymentTokenDecimals();
+    const native = isNativePaymentToken();
     const { tournamentManager } = getContractsConfig();
 
     const [fee, tournamentInfo, balance] = await Promise.all([
@@ -139,9 +146,22 @@ export async function enterTournament(tournamentId: number, wallet: WalletPort):
     if (tournamentInfo.finalized) throw new Error('Tournament is already finalized');
 
     if (balance < fee) {
-      throw new Error(`Insufficient ${tokenSymbol} balance. Need ${ethers.formatUnits(fee, 18)} ${tokenSymbol}`);
+      throw new Error(`Insufficient ${tokenSymbol} balance. Need ${ethers.formatUnits(fee, tokenDecimals)} ${tokenSymbol}`);
     }
 
+    if (native) {
+      // Native token: send value directly with the transaction (no approve step)
+      const gasLimit = await estimateGasWithBuffer(
+        () => publicContract.enterTournament.estimateGas(tournamentId, { from: address, value: fee }),
+        { fallback: 200000n, bufferBps: 5000n }
+      );
+      const tx = await c.enterTournament(tournamentId, { value: fee, gasLimit });
+      const receiptPublic: ethers.TransactionReceipt | null = await waitForTxPublic(tx.hash).catch(() => null);
+      const receipt: ethers.TransactionReceipt = receiptPublic ?? (await tx.wait());
+      return receipt?.hash as string;
+    }
+
+    // ERC-20 token: approve + transferFrom flow
     const allowance = await getPaymentTokenAllowance(address, tournamentManager.address);
     if (allowance < fee) {
       await approvePaymentToken(tournamentManager.address, ethers.MaxUint256, w);

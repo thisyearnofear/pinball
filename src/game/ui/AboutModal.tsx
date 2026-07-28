@@ -43,10 +43,9 @@ export function AboutModal(props: { onClose: () => void }) {
             Contracts (Polygon Amoy)
           </h3>
           <div style={{ fontSize: typography.size.sm, color: colors.text.secondary, fontFamily: typography.fontFamilyMono, lineHeight: typography.lineHeight.relaxed }}>
-            TournamentManager: 0x711a...C860<br />
-            MissionPool: 0xf0Fc...FD49<br />
-            Test USDT: 0xD391...3A66<br />
-            Chain: 80002
+            TournamentManager (native): 0xDD62...C1A4<br />
+            Chain: 80002 (Polygon Amoy)<br />
+            Entry fee: 0.01 MATIC
           </div>
         </div>
 

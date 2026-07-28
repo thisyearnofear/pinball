@@ -1,6 +1,6 @@
 import { ethers } from "ethers";
 import { getContractsConfig } from "../../config/contracts";
-import { approvePaymentToken, getPaymentTokenAllowance, getPaymentTokenBalance, getPaymentTokenSymbol } from "./payment-token-client";
+import { approvePaymentToken, getPaymentTokenAllowance, getPaymentTokenBalance, getPaymentTokenSymbol, getPaymentTokenDecimals } from "./payment-token-client";
 import { MISSION_POOL_ABI } from "./abi";
 import { getPublicContract, getWriteContract as getWriteEthersContract } from "./contract-utils";
 import type { WalletPort } from "@/domains/wallet/wallet-port";
@@ -33,7 +33,7 @@ export async function createSponsoredMission(
   const tokenSymbol = getPaymentTokenSymbol();
   const balance = await getPaymentTokenBalance(address);
   if (balance < total) {
-    throw new Error(`Insufficient ${tokenSymbol} balance. Need ${ethers.formatUnits(total, 18)} ${tokenSymbol}`);
+    throw new Error(`Insufficient ${tokenSymbol} balance. Need ${ethers.formatUnits(total, getPaymentTokenDecimals())} ${tokenSymbol}`);
   }
 
   const spender = getMissionPoolAddress();

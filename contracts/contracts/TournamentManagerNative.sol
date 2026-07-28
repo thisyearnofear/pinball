@@ -1,0 +1,359 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.28;
+
+/**
+ * TournamentManagerNative
+ *
+ * Same tournament logic as TournamentManager but accepts native token
+ * (MATIC on Polygon Amoy) for entry fees and payouts. No ERC-20 approve
+ * step needed — users send value directly with enterTournament().
+ *
+ * Users get test MATIC from faucets (free, instant) instead of needing
+ * a mock ERC-20 token deployed and minted.
+ *
+ * Entry fees and payouts are denominated in native token base units (wei).
+ */
+contract TournamentManagerNative {
+    string internal constant SCORE_PREFIX_V2 = "PINBALL_SCORE:v2";
+
+    struct Tournament {
+        uint256 id;
+        uint64 startTime;
+        uint64 endTime;
+        uint16 topN;
+        bool finalized;
+        bool invertedWinCondition; // true = lower score wins (Kamikaze: fastest drain)
+        uint16[] prizeBps; // sum == 10000
+        uint256 totalPot;  // in native token base units
+    }
+
+    struct PlayerInfo {
+        bool entered;
+        bool hasScore;
+        uint256 bestScore;
+        bool rewardClaimed;
+    }
+
+    address public owner;
+    address public scoreSigner;
+    uint256 public entryFee; // in native token base units (wei)
+
+    uint256 public lastTournamentId;
+
+    mapping(uint256 => Tournament) public tournaments;
+    mapping(uint256 => address[]) public participants;
+    mapping(uint256 => mapping(address => PlayerInfo)) public playerInfo;
+    mapping(uint256 => mapping(address => uint256)) public playerNonces;
+    mapping(uint256 => address[]) public winners;
+
+    event OwnerUpdated(address indexed newOwner);
+    event ScoreSignerUpdated(address indexed signer);
+    event EntryFeeUpdated(uint256 fee);
+    event TournamentCreated(uint256 indexed id, uint64 startTime, uint64 endTime, uint16 topN, uint16[] prizeBps, bool invertedWinCondition);
+    event Entered(uint256 indexed id, address indexed player, uint256 feePaid);
+    event ScoreSubmitted(uint256 indexed id, address indexed player, uint256 score);
+    event Finalized(uint256 indexed id, address[] winners);
+    event RewardClaimed(uint256 indexed id, address indexed player, uint256 amount);
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "NOT_OWNER");
+        _;
+    }
+
+    constructor(address _scoreSigner, uint256 _entryFee) {
+        require(_scoreSigner != address(0), "ZERO_SIGNER");
+        owner = msg.sender;
+        scoreSigner = _scoreSigner;
+        entryFee = _entryFee;
+        emit OwnerUpdated(owner);
+        emit ScoreSignerUpdated(_scoreSigner);
+        emit EntryFeeUpdated(_entryFee);
+    }
+
+    function setOwner(address _new) external onlyOwner {
+        require(_new != address(0), "ZERO_OWNER");
+        owner = _new;
+        emit OwnerUpdated(_new);
+    }
+
+    function setScoreSigner(address _signer) external onlyOwner {
+        require(_signer != address(0), "ZERO_SIGNER");
+        scoreSigner = _signer;
+        emit ScoreSignerUpdated(_signer);
+    }
+
+    function setEntryFee(uint256 _fee) external onlyOwner {
+        entryFee = _fee;
+        emit EntryFeeUpdated(_fee);
+    }
+
+    function createTournament(
+        uint64 startTime,
+        uint64 endTime,
+        uint16 topN,
+        uint16[] calldata prizeBps,
+        bool invertedWinCondition
+    ) external onlyOwner returns (uint256) {
+        require(startTime < endTime, "BAD_TIME");
+        require(topN > 0, "BAD_TOPN");
+        require(prizeBps.length == topN, "BPS_LEN_NEQ_TOPN");
+
+        uint256 sum;
+        for (uint256 i = 0; i < prizeBps.length; i++) sum += prizeBps[i];
+        require(sum == 10000, "BPS_NEQ_10000");
+
+        uint256 id = ++lastTournamentId;
+        Tournament storage t = tournaments[id];
+        t.id = id;
+        t.startTime = startTime;
+        t.endTime = endTime;
+        t.topN = topN;
+        t.finalized = false;
+        t.invertedWinCondition = invertedWinCondition;
+        t.totalPot = 0;
+        for (uint256 i = 0; i < prizeBps.length; i++) {
+            t.prizeBps.push(prizeBps[i]);
+        }
+
+        emit TournamentCreated(id, startTime, endTime, topN, prizeBps, invertedWinCondition);
+        return id;
+    }
+
+    /**
+     * Enter tournament by sending native token (msg.value must == entryFee).
+     * No approve step needed — value is sent directly.
+     */
+    function enterTournament(uint256 id) external payable {
+        Tournament storage t = tournaments[id];
+        require(t.id == id, "NO_TOURNAMENT");
+        require(block.timestamp >= t.startTime && block.timestamp <= t.endTime, "NOT_ACTIVE");
+        require(msg.value == entryFee, "WRONG_FEE");
+
+        PlayerInfo storage p = playerInfo[id][msg.sender];
+        if (!p.entered) {
+            p.entered = true;
+            participants[id].push(msg.sender);
+        }
+
+        t.totalPot += msg.value;
+        emit Entered(id, msg.sender, msg.value);
+    }
+
+    function submitScoreWithSignature(
+        uint256 id,
+        uint256 score,
+        uint256 nonce,
+        string calldata name,
+        string calldata metadata,
+        bytes calldata signature
+    ) external {
+        Tournament storage t = tournaments[id];
+        require(t.id == id, "NO_TOURNAMENT");
+        require(block.timestamp >= t.startTime && block.timestamp <= t.endTime, "NOT_ACTIVE");
+        require(!t.finalized, "FINALIZED");
+
+        PlayerInfo storage p = playerInfo[id][msg.sender];
+        require(p.entered, "NOT_ENTERED");
+
+        uint256 expectedNonce = playerNonces[id][msg.sender] + 1;
+        require(nonce == expectedNonce, "INVALID_NONCE");
+
+        bytes32 nameHash = keccak256(bytes(name));
+        bytes32 metaHash = keccak256(bytes(metadata));
+
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19Ethereum Signed Message:\n32",
+                keccak256(
+                    abi.encodePacked(
+                        SCORE_PREFIX_V2,
+                        id,
+                        msg.sender,
+                        score,
+                        nonce,
+                        block.chainid,
+                        nameHash,
+                        metaHash
+                    )
+                )
+            )
+        );
+
+        address recovered = _recoverSigner(digest, signature);
+        require(recovered == scoreSigner, "BAD_SIG");
+
+        playerNonces[id][msg.sender] = nonce;
+
+        bool improved;
+        if (!p.hasScore) {
+            improved = true;
+        } else if (t.invertedWinCondition) {
+            improved = score < p.bestScore;
+        } else {
+            improved = score > p.bestScore;
+        }
+
+        if (improved) {
+            p.hasScore = true;
+            p.bestScore = score;
+            emit ScoreSubmitted(id, msg.sender, score);
+        }
+    }
+
+    function finalize(uint256 id) external {
+        Tournament storage t = tournaments[id];
+        require(t.id == id, "NO_TOURNAMENT");
+        require(block.timestamp > t.endTime, "NOT_ENDED");
+        require(!t.finalized, "ALREADY_FINAL");
+
+        uint256 n = participants[id].length;
+        uint16 topN = t.topN;
+        address[] memory arr = participants[id];
+        bool inverted = t.invertedWinCondition;
+
+        for (uint16 i = 0; i < topN && i < n; i++) {
+            uint256 bestIdx = i;
+            uint256 bestVal = _sortValue(id, arr[bestIdx], inverted);
+            for (uint256 j = i + 1; j < n; j++) {
+                uint256 jVal = _sortValue(id, arr[j], inverted);
+                bool better = inverted ? jVal < bestVal : jVal > bestVal;
+                if (better) {
+                    bestIdx = j;
+                    bestVal = jVal;
+                }
+            }
+            if (bestIdx != i) {
+                address tmp = arr[i];
+                arr[i] = arr[bestIdx];
+                arr[bestIdx] = tmp;
+            }
+        }
+
+        address[] storage w = winners[id];
+        for (uint16 k = 0; k < topN && k < n; k++) {
+            w.push(arr[k]);
+        }
+
+        t.finalized = true;
+        emit Finalized(id, winners[id]);
+    }
+
+    function finalizeWithSignedWinners(
+        uint256 id,
+        address[] calldata winnerAddrs,
+        bytes calldata signature
+    ) external {
+        Tournament storage t = tournaments[id];
+        require(t.id == id, "NO_TOURNAMENT");
+        require(block.timestamp > t.endTime, "NOT_ENDED");
+        require(!t.finalized, "ALREADY_FINAL");
+        require(winnerAddrs.length == t.topN, "WINNER_COUNT_MISMATCH");
+
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19Ethereum Signed Message:\n32",
+                keccak256(
+                    abi.encodePacked(
+                        "PINBALL_FINALIZE:v1",
+                        id,
+                        block.chainid,
+                        t.topN,
+                        t.invertedWinCondition,
+                        winnerAddrs
+                    )
+                )
+            )
+        );
+        require(_recoverSigner(digest, signature) == scoreSigner, "BAD_FINALIZE_SIG");
+
+        address[] storage w = winners[id];
+        for (uint256 i = 0; i < winnerAddrs.length; i++) {
+            w.push(winnerAddrs[i]);
+        }
+
+        t.finalized = true;
+        emit Finalized(id, winners[id]);
+    }
+
+    /**
+     * Claim reward in native token — sends value directly via call().
+     */
+    function claimReward(uint256 id) external {
+        Tournament storage t = tournaments[id];
+        require(t.finalized, "NOT_FINAL");
+
+        PlayerInfo storage p = playerInfo[id][msg.sender];
+        require(!p.rewardClaimed, "CLAIMED");
+
+        uint16 rank = _rankOf(id, msg.sender);
+        require(rank > 0 && rank <= t.topN, "NOT_WINNER");
+
+        uint256 amount = (t.totalPot * t.prizeBps[rank - 1]) / 10000;
+        p.rewardClaimed = true;
+
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        require(success, "NATIVE_TRANSFER_FAIL");
+        emit RewardClaimed(id, msg.sender, amount);
+    }
+
+    function viewLeaderboard(
+        uint256 id,
+        uint256 offset,
+        uint256 limit
+    ) external view returns (address[] memory addrs, uint256[] memory scores) {
+        address[] memory arr = participants[id];
+        uint256 n = arr.length;
+        if (offset >= n) return (new address[](0), new uint256[](0));
+        uint256 end = offset + limit;
+        if (end > n) end = n;
+        uint256 len = end - offset;
+        addrs = new address[](len);
+        scores = new uint256[](len);
+        for (uint256 i = 0; i < len; i++) {
+            address a = arr[offset + i];
+            addrs[i] = a;
+            scores[i] = playerInfo[id][a].bestScore;
+        }
+    }
+
+    function getWinners(uint256 id) external view returns (address[] memory) {
+        return winners[id];
+    }
+
+    function getPrizeBps(uint256 id) external view returns (uint16[] memory) {
+        Tournament storage t = tournaments[id];
+        require(t.id == id, "NO_TOURNAMENT");
+        return t.prizeBps;
+    }
+
+    function _rankOf(uint256 id, address player) internal view returns (uint16) {
+        address[] storage w = winners[id];
+        for (uint16 i = 0; i < w.length; i++) {
+            if (w[i] == player) return i + 1;
+        }
+        return 0;
+    }
+
+    function _sortValue(uint256 id, address player, bool inverted) internal view returns (uint256) {
+        PlayerInfo storage p = playerInfo[id][player];
+        if (!p.hasScore) {
+            return inverted ? type(uint256).max : 0;
+        }
+        return p.bestScore;
+    }
+
+    function _recoverSigner(bytes32 digest, bytes memory sig) internal pure returns (address) {
+        require(sig.length == 65, "SIG_LEN");
+        bytes32 r;
+        bytes32 s;
+        uint8 v;
+        assembly {
+            r := mload(add(sig, 0x20))
+            s := mload(add(sig, 0x40))
+            v := byte(0, mload(add(sig, 0x60)))
+        }
+        if (v < 27) v += 27;
+        require(v == 27 || v == 28, "BAD_V");
+        return ecrecover(digest, v, r, s);
+    }
+}

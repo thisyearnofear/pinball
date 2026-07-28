@@ -6,6 +6,10 @@
  * - CLEAN: Keep ABIs minimal and explicit (only what the app calls).
  */
 
+/**
+ * ABI for TournamentManager (ERC-20 version).
+ * enterTournament uses approve + transferFrom under the hood.
+ */
 export const TOURNAMENT_MANAGER_ABI = [
   // Tournament info / config
   "function entryFee() view returns (uint256)",
@@ -26,7 +30,35 @@ export const TOURNAMENT_MANAGER_ABI = [
   "function submitScoreWithSignature(uint256 id, uint256 score, uint256 nonce, string name, string metadata, bytes signature)",
   "function claimReward(uint256 id)",
 
-  // Admin (not used by app UI, but useful for ops scripts / debugging)
+  // Admin
+  "function finalize(uint256 id)",
+] as const;
+
+/**
+ * ABI for TournamentManagerNative (native token version).
+ * enterTournament is payable — sends native value directly.
+ * No musd() function; otherwise identical interface.
+ */
+export const TOURNAMENT_MANAGER_NATIVE_ABI = [
+  // Tournament info / config
+  "function entryFee() view returns (uint256)",
+  "function scoreSigner() view returns (address)",
+  "function tournaments(uint256) view returns (uint256 id, uint64 startTime, uint64 endTime, uint16 topN, bool finalized, bool invertedWinCondition, uint256 totalPot)",
+  "function lastTournamentId() view returns (uint256)",
+  "function getPrizeBps(uint256 id) view returns (uint16[])",
+  "function getWinners(uint256 id) view returns (address[])",
+  "function viewLeaderboard(uint256 id, uint256 offset, uint256 limit) view returns (address[] addrs, uint256[] scores)",
+
+  // Player state
+  "function playerInfo(uint256,address) view returns (bool entered, bool hasScore, uint256 bestScore, bool rewardClaimed)",
+  "function playerNonces(uint256,address) view returns (uint256)",
+
+  // Write functions
+  "function enterTournament(uint256 id) payable",
+  "function submitScoreWithSignature(uint256 id, uint256 score, uint256 nonce, string name, string metadata, bytes signature)",
+  "function claimReward(uint256 id)",
+
+  // Admin
   "function finalize(uint256 id)",
 ] as const;
 
