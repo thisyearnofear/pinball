@@ -133,7 +133,22 @@ export function AttractMode({ height = 240 }: { height?: number }) {
     };
   }, []);
 
-  if (failed) return null;
+  if (failed) return (
+    <div
+      style={{
+        height,
+        borderRadius: 12,
+        border: "1px solid rgba(255, 255, 255, 0.08)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 12,
+        color: "rgba(255, 255, 255, 0.3)",
+      }}
+    >
+      Demo preview unavailable
+    </div>
+  );
 
   return (
     <div

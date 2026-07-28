@@ -12,6 +12,8 @@ type Props = {
   rows: Row[];
   playerAddress?: string;
   loading?: boolean;
+  loadError?: boolean;
+  onRetry?: () => void;
   /** Kamikaze mode: lower score (drain time in ms) wins; scores shown as seconds */
   inverted?: boolean;
 };
@@ -108,8 +110,42 @@ export function LeaderboardModal(props: Props) {
           padding: spacing['2xl'],
           color: colors.text.muted,
           fontSize: typography.size.md,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: spacing.md,
         }}>
-          No scores yet. Be the first to play!
+          {props.loadError ? (
+            <>
+              <span>Could not load scores.</span>
+              {props.onRetry && (
+                <button
+                  onClick={props.onRetry}
+                  style={{
+                    padding: "6px 16px", borderRadius: radius.md, border: "none",
+                    background: colors.accent.primary, color: "#fff",
+                    fontWeight: typography.weight.bold, fontSize: typography.size.sm, cursor: "pointer",
+                  }}
+                >
+                  Retry
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <span>No scores yet. Be the first to play!</span>
+              <button
+                onClick={props.onClose}
+                style={{
+                  padding: "6px 16px", borderRadius: radius.md, border: "none",
+                  background: colors.accent.primary, color: "#fff",
+                  fontWeight: typography.weight.bold, fontSize: typography.size.sm, cursor: "pointer",
+                }}
+              >
+                Play Now
+              </button>
+            </>
+          )}
         </div>
       )}
     </Modal>

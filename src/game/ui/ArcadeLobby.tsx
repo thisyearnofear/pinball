@@ -168,13 +168,6 @@ function ArcadeCard(props: CardProps) {
     return "ghost" as const;
   }
 
-  function isDisabled() {
-    if (!props.isConnected) return false;
-    if (props.isActive && !props.entered) return false;
-    if (props.isActive && props.entered) return false;
-    return true;
-  }
-
   function handleAction(e: React.MouseEvent) {
     e.stopPropagation();
     if (!props.isConnected) {
@@ -212,7 +205,7 @@ function ArcadeCard(props: CardProps) {
       </div>
 
       <div className={styles.actions}>
-        <Button variant={buttonVariant()} disabled={isDisabled()} onClick={handleAction}>
+        <Button variant={buttonVariant()} onClick={handleAction}>
           {buttonLabel()}
         </Button>
       </div>

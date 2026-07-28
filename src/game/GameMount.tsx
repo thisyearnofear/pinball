@@ -131,6 +131,7 @@ export default function GameMount(props: Props) {
   const mountedRef = useRef<MountedGame | null>(null);
   const worldHandleRef = useRef<WorldHandle | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [mountError, setMountError] = useState<string | null>(null);
   const [hud, setHud] = useState<{ score: number; balls: number; multiplier: number }>({
     score: 0,
     balls: BALLS_PER_GAME,
@@ -287,6 +288,7 @@ export default function GameMount(props: Props) {
 
     run().catch((e) => {
       console.error("Failed to mount game:", e);
+      setMountError(e?.message ?? "Failed to load the game engine.");
     });
 
     return () => {
@@ -685,6 +687,37 @@ export default function GameMount(props: Props) {
             3D world unavailable — playing in 2D mode
           </div>
         )}
+        {mountError ? (
+          <div
+            style={{
+              width: "100%",
+              height: "75vh",
+              border: "1px solid rgba(239, 68, 68, 0.3)",
+              borderRadius: 8,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 16,
+              background: "rgba(239, 68, 68, 0.05)",
+            }}
+          >
+            <div style={{ fontSize: 32 }}>🎯</div>
+            <div style={{ color: "#fca5a5", fontSize: 14, textAlign: "center", maxWidth: 300 }}>
+              {mountError}
+            </div>
+            <button
+              onClick={() => { setMountError(null); window.location.reload(); }}
+              style={{
+                padding: "8px 20px", borderRadius: 8, border: "none",
+                background: "rgba(99, 102, 241, 0.8)", color: "#fff",
+                fontWeight: 700, fontSize: 13, cursor: "pointer",
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
         <div
           ref={containerRef}
           style={{
@@ -696,6 +729,7 @@ export default function GameMount(props: Props) {
             background: "transparent",
           }}
         />
+        )}
         <div
           style={{
             position: "absolute",

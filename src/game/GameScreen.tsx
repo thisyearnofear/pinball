@@ -64,7 +64,7 @@ function GameScreenInner() {
   const activityFeed = useActivityFeed();
   const { stats, recordRun } = usePlayerStats();
   const walletPort = useWalletPort();
-  const { tournament, setTournament, isLoading: isLoadingTournament, refresh: refreshTournament, enterTournament: doEnterTournament } = useTournament(address, walletPort);
+  const { tournament, setTournament, isLoading: isLoadingTournament, loadError, refresh: refreshTournament, enterTournament: doEnterTournament } = useTournament(address, walletPort);
 
   const [mode, setMode] = useState<"practice" | "tournament">("practice");
   const [gameMode, setGameMode] = useState<GameMode>(() => {
@@ -171,7 +171,19 @@ function GameScreenInner() {
   function startTournament() {
     setMode("tournament");
     if (!canStartTournamentRun) {
-      toast.addToast(isConnected ? "Enter the active tournament first." : "Connect your wallet first.", "warning");
+      if (!isConnected) {
+        toast.addToast("Connect your wallet using the button in the header, then try again.", "warning");
+      } else {
+        doEnterTournament()
+          .then(() => {
+            toast.addToast("Entered tournament! Starting your run...", "success");
+            setShowCelebration(false);
+            if (!hasSeenTutorial()) setShowTutorial(true);
+            setRunKey((k) => k + 1);
+            setView("game");
+          })
+          .catch((e: any) => toast.addToast(e?.message ?? "Failed to enter tournament. Check your MATIC balance.", "error"));
+      }
       return;
     }
     setShowCelebration(false);
@@ -262,6 +274,26 @@ function GameScreenInner() {
 
           <main style={{ padding: spacing.lg }}>
             {view === "lobby" && <InstallPrompt />}
+            {view === "lobby" && loadError && (
+              <div style={{
+                maxWidth: 900, margin: "0 auto 14px", padding: "10px 16px",
+                borderRadius: 10, border: "1px solid rgba(239, 68, 68, 0.45)",
+                background: "rgba(239, 68, 68, 0.1)", fontSize: 13, color: "#fca5a5",
+                display: "flex", alignItems: "center", gap: 12,
+              }}>
+                <span style={{ flex: 1 }}>⚠ {loadError}</span>
+                <button
+                  onClick={() => refreshTournament()}
+                  style={{
+                    padding: "5px 14px", borderRadius: 8, border: "none",
+                    background: "rgba(239, 68, 68, 0.3)", color: "#fff",
+                    fontWeight: 700, fontSize: 13, cursor: "pointer",
+                  }}
+                >
+                  Retry
+                </button>
+              </div>
+            )}
             {view === "lobby" && (
               <ArcadeLobby
                 tournaments={getAllTournaments()}
@@ -349,7 +381,7 @@ function GameScreenInner() {
           {activeModal === "how" && <HowToPlayModal onClose={() => setActiveModal(null)} />}
           {activeModal === "about" && <AboutModal onClose={() => setActiveModal(null)} />}
           {activeModal === "leaderboard" && (
-            <LeaderboardModal onClose={() => setActiveModal(null)} rows={tournament.leaderboard} playerAddress={address} loading={isLoadingTournament} inverted={tournament.invertedWinCondition} />
+            <LeaderboardModal onClose={() => setActiveModal(null)} rows={tournament.leaderboard} playerAddress={address} loading={isLoadingTournament} loadError={Boolean(loadError)} onRetry={refreshTournament} inverted={tournament.invertedWinCondition} />
           )}
 
           {showTutorial && <TutorialOverlay gameMode={effectiveGameMode} onClose={() => { markTutorialSeen(); setShowTutorial(false); }} />}

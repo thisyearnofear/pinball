@@ -45,10 +45,12 @@ const INITIAL_STATE: TournamentState = {
 export function useTournament(address: string | undefined, walletPort: WalletPort | null) {
   const [tournament, setTournament] = useState<TournamentState>(INITIAL_STATE);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
       setIsLoading(true);
+      setLoadError(null);
       const tournamentId = await getActiveTournamentId();
       const [fee, info, winners] = await Promise.all([
         getEntryFee(),
@@ -89,6 +91,7 @@ export function useTournament(address: string | undefined, walletPort: WalletPor
       });
     } catch (e: any) {
       console.error(e);
+      setLoadError(e?.message ?? 'Failed to load tournament data. Check your connection and try again.');
     } finally {
       setIsLoading(false);
     }
@@ -108,6 +111,7 @@ export function useTournament(address: string | undefined, walletPort: WalletPor
     tournament,
     setTournament,
     isLoading,
+    loadError,
     refresh,
     enterTournament: doEnterTournament,
   };
