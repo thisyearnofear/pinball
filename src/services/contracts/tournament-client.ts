@@ -146,7 +146,14 @@ export async function enterTournament(tournamentId: number, wallet: WalletPort):
     if (tournamentInfo.finalized) throw new Error('Tournament is already finalized');
 
     if (balance < fee) {
-      throw new Error(`Insufficient ${tokenSymbol} balance. Need ${ethers.formatUnits(fee, tokenDecimals)} ${tokenSymbol}`);
+      const needed = ethers.formatUnits(fee, tokenDecimals);
+      if (native) {
+        throw new Error(
+          `Insufficient ${tokenSymbol} balance. Need ${needed} ${tokenSymbol} to enter. ` +
+          `Get free test ${tokenSymbol} from the Polygon Amoy faucet: https://faucet.polygon.technology/`
+        );
+      }
+      throw new Error(`Insufficient ${tokenSymbol} balance. Need ${needed} ${tokenSymbol} to enter.`);
     }
 
     if (native) {
