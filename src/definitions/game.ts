@@ -157,6 +157,10 @@ export type KamikazeState = {
     rubberBandBias: number;          // current rubber-band probability (0-1, 0.5 = neutral)
     completedBallScores: number[];   // final score per drained ball; game score = best (lowest)
     scoreFrozen: boolean;            // true between drain and next ball launch
+    // ── Player agency (Phase 2) ──
+    diveQueued: boolean;             // player swiped down: next drain bypasses the machine's save
+    storedPowerUp: PowerUpType | null; // earned from trigger-group completion; player chooses when to deploy
+    underworldCharge: number;        // 0-1 charge toward forcing an underworld dive
 };
 
 /**

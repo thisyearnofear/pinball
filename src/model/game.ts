@@ -44,7 +44,7 @@ import {
     createKamikazeState, updateAIFlippers, getKamikazeScore, getBestKamikazeScore, applyPowerUpEffects,
     hasPowerUp, rollPowerUp, activatePowerUp, cleanupPowerUps, shouldSpawnCrate,
     recordCrateSpawn, getRandomTaunt, nudgeBall, isDrainBlocked, rollEmergencySave,
-    updateRubberBand,
+    updateRubberBand, bankStoredPowerUp, deployStoredPowerUp,
 } from "@/model/kamikaze";
 import { setKamikazeMode as setBumperKamikazeMode, setGhostMode as setBumperGhostMode, setFrenzyMode as setBumperFrenzyMode } from "@/renderers/bumper-renderer";
 import { setKamikazeMode as setFlipperKamikazeMode } from "@/renderers/flipper-renderer";
@@ -247,6 +247,9 @@ export const init = async (
                         // Kamikaze Ball: completing a trigger group feeds the machine (+2500ms penalty)
                         if (game.kamikaze?.enabled) {
                             game.kamikaze.totalTriggerGroupCompletions++;
+                            // Player agency: bank a deployable munition + build underworld charge
+                            bankStoredPowerUp(game.kamikaze, game.rng ?? Math.random);
+                            game.kamikaze.underworldCharge = Math.min(1, game.kamikaze.underworldCharge + 0.5);
                         }
                         switch (triggerGroup.triggerTarget) {
                             default:
@@ -614,7 +617,11 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
                     aiSaveFeedback();
                     continue;
                 }
-                if (rollEmergencySave(game.kamikaze, now, lastNudgeAt, rng)) {
+                // Dive (player agency): a queued dive bypasses the machine's
+                // emergency save entirely, then clears itself.
+                const diving = game.kamikaze.diveQueued;
+                game.kamikaze.diveQueued = false;
+                if (!diving && rollEmergencySave(game.kamikaze, now, lastNudgeAt, rng)) {
                     // Machine emergency save — kick the ball back up into the playfield
                     const towardCenter = Math.sign(table.width / 2 - ball.body.position.x);
                     const sideKick = towardCenter * (2 + rng() * 4);
@@ -728,6 +735,9 @@ function startRound(game: GameDef): void {
         game.kamikaze.aiFlipperReleaseAt = [];
         game.kamikaze.aiSavesUsed = 0;
         game.kamikaze.scoreFrozen = false;
+        game.kamikaze.diveQueued = false;
+        game.kamikaze.storedPowerUp = null;
+        game.kamikaze.underworldCharge = 0;
 
         if (ghostActive) {
             ghostActive = false;
@@ -761,13 +771,38 @@ export function getBallCount(): number {
 /**
  * Kamikaze Ball: nudge the ball toward a tap location.
  * Called from the UI layer on touch/click events.
+ * `power` (1-3) scales the impulse for charged hold-nudges.
  */
-export const nudgeBallToward = (tapX: number, tapY: number): void => {
+export const nudgeBallToward = (tapX: number, tapY: number, power = 1): void => {
     if (!gameRef?.kamikaze?.enabled || balls.length === 0) return;
     const ballBody = balls[0].body;
     lastNudgeAt = window.performance.now();
     recordReplayEvent(tickCount, "nudge", tapX, tapY);
-    nudgeBall(engine, ballBody, tapX, tapY);
+    nudgeBall(engine, ballBody, tapX, tapY, power);
+};
+
+/**
+ * Kamikaze Ball: queue a deliberate dive. The next drain bypasses the
+ * machine's emergency save (but not an active Force Field).
+ */
+export const queueDive = (): boolean => {
+    if (!gameRef?.kamikaze?.enabled) return false;
+    gameRef.kamikaze.diveQueued = true;
+    recordReplayEvent(tickCount, "dive");
+    return true;
+};
+
+/**
+ * Kamikaze Ball: deploy the banked munition (player agency).
+ * Returns the deployed power-up type, or null if none was stored.
+ */
+export const deployStoredMunition = (): number | null => {
+    if (!gameRef?.kamikaze?.enabled) return null;
+    const type = deployStoredPowerUp(gameRef.kamikaze, window.performance.now());
+    if (type !== null) {
+        recordReplayEvent(tickCount, "deploy");
+    }
+    return type;
 };
 
 /**

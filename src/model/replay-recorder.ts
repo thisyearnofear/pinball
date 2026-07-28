@@ -12,6 +12,8 @@ export type ReplayEventType =
     | "R+" | "R-"   // right flipper down/up
     | "bump"        // table bump
     | "nudge"       // kamikaze tap-to-nudge (x/y = tap position)
+    | "dive"        // kamikaze deliberate dive (bypass machine save)
+    | "deploy"      // kamikaze deploy banked munition
     | "spawn"       // ball spawned
     | "drain";      // ball drained
 

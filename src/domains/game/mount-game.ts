@@ -5,9 +5,9 @@ import type { Size } from "zcanvas";
 import type { GameDef, GameMessages } from "@/definitions/game";
 import { ActorTypes, FRAME_RATE, GameSounds } from "@/definitions/game";
 
-import { init, scaleCanvas, setFlipperState, bumpTable, update, panViewport, setPaused, getBallPosition, getBallCount, nudgeBallToward, isKamikazeMode } from "@/model/game";
+import { init, scaleCanvas, setFlipperState, bumpTable, update, panViewport, setPaused, getBallPosition, getBallCount, nudgeBallToward, isKamikazeMode, queueDive, deployStoredMunition } from "@/model/game";
 import SpriteCache from "@/utils/sprite-cache";
-import { createInputController } from "@/utils/input-controller";
+import { createInputController, attachKamikazeGestures } from "@/utils/input-controller";
 import * as haptics from "@/utils/haptics";
 
 export type MountGameOptions = {
@@ -35,6 +35,13 @@ export type MountGameOptions = {
    * Fired when the engine surfaces high-signal messages (e.g. MULTIBALL).
    */
   onMessage?: (message: GameMessages | null) => void;
+  /**
+   * Kamikaze Ball gesture callbacks (Phase 2 agency). Fired on charge
+   * (hold), dive (swipe down), and deploy (double-tap / D key).
+   */
+  onCharge?: (power: number | null) => void;
+  onDive?: () => void;
+  onDeploy?: () => void;
 };
 
 export type MountedGame = {
@@ -151,6 +158,9 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
       setPaused(gameRef.paused);
     },
     onNudge: (x: number, y: number) => {
+      // Kamikaze nudging is owned by the pointer gesture controller
+      // (charged nudge / dive / deploy); skip the legacy click path.
+      if (isKamikazeMode()) return;
       const world = clientToWorld(x, y);
       if (!world) return;
       nudgeBallToward(world.x, world.y);
@@ -158,6 +168,43 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     },
     isKamikaze: () => isKamikazeMode(),
   }, root);
+
+  // ── Kamikaze Ball agency gestures (Phase 2) ──────────────────────
+  // Shared handlers so pointer gestures and keyboard agree.
+  function nudgeAt(clientX: number, clientY: number, power = 1) {
+    const world = clientToWorld(clientX, clientY);
+    if (!world) return;
+    nudgeBallToward(world.x, world.y, power);
+    haptics.bump();
+  }
+  function dive() {
+    if (!isKamikazeMode()) return;
+    queueDive();
+    haptics.bump();
+    opts.onDive?.();
+  }
+  function deploy() {
+    if (!isKamikazeMode()) return;
+    const type = deployStoredMunition();
+    if (type !== null) {
+      haptics.flip();
+      opts.onDeploy?.();
+    }
+  }
+
+  let detachGestures: (() => void) | null = null;
+
+  function handleKamikazeKey(e: KeyboardEvent) {
+    if (!isKamikazeMode() || opts.attract) return;
+    if (e.type !== "keydown" || e.repeat) return;
+    if (e.code === "ArrowDown") {
+      dive();
+      e.preventDefault();
+    } else if (e.code === "KeyD") {
+      deploy();
+      e.preventDefault();
+    }
+  }
 
   function resize() {
     if (!inited || !tableSize) return;
@@ -184,17 +231,8 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     const bindTouch = (el: HTMLElement, isLeft: boolean) => {
       el.addEventListener("touchstart", (e) => {
         if (isKamikazeMode()) {
-          // Kamikaze Ball: tap to nudge
-          const t = e.touches[0];
-          if (t) {
-            const world = clientToWorld(t.clientX, t.clientY);
-            if (world) {
-              nudgeBallToward(world.x, world.y);
-              haptics.bump();
-            }
-          }
-          e.preventDefault();
-          e.stopPropagation();
+          // Kamikaze Ball: input is owned by the pointer gesture controller
+          // (charged nudge / dive / deploy). Let pointer events pass through.
           return;
         }
         inputController.handleTouchStart(isLeft, e);
@@ -242,6 +280,18 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
 
     if (!opts.attract) {
       inputController.addListeners();
+      window.addEventListener("keydown", handleKamikazeKey);
+      // Kamikaze Ball agency gestures (charged nudge / dive / deploy).
+      if (!detachGestures) {
+        detachGestures = attachKamikazeGestures(root, {
+          onNudge: nudgeAt,
+          onDive: dive,
+          onDeploy: deploy,
+          onChargeTick: (power) => opts.onCharge?.(power),
+          onChargeEnd: () => opts.onCharge?.(null),
+          shouldHandle: () => isKamikazeMode() && !gameRef.paused,
+        });
+      }
     }
     window.addEventListener("resize", resize);
     resize();
@@ -258,6 +308,9 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
 
     window.removeEventListener("resize", resize);
     inputController.removeListeners();
+    window.removeEventListener("keydown", handleKamikazeKey);
+    detachGestures?.();
+    detachGestures = null;
 
     try {
       canvas.pause(true);

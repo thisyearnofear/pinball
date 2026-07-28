@@ -50,6 +50,9 @@ export function createKamikazeState(difficulty: AIDifficulty = "medium"): Kamika
         rubberBandBias: 0.5, // neutral start
         completedBallScores: [],
         scoreFrozen: false,
+        diveQueued: false,
+        storedPowerUp: null,
+        underworldCharge: 0,
     };
 }
 
@@ -264,6 +267,28 @@ export function applyPowerUpEffects(
     // Flipper Jam: handled in AI flipper skip
 }
 
+/**
+ * Player agency: completing a trigger group banks one player munition that
+ * the player can deploy at a moment of their choosing (double-tap / D key).
+ * The banked munition rolls from the player power-up pool.
+ */
+export function bankStoredPowerUp(state: KamikazeState, rng: () => number = Math.random): void {
+    if (state.storedPowerUp !== null) return; // only one stored at a time
+    state.storedPowerUp = PLAYER_POWERUPS[Math.floor(rng() * PLAYER_POWERUPS.length)];
+}
+
+/**
+ * Deploy the banked munition. Returns the deployed type, or null if none
+ * was stored. Clears the bank.
+ */
+export function deployStoredPowerUp(state: KamikazeState, now: number): PowerUpType | null {
+    const type = state.storedPowerUp;
+    if (type === null) return null;
+    state.storedPowerUp = null;
+    activatePowerUp(state, type, "player", now);
+    return type;
+}
+
 // ── Crate spawning ─────────────────────────────────────────────
 
 /**
@@ -300,12 +325,16 @@ export function getRandomTaunt(drain: boolean, rng: () => number = Math.random):
 /**
  * Apply a nudge impulse to the ball toward the tap location.
  * This is the primary Kamikaze Ball control.
+ *
+ * `power` (1-3) scales the impulse so a charged hold-nudge hits up to 3x
+ * harder than a quick tap. Default 1 keeps the classic tap behaviour.
  */
 export function nudgeBall(
     engine: IPhysicsEngine,
     ballBody: Body | null,
     tapX: number,
-    tapY: number
+    tapY: number,
+    power = 1
 ): void {
     if (!ballBody) return;
 
@@ -314,8 +343,8 @@ export function nudgeBall(
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist === 0) return;
 
-    // Small impulse, normalized
-    const force = 4; // tunable
+    // Small impulse, normalized; scaled by charge power
+    const force = 4 * power; // tunable
     const impulse = {
         x: (dx / dist) * force,
         y: (dy / dist) * force,

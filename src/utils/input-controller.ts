@@ -103,3 +103,122 @@ export function createInputController(cb: Callbacks, nudgeTarget?: HTMLElement) 
     handleTouchEnd,
   };
 }
+
+/**
+ * Kamikaze Ball gesture controller (Phase 2 player agency).
+ *
+ * Maps pointer gestures on the play surface to three deliberate verbs so the
+ * mode stops being "tap and hope":
+ *   - HOLD then release: charged nudge toward the release point (up to 3x).
+ *   - SWIPE DOWN: deliberate dive (bypass the machine's emergency save).
+ *   - DOUBLE-TAP: deploy the banked munition.
+ * A quick tap still performs a normal nudge.
+ *
+ * `shouldHandle` gates input (e.g. false when paused / not in kamikaze mode).
+ */
+export type KamikazeGestures = {
+  onNudge: (x: number, y: number, power: number) => void;
+  onDive: () => void;
+  onDeploy: () => void;
+  onChargeTick?: (power: number) => void;
+  onChargeEnd?: () => void;
+  shouldHandle: () => boolean;
+};
+
+const HOLD_TO_CHARGE_MS = 160;
+const CHARGE_FULL_MS = 900; // time from hold-start to max power
+const MAX_POWER = 3;
+const SWIPE_DOWN_PX = 60;
+const DOUBLE_TAP_MS = 280;
+
+export function attachKamikazeGestures(target: HTMLElement, g: KamikazeGestures): () => void {
+  let downX = 0;
+  let downY = 0;
+  let downAt = 0;
+  let charging = false;
+  let chargeRaf = 0;
+  let lastTapAt = 0;
+  let swiped = false;
+
+  function powerFor(elapsed: number): number {
+    if (elapsed < HOLD_TO_CHARGE_MS) return 1;
+    const charged = (elapsed - HOLD_TO_CHARGE_MS) / CHARGE_FULL_MS;
+    return 1 + Math.min(1, charged) * (MAX_POWER - 1);
+  }
+
+  function startCharge() {
+    charging = true;
+    const loop = () => {
+      if (!charging) return;
+      g.onChargeTick?.(powerFor(window.performance.now() - downAt));
+      chargeRaf = requestAnimationFrame(loop);
+    };
+    chargeRaf = requestAnimationFrame(loop);
+  }
+
+  function stopCharge() {
+    charging = false;
+    cancelAnimationFrame(chargeRaf);
+    g.onChargeEnd?.();
+  }
+
+  function onDown(e: PointerEvent) {
+    if (!g.shouldHandle()) return;
+    downX = e.clientX;
+    downY = e.clientY;
+    downAt = window.performance.now();
+    swiped = false;
+    startCharge();
+  }
+
+  function onMove(e: PointerEvent) {
+    if (!charging || swiped) return;
+    if (e.clientY - downY > SWIPE_DOWN_PX) {
+      swiped = true;
+      stopCharge();
+      g.onDive();
+    }
+  }
+
+  function onUp(e: PointerEvent) {
+    if (!g.shouldHandle()) return;
+    const wasCharging = charging;
+    stopCharge();
+    if (swiped) { swiped = false; return; }
+
+    const now = window.performance.now();
+    const held = now - downAt;
+
+    // Double-tap detection (only for quick taps, not charged releases)
+    if (held < HOLD_TO_CHARGE_MS && now - lastTapAt < DOUBLE_TAP_MS) {
+      lastTapAt = 0;
+      g.onDeploy();
+      return;
+    }
+    lastTapAt = held < HOLD_TO_CHARGE_MS ? now : 0;
+
+    // Charged release: nudge toward the release point with scaled power.
+    const power = wasCharging ? powerFor(held) : 1;
+    g.onNudge(e.clientX, e.clientY, power);
+  }
+
+  function onCancel() {
+    if (charging) stopCharge();
+    swiped = false;
+  }
+
+  target.addEventListener("pointerdown", onDown);
+  target.addEventListener("pointermove", onMove);
+  target.addEventListener("pointerup", onUp);
+  target.addEventListener("pointercancel", onCancel);
+  target.addEventListener("pointerleave", onCancel);
+
+  return () => {
+    stopCharge();
+    target.removeEventListener("pointerdown", onDown);
+    target.removeEventListener("pointermove", onMove);
+    target.removeEventListener("pointerup", onUp);
+    target.removeEventListener("pointercancel", onCancel);
+    target.removeEventListener("pointerleave", onCancel);
+  };
+}

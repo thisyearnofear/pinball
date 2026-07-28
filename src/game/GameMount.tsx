@@ -146,6 +146,12 @@ export default function GameMount(props: Props) {
   const [slowMoActive, setSlowMoActive] = useState(false);
   const [momentum, setMomentum] = useState(0.5);
   const [momentumShift, setMomentumShift] = useState<"player" | "machine" | null>(null);
+  // Phase 2 player agency
+  const [chargePower, setChargePower] = useState<number | null>(null);
+  const [storedMunition, setStoredMunition] = useState<string | null>(null);
+  const [underworldCharge, setUnderworldCharge] = useState(0);
+  const [agencyBanner, setAgencyBanner] = useState<string | null>(null);
+  const agencyBannerClearRef = useRef(0);
   const momentumShiftClearRef = useRef(0);
   const [ripples, setRipples] = useState<{ id: number; x: number; y: number }[]>([]);
   const rippleIdRef = useRef(0);
@@ -191,6 +197,13 @@ export default function GameMount(props: Props) {
     const id = ++rippleIdRef.current;
     setRipples((prev) => [...prev.slice(-4), { id, x: e.clientX - rect.left, y: e.clientY - rect.top }]);
     window.setTimeout(() => setRipples((prev) => prev.filter((r) => r.id !== id)), 600);
+  }
+
+  // Phase 2 agency: transient banner for deliberate verbs (dive / deploy).
+  function showAgencyBanner(text: string) {
+    setAgencyBanner(text);
+    window.clearTimeout(agencyBannerClearRef.current);
+    agencyBannerClearRef.current = window.setTimeout(() => setAgencyBanner(null), 1400);
   }
   const [worldFallback, setWorldFallback] = useState(false);
   const [worldLoadingProgress, setWorldLoadingProgress] = useState<number | null>(null);
@@ -248,6 +261,13 @@ export default function GameMount(props: Props) {
         container: containerRef.current,
         game: initialGame,
         touchscreen: true,
+        onCharge: (power) => setChargePower(power),
+        onDive: () => showAgencyBanner("突っ込む · DIVE!"),
+        onDeploy: () => {
+          const g = gameRef.current;
+          const active = g?.kamikaze?.activePowerUps.find((p) => p.side === "player");
+          showAgencyBanner(active ? `発動 · ${POWERUP_NAMES[active.type]}!` : "発動 · MUNITION DEPLOYED!");
+        },
         onMessage: (msg: GameMessages | null) => {
           if (!msg) return;
           setMessage(String(msg));
@@ -372,6 +392,13 @@ export default function GameMount(props: Props) {
       setSlowMoActive((prev) => (ts < 0.85) !== prev ? ts < 0.85 : prev);
       if (g.kamikaze?.enabled) {
         setMomentum(g.kamikaze.rubberBandBias);
+        // Phase 2 agency: surface banked munition + underworld charge
+        const banked = g.kamikaze.storedPowerUp;
+        setStoredMunition((prev) => {
+          const next = banked !== null ? POWERUP_NAMES[banked] : null;
+          return prev === next ? prev : next;
+        });
+        setUnderworldCharge((prev) => (Math.abs(prev - g.kamikaze!.underworldCharge) < 0.01 ? prev : g.kamikaze!.underworldCharge));
         const shift = consumeMomentumShift();
         if (shift) {
           setMomentumShift(shift);
@@ -856,7 +883,41 @@ export default function GameMount(props: Props) {
                   <span style={{ color: "#f87171" }}>MACHINE</span>
                 </div>
               </div>
-              <div style={{ fontSize: 10, opacity: 0.7, marginTop: 4 }}>Tap to nudge toward drain</div>
+              {/* Banked munition: double-tap / D to deploy */}
+              <div style={{ marginTop: 6 }}>
+                <div style={{ fontSize: 9, opacity: 0.6, marginBottom: 3, letterSpacing: "0.15em" }}>MUNITION</div>
+                {storedMunition ? (
+                  <div style={{
+                    display: "inline-block", padding: "2px 8px", borderRadius: 6,
+                    background: "rgba(34,197,94,0.18)", border: "1px solid rgba(34,197,94,0.6)",
+                    color: "#4ade80", fontSize: 10, fontWeight: 700,
+                  }}>
+                    {storedMunition} · tap×2
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 10, opacity: 0.4 }}>— clear a target bank to earn one</div>
+                )}
+              </div>
+              {/* Underworld charge meter */}
+              <div style={{ marginTop: 6 }}>
+                <div style={{ fontSize: 9, opacity: 0.6, marginBottom: 3, letterSpacing: "0.15em" }}>
+                  UNDERWORLD {underworldCharge >= 1 ? "· READY" : ""}
+                </div>
+                <div style={{ position: "relative", height: 6, borderRadius: 3, overflow: "hidden", background: "rgba(255,255,255,0.12)" }}>
+                  <div style={{
+                    position: "absolute", left: 0, top: 0, bottom: 0,
+                    width: `${underworldCharge * 100}%`,
+                    background: underworldCharge >= 1
+                      ? "linear-gradient(90deg, #a855f7, #f0abfc)"
+                      : "linear-gradient(90deg, #7c3aed, #a855f7)",
+                    transition: "width 400ms ease",
+                    boxShadow: underworldCharge >= 1 ? "0 0 8px rgba(168,85,247,0.8)" : "none",
+                  }} />
+                </div>
+              </div>
+              <div style={{ fontSize: 9, opacity: 0.6, marginTop: 6, lineHeight: 1.5 }}>
+                HOLD charge · SWIPE↓ dive · tap×2 deploy
+              </div>
             </>
           ) : (
             <>
@@ -949,6 +1010,60 @@ export default function GameMount(props: Props) {
             }}
           >
             {kamikazeMessage}
+          </div>
+        )}
+        {/* Charge ring: grows while holding to build a power nudge */}
+        {kamikazeActive && chargePower !== null && chargePower > 1.05 && (
+          <div
+            aria-hidden
+            style={{
+              position: "absolute",
+              bottom: 24,
+              left: "50%",
+              transform: "translateX(-50%)",
+              zIndex: 11,
+              pointerEvents: "none",
+              textAlign: "center",
+            }}
+          >
+            <div style={{
+              width: 56, height: 56, borderRadius: "50%",
+              margin: "0 auto",
+              border: `3px solid ${chargePower >= 2.9 ? "#f0abfc" : "#22c55e"}`,
+              boxShadow: `0 0 ${8 + chargePower * 6}px ${chargePower >= 2.9 ? "rgba(240,171,252,0.7)" : "rgba(34,197,94,0.6)"}`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 16, fontWeight: 800,
+              color: chargePower >= 2.9 ? "#f0abfc" : "#4ade80",
+              transition: "box-shadow 120ms ease",
+            }}>
+              {chargePower.toFixed(1)}×
+            </div>
+            <div style={{ fontSize: 9, opacity: 0.7, marginTop: 4, letterSpacing: "0.15em" }}>CHARGE</div>
+          </div>
+        )}
+        {/* Agency banner: dive / deploy feedback */}
+        {agencyBanner && (
+          <div
+            aria-hidden
+            style={{
+              position: "absolute",
+              top: "30%",
+              left: "50%",
+              transform: "translateX(-50%)",
+              padding: "8px 20px",
+              borderRadius: 10,
+              background: "rgba(0,0,0,0.75)",
+              border: "1px solid rgba(74,222,128,0.6)",
+              color: "#4ade80",
+              fontSize: 16,
+              fontWeight: 800,
+              letterSpacing: "0.08em",
+              pointerEvents: "none",
+              zIndex: 11,
+              animation: "momentumShiftIn 1.4s ease-out forwards",
+            }}
+          >
+            {agencyBanner}
           </div>
         )}
       </div>
