@@ -16,7 +16,7 @@ import { GhostRace } from "./ui/GhostRace";
 import { StabilityMeter } from "./ui/StabilityMeter";
 import { KanjiWatermark } from "./ui/KanjiWatermark";
 import { type WorldReaction } from "@/presentation/world-reactor";
-import { isKamikazeMode, getLastTaunt, getTickCount } from "@/model/game";
+import { isKamikazeMode, getLastTaunt, getTickCount, getTimeScale, consumeMomentumShift } from "@/model/game";
 import { createKamikazeState, POWERUP_NAMES, type AIDifficulty } from "@/model/kamikaze";
 import type { PowerUpSide } from "@/definitions/game";
 import { mulberry32, createRunSeed } from "@/utils/rng";
@@ -143,6 +143,10 @@ export default function GameMount(props: Props) {
   const [machineSaving, setMachineSaving] = useState(false);
   const [kamikazeMessage, setKamikazeMessage] = useState<string | null>(null);
   const [activePowerUps, setActivePowerUps] = useState<{ name: string; side: PowerUpSide; remainingMs: number }[]>([]);
+  const [slowMoActive, setSlowMoActive] = useState(false);
+  const [momentum, setMomentum] = useState(0.5);
+  const [momentumShift, setMomentumShift] = useState<"player" | "machine" | null>(null);
+  const momentumShiftClearRef = useRef(0);
   const [ripples, setRipples] = useState<{ id: number; x: number; y: number }[]>([]);
   const rippleIdRef = useRef(0);
   // Victory FX: incrementing id keys the flash/shake/punch animations; confetti auto-clears.
@@ -363,6 +367,19 @@ export default function GameMount(props: Props) {
       );
       setKamikazeActive(isKamikazeMode());
 
+      // Slow-mo + momentum (Phase 1 immersion)
+      const ts = getTimeScale();
+      setSlowMoActive((prev) => (ts < 0.85) !== prev ? ts < 0.85 : prev);
+      if (g.kamikaze?.enabled) {
+        setMomentum(g.kamikaze.rubberBandBias);
+        const shift = consumeMomentumShift();
+        if (shift) {
+          setMomentumShift(shift);
+          window.clearTimeout(momentumShiftClearRef.current);
+          momentumShiftClearRef.current = window.setTimeout(() => setMomentumShift(null), 2200);
+        }
+      }
+
       // Kamikaze power-up HUD: active effects per side with countdown
       if (g.kamikaze?.enabled) {
         const now = performance.now();
@@ -575,6 +592,12 @@ export default function GameMount(props: Props) {
             80% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
             100% { transform: translate(-50%, -50%) scale(1.1); opacity: 0; }
           }
+          @keyframes momentumShiftIn {
+            0% { transform: translateY(-12px) scale(0.9); opacity: 0; }
+            18% { transform: translateY(0) scale(1.03); opacity: 1; }
+            78% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-8px) scale(0.98); opacity: 0; }
+          }
         `}</style>
         {victoryFx > 0 && victoryTimeText && (
           <>
@@ -734,6 +757,58 @@ export default function GameMount(props: Props) {
           }}
         />
         )}
+        {/* Slow-motion cinematic FX: vignette + letterbox bars */}
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 4,
+            pointerEvents: "none",
+            opacity: slowMoActive ? 1 : 0,
+            transition: "opacity 220ms ease",
+            boxShadow: "inset 0 0 120px 40px rgba(0,0,0,0.75)",
+            background: "radial-gradient(ellipse at center, transparent 55%, rgba(20,10,30,0.35) 100%)",
+          }}
+        >
+          <div style={{ position: "absolute", left: 0, right: 0, top: 0, height: 26, background: "linear-gradient(180deg, rgba(0,0,0,0.85), transparent)" }} />
+          <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 26, background: "linear-gradient(0deg, rgba(0,0,0,0.85), transparent)" }} />
+          <div style={{
+            position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)",
+            fontSize: 11, letterSpacing: "0.4em", color: "rgba(255,255,255,0.5)", fontWeight: 700,
+          }}>スロー</div>
+        </div>
+        {/* Momentum shift banner */}
+        {momentumShift && (
+          <div
+            aria-hidden
+            style={{
+              position: "absolute",
+              top: "38%",
+              left: 0,
+              right: 0,
+              zIndex: 8,
+              pointerEvents: "none",
+              textAlign: "center",
+              animation: "momentumShiftIn 2.2s ease-out forwards",
+            }}
+          >
+            <div style={{
+              display: "inline-block",
+              padding: "10px 28px",
+              borderRadius: 10,
+              background: momentumShift === "player" ? "rgba(34,197,94,0.18)" : "rgba(239,68,68,0.18)",
+              border: `1px solid ${momentumShift === "player" ? "rgba(34,197,94,0.7)" : "rgba(239,68,68,0.7)"}`,
+              color: momentumShift === "player" ? "#4ade80" : "#f87171",
+              fontWeight: 800,
+              fontSize: 20,
+              letterSpacing: "0.12em",
+              textShadow: "0 0 12px rgba(0,0,0,0.8)",
+            }}>
+              {momentumShift === "player" ? "風向きが変わる · THE WIND SHIFTS" : "鉄壁 · THE MACHINE HARDENS"}
+            </div>
+          </div>
+        )}
         <div
           style={{
             position: "absolute",
@@ -756,6 +831,30 @@ export default function GameMount(props: Props) {
               <div>Balls: {hud.balls}</div>
               <div style={{ marginTop: 6 }}>
                 <StabilityMeter value={stability} machineSaving={machineSaving} />
+              </div>
+              {/* Momentum tug-of-war: player (green) vs machine (red) */}
+              <div style={{ marginTop: 6 }}>
+                <div style={{ fontSize: 9, opacity: 0.6, marginBottom: 3, letterSpacing: "0.15em" }}>MOMENTUM</div>
+                <div style={{ position: "relative", height: 8, borderRadius: 4, overflow: "hidden", background: "rgba(255,255,255,0.12)" }}>
+                  <div style={{
+                    position: "absolute", left: 0, top: 0, bottom: 0,
+                    width: `${momentum * 100}%`,
+                    background: "linear-gradient(90deg, #22c55e, #4ade80)",
+                    transition: "width 500ms ease",
+                    boxShadow: "0 0 8px rgba(34,197,94,0.6)",
+                  }} />
+                  <div style={{
+                    position: "absolute", right: 0, top: 0, bottom: 0,
+                    width: `${(1 - momentum) * 100}%`,
+                    background: "linear-gradient(90deg, #f87171, #ef4444)",
+                    transition: "width 500ms ease",
+                    boxShadow: "0 0 8px rgba(239,68,68,0.6)",
+                  }} />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, opacity: 0.5, marginTop: 2 }}>
+                  <span style={{ color: "#4ade80" }}>YOU</span>
+                  <span style={{ color: "#f87171" }}>MACHINE</span>
+                </div>
               </div>
               <div style={{ fontSize: 10, opacity: 0.7, marginTop: 4 }}>Tap to nudge toward drain</div>
             </>

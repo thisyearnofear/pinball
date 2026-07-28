@@ -89,7 +89,31 @@ const ENGINE_INCREMENT = 1000 / FRAME_RATE;
 let accumulator = 0;
 let tickCount = 0; // fixed-timestep tick counter (replay keying)
 
+// ── Slow-motion / time dilation ─────────────────────────────────
+let timeScale = 1;
+let targetTimeScale = 1;
+let slowMoExpiresAt = 0;
+
 export const getTickCount = (): number => tickCount;
+export const getTimeScale = (): number => timeScale;
+
+/** Request a slow-motion window. Eases in/out automatically. */
+export const requestSlowMo = (durationMs: number, target: number = 0.35): void => {
+    targetTimeScale = target;
+    slowMoExpiresAt = window.performance.now() + durationMs;
+};
+
+// ── Momentum (rubber-band) exposure ─────────────────────────────
+let prevRubberBandBias = 0.5;
+export type MomentumShift = "player" | "machine" | null;
+let pendingMomentumShift: MomentumShift = null;
+
+export const getMomentum = (): number => gameRef?.kamikaze?.rubberBandBias ?? 0.5;
+export const consumeMomentumShift = (): MomentumShift => {
+    const s = pendingMomentumShift;
+    pendingMomentumShift = null;
+    return s;
+};
 
 // test/sim hook
 export const getPhysicsEngine = (): IPhysicsEngine => engine;
@@ -207,6 +231,7 @@ export const init = async (
                                 const { type, side } = rollPowerUp(kamikaze, game.rng ?? Math.random);
                                 activatePowerUp(kamikaze, type, side, resolveNow);
                                 messageHandler(side === "player" ? GameMessages.POWERUP_PLAYER : GameMessages.POWERUP_MACHINE);
+                                requestSlowMo(800, 0.25);
                             }, 1200);
                         }
                     }
@@ -230,6 +255,7 @@ export const init = async (
                                 game.underworld = true;
                                 awardPoints(game, AwardablePoints.UNDERWORLD_UNLOCKED);
                                 messageHandler(GameMessages.UNDERWORLD_UNLOCKED);
+                                requestSlowMo(1000, 0.2);
                                 setTimeout(() => {
                                     const { x, y } = pair.bodyB.velocity;
                                     if (Math.abs(x) < 2 && Math.abs(y) < 2) {
@@ -418,7 +444,38 @@ export const update = (timestamp: DOMHighResTimeStamp, framesSinceLastRender: nu
     // at a FRAME_RATE of 60 fps, the increment is 16.66 ms, a double increment of 33.33 ms
     // should cater for a refresh rate of 30 Hz, which is lower than we expect of modern displays
 
-    const delta = ENGINE_INCREMENT * framesSinceLastRender;
+    // Ease timeScale toward its target (slow-mo ramps in/out smoothly)
+    const nowMs = window.performance.now();
+    if (nowMs > slowMoExpiresAt && targetTimeScale !== 1) {
+        targetTimeScale = 1;
+    }
+    timeScale += (targetTimeScale - timeScale) * 0.08;
+    if (Math.abs(timeScale - 1) < 0.01) timeScale = 1;
+
+    // Auto slow-mo: ball approaching drain in kamikaze mode
+    if (gameRef?.kamikaze?.enabled && targetTimeScale === 1 && timeScale === 1) {
+        const b = balls[0];
+        if (b) {
+            const tableBottom = (!tableHasUnderworld || gameRef.underworld) ? table.height : table.underworld;
+            const proximity = b.bounds.top / tableBottom;
+            if (proximity > 0.82 && b.body.velocity.y > 0) {
+                requestSlowMo(600, 0.3);
+            }
+        }
+    }
+
+    // Detect momentum shifts (rubber-band bias crossed a threshold)
+    if (gameRef?.kamikaze?.enabled) {
+        const bias = gameRef.kamikaze.rubberBandBias;
+        if (prevRubberBandBias <= 0.5 && bias > 0.5) {
+            pendingMomentumShift = "player";
+        } else if (prevRubberBandBias >= 0.5 && bias < 0.5) {
+            pendingMomentumShift = "machine";
+        }
+        prevRubberBandBias = bias;
+    }
+
+    const delta = ENGINE_INCREMENT * framesSinceLastRender * timeScale;
     accumulator += delta;
 
     // avoid spiral of death when lag is huge
@@ -654,6 +711,9 @@ function endRound(game: GameDef, timeout = 3500): void {
 function startRound(game: GameDef): void {
     createBall(table.poppers[0].left, table.poppers[0].top - BALL_HEIGHT);
     setFrequency();
+    timeScale = 1;
+    targetTimeScale = 1;
+    prevRubberBandBias = 0.5;
 
     if (game.balls === BALLS_PER_GAME) {
         roundStart = window.performance.now();
