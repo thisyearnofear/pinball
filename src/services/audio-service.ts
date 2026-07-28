@@ -133,6 +133,80 @@ export const duckMusic = ( durationMs = 700, level = 0.25 ): void => {
     masterGain.gain.linearRampToValueAtTime( 1, now + Math.max( 0.1, durationMs / 1000 ));
 };
 
+// ── Japanese identity sounds (synthesized, no new assets) ────────
+// Taiko: a deep drum thump for bumper hits during Kamikaze mode.
+// Furin: a glass wind-chime ring for the winning drain.
+let taikoNoiseBuffer: AudioBuffer | null = null;
+
+function getNoiseBuffer(): AudioBuffer | null {
+    if ( !taikoNoiseBuffer && audioContext ) {
+        const len = Math.floor( audioContext.sampleRate * 0.1 );
+        taikoNoiseBuffer = audioContext.createBuffer( 1, len, audioContext.sampleRate );
+        const data = taikoNoiseBuffer.getChannelData( 0 );
+        for ( let i = 0; i < len; i++ ) data[i] = Math.random() * 2 - 1;
+    }
+    return taikoNoiseBuffer;
+}
+
+export const playTaikoHit = (): void => {
+    if ( !inited || fxMuted || suppressed || !audioContext || !masterGain ) {
+        return;
+    }
+    const t = audioContext.currentTime;
+    // Body thump: pitched-down sine.
+    const osc = audioContext.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime( 95, t );
+    osc.frequency.exponentialRampToValueAtTime( 45, t + 0.16 );
+    const g = audioContext.createGain();
+    g.gain.setValueAtTime( 0.9, t );
+    g.gain.exponentialRampToValueAtTime( 0.001, t + 0.22 );
+    osc.connect( g ).connect( masterGain );
+    osc.start( t );
+    osc.stop( t + 0.25 );
+    // Stick attack: short band-passed noise burst.
+    const noiseBuf = getNoiseBuffer();
+    if ( noiseBuf ) {
+        const noise = audioContext.createBufferSource();
+        noise.buffer = noiseBuf;
+        const nf = audioContext.createBiquadFilter();
+        nf.type = "bandpass";
+        nf.frequency.value = 900;
+        nf.Q.value = 0.8;
+        const ng = audioContext.createGain();
+        ng.gain.setValueAtTime( 0.35, t );
+        ng.gain.exponentialRampToValueAtTime( 0.001, t + 0.06 );
+        noise.connect( nf ).connect( ng ).connect( masterGain );
+        noise.start( t );
+        noise.stop( t + 0.08 );
+    }
+};
+
+export const playFurinChime = (): void => {
+    if ( !inited || fxMuted || suppressed || !audioContext || !masterGain ) {
+        return;
+    }
+    const t = audioContext.currentTime;
+    // Two-ish detuned high sine partials with a long ring — a glass furin.
+    const partials = [
+        { freq: 2637, gain: 0.16, dur: 1.4 },
+        { freq: 3951, gain: 0.10, dur: 1.1 },
+        { freq: 1975, gain: 0.08, dur: 1.6 },
+    ];
+    for ( const p of partials ) {
+        const osc = audioContext.createOscillator();
+        osc.type = "sine";
+        osc.frequency.value = p.freq * ( 1 + ( Math.random() - 0.5 ) * 0.004 );
+        const g = audioContext.createGain();
+        g.gain.setValueAtTime( 0.0001, t );
+        g.gain.exponentialRampToValueAtTime( p.gain, t + 0.012 );
+        g.gain.exponentialRampToValueAtTime( 0.0001, t + p.dur );
+        osc.connect( g ).connect( masterGain );
+        osc.start( t );
+        osc.stop( t + p.dur + 0.05 );
+    }
+};
+
 /**
  * enqueue a track from the available pool for playing
  */

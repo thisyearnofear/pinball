@@ -7,6 +7,24 @@
  * - ORGANIZED: Grouped by semantic category.
  */
 
+/**
+ * Japanese accent palette — 藍 (ai) indigo, 朱 (shu) vermilion, 金 (kin) gold.
+ * Used to give Kamikaze Ball a deliberate washi/ink/vermilion character.
+ * - ai:   the existing indigo brand accent (Japanese indigo dye)
+ * - shu:  vermilion, maps to the hostile-machine red (the torii color)
+ * - kin:  gold, for scoring / victory / the divine wind
+ */
+export const jp = {
+  ai: "#6366f1",
+  aiSoft: "rgba(99, 102, 241, 0.35)",
+  shu: "#e34234",
+  shuSoft: "rgba(227, 66, 52, 0.35)",
+  kin: "#d4a017",
+  kinSoft: "rgba(212, 160, 23, 0.35)",
+  sakura: "#f7a8c4",
+  washi: "#f5efe6",
+} as const;
+
 export const colors = {
   background: {
     primary: '#0a0a0f',

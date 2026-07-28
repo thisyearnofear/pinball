@@ -103,8 +103,9 @@ export function getOptimalSplatUrl(
     return world.radUrl;
   }
   
-  // Default to .spz (optimized for web)
-  return world.spzUrl;
+  // Default to .spz (optimized for web). The caller only invokes this when a
+  // 3D scene exists, so the fallback is purely for type safety.
+  return world.spzUrl ?? '';
 }
 
 /**

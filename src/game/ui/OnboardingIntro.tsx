@@ -10,9 +10,9 @@ type Props = {
 
 const slides = [
   {
-    icon: "🎯",
+    icon: "🌸",
     title: "Kamikaze Ball",
-    body: "The world's first verifiable arcade. In Kamikaze mode the machine fights to keep the ball alive — you win by draining it fast. Tap to nudge, collect power-ups, and outsmart the table.",
+    body: "神風 — the divine wind. Like a falling cherry blossom, the ball's noble end is the win: in Kamikaze mode the machine fights to keep it aloft, and you win by draining it fast. Tap to nudge, collect power-ups, and outsmart the table.",
   },
   {
     icon: "🕹️",

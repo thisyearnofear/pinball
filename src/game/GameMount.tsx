@@ -14,6 +14,7 @@ import { WorldLoadingOverlay, WorldLoadingIndicator } from "./ui/WorldLoadingOve
 import { CelebrationParticles } from "./ui/CelebrationParticles";
 import { GhostRace } from "./ui/GhostRace";
 import { StabilityMeter } from "./ui/StabilityMeter";
+import { KanjiWatermark } from "./ui/KanjiWatermark";
 import { type WorldReaction } from "@/presentation/world-reactor";
 import { isKamikazeMode, getLastTaunt, getTickCount } from "@/model/game";
 import { createKamikazeState, POWERUP_NAMES, type AIDifficulty } from "@/model/kamikaze";
@@ -216,7 +217,7 @@ export default function GameMount(props: Props) {
       if (cancelled) return;
 
       // Check if we should render a Marble world
-      const shouldRenderWorld = isSplatSupported() && !prefersReducedMotion();
+      const shouldRenderWorld = isSplatSupported() && !prefersReducedMotion() && Boolean((getWorldById(props.worldId || '') || MARBLE_WORLDS.HOBBITON).spzUrl);
       
       if (shouldRenderWorld && worldContainerRef.current) {
         const worldKey = props.worldId || 'HOBBITON';
@@ -254,11 +255,11 @@ export default function GameMount(props: Props) {
             return;
           }
           const kamikazeMessages: Record<number, string> = {
-            [GameMessages.KAMIKAZE_START]: "KAMIKAZE BALL — DRAIN IT!",
-            [GameMessages.SAVED]: "SAVED! The machine won't let you lose.",
-            [GameMessages.POWERUP_ROULETTE]: "MUNITIONS CRATE! Rolling…",
-            [GameMessages.POWERUP_PLAYER]: "MUNITION ACTIVATED!",
-            [GameMessages.POWERUP_MACHINE]: "COUNTERMEASURE DEPLOYED!",
+            [GameMessages.KAMIKAZE_START]: "神風 — DRAIN IT!",
+            [GameMessages.SAVED]: "The machine catches the blossom.",
+            [GameMessages.POWERUP_ROULETTE]: "Munitions crate! Rolling…",
+            [GameMessages.POWERUP_PLAYER]: "Munition activated!",
+            [GameMessages.POWERUP_MACHINE]: "Countermeasure deployed!",
           };
           const kamMsg = msg === GameMessages.AI_TAUNT
             ? `MACHINE: "${getLastTaunt()}"`
@@ -548,6 +549,7 @@ export default function GameMount(props: Props) {
         style={{ position: "relative" }}
         onClick={spawnRipple}
       >
+        {props.gameMode === "kamikaze" && !mountError && <KanjiWatermark size="table" />}
         <style>{`
           @keyframes kamikazeRipple { from { transform: translate(-50%, -50%) scale(0.3); opacity: 0.8; } to { transform: translate(-50%, -50%) scale(2); opacity: 0; } }
           @keyframes victoryShake {
@@ -721,6 +723,8 @@ export default function GameMount(props: Props) {
         <div
           ref={containerRef}
           style={{
+            position: "relative",
+            zIndex: 1,
             width: "100%",
             height: "75vh",
             border: "1px solid rgba(255,255,255,0.15)",
@@ -747,7 +751,7 @@ export default function GameMount(props: Props) {
         >
           {kamikazeActive ? (
             <>
-              <div style={{ color: "#ff4444", fontWeight: "bold" }}>KAMIKAZE BALL</div>
+              <div style={{ color: "#ff4444", fontWeight: "bold" }}>神風 KAMIKAZE BALL</div>
               <div>Time: {formatGameScore(hud.score, true)}</div>
               <div>Balls: {hud.balls}</div>
               <div style={{ marginTop: 6 }}>

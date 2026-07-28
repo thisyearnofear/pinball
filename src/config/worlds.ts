@@ -9,7 +9,8 @@ export interface WorldPalette {
 export interface MarbleWorld {
   id: string;
   name: string;
-  spzUrl: string;
+  /** Gaussian-splat scene URL. Omit for a stylized 2D world (uses `gradient`). */
+  spzUrl?: string;
   radUrl?: string;
   position: [number, number, number];
   rotation: [number, number, number];
@@ -121,6 +122,27 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
       overview: { position: [0, 18, 18], target: [0, 0, 0] },
       drain: { position: [0, 1, 6], target: [0, -3, 0] },
       side: { position: [12, 4, 0], target: [0, 0, 0] },
+    },
+  },
+  SAKURA_SHRINE: {
+    id: 'sakura-shrine',
+    name: 'Sakura Shrine',
+    position: [0, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+    description: 'Vermilion torii gates beneath falling cherry blossoms. The divine wind carries the ball home.',
+    gradient: 'linear-gradient(180deg, #2b1230 0%, #4a1e3a 45%, #6e2b3f 75%, #8a3b3a 100%)',
+    palette: {
+      primary: '#e34234',
+      hover: '#f0544a',
+      gradient: 'linear-gradient(135deg, #e34234 0%, #d4a017 100%)',
+      glow: '0 0 20px rgba(227, 66, 52, 0.4)',
+      muted: 'rgba(227, 66, 52, 0.3)',
+    },
+    camera: {
+      plunger: { position: [0, 2, 8], target: [0, 0, 0] },
+      overview: { position: [0, 15, 15], target: [0, 0, 0] },
+      drain: { position: [0, 1, 5], target: [0, -2, 0] },
     },
   },
   HAUNTED_HOUSE: {

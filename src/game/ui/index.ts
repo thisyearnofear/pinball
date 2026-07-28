@@ -29,6 +29,8 @@ export { CabinetFrame } from './CabinetFrame';
 export { ArcadeLobby } from './ArcadeLobby';
 export { AppHeader } from './AppHeader';
 export { AmbientBackground } from './AmbientBackground';
+export { KanjiWatermark } from './KanjiWatermark';
+export { SakuraPetals } from './SakuraPetals';
 export { ActivityFeedProvider, ActivityFeedPanel, useActivityFeed } from './ActivityFeed';
 export type { ActivityKind } from './ActivityFeed';
 export { StabilityMeter } from './StabilityMeter';

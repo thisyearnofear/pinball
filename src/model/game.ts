@@ -38,7 +38,7 @@ import Rect from "@/model/rect";
 import TriggerGroup from "@/model/trigger-group";
 import { createEngine } from "@/model/physics/engine";
 import type { IPhysicsEngine, CollisionEvent } from "@/model/physics/engine";
-import { enqueueTrack, setFrequency, playSoundEffect, duckMusic } from "@/services/audio-service";
+import { enqueueTrack, setFrequency, playSoundEffect, duckMusic, playTaikoHit, playFurinChime } from "@/services/audio-service";
 import * as haptics from "@/utils/haptics";
 import {
     createKamikazeState, updateAIFlippers, getKamikazeScore, getBestKamikazeScore, applyPowerUpEffects,
@@ -179,6 +179,10 @@ export const init = async (
                     awardPoints(game, AwardablePoints.BUMPER);
                     (actorMap.get(pair.bodyA.id) as Bumper).collided = true;
                     playSoundEffect(GameSounds.BUMPER);
+                    // Kamikaze: the machine's defense lands like a taiko drum.
+                    if (game.kamikaze?.enabled) {
+                        playTaikoHit();
+                    }
                     break;
                 }
                 case ActorLabels.TRIGGER:
@@ -563,6 +567,7 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
                 }
                 // Drain successful! Record score and show taunt
                 playSoundEffect(GameSounds.DRAIN_VICTORY);
+                playFurinChime();
                 duckMusic(1000, 0.2);
                 haptics.drainVictory();
                 messageHandler(GameMessages.DRAINED);

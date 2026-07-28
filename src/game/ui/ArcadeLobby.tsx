@@ -56,6 +56,15 @@ export function ArcadeLobby(props: Props) {
       <div className={styles.container}>
         <div className={styles.marquee}>
           <NeonTitle text="KAMIKAZE BALL" size="lg" color="#6366f1" />
+          <div style={{
+            textAlign: "center",
+            marginTop: -2,
+            marginBottom: 6,
+            fontFamily: "'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif",
+            fontSize: 15,
+            letterSpacing: "0.6em",
+            color: "rgba(212, 160, 23, 0.75)",
+          }} aria-hidden="true">神風</div>
           <p className={styles.marqueeSubtitle}>
             Drain-to-win pinball — the machine fights back
           </p>
@@ -70,7 +79,9 @@ export function ArcadeLobby(props: Props) {
             onClick={(e) => { burstOnElement(e.currentTarget, { count: 10, colors: ["#ef4444", "#f87171", "#fbbf24"] }); props.onSelectGameMode("kamikaze"); }}
           >
             <span className={styles.modeBadgeFlagship}>FLAGSHIP</span>
-            <span className={styles.modeName}>Kamikaze</span>
+            <span className={styles.modeName}>
+              Kamikaze <span style={{ fontFamily: "'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif", color: "#e34234", fontSize: "1.1em" }} aria-hidden="true">神風</span>
+            </span>
             <span className={styles.modeDesc}>Drain the ball. The machine fights back. Fastest drain wins.</span>
           </button>
           <button
@@ -195,7 +206,7 @@ function ArcadeCard(props: CardProps) {
         <div className={`${styles.name} ${props.isActive ? styles.nameActive : styles.nameInactive}`}>
           {props.tournament.name}
           <span className={`${styles.modeBadge} ${props.tournament.mode === "kamikaze" ? styles.modeBadgeKamikaze : styles.modeBadgeClassic}`}>
-            {props.tournament.mode === "kamikaze" ? "KAMIKAZE" : "CLASSIC"}
+            {props.tournament.mode === "kamikaze" ? "神風 KAMIKAZE" : "CLASSIC"}
           </span>
         </div>
         <div className={styles.meta}>

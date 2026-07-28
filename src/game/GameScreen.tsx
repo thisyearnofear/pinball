@@ -22,6 +22,7 @@ import {
   OnboardingIntro,
   CRTOverlay, ArcadeLobby, AppHeader,
   AmbientBackground, ActivityFeedProvider, useActivityFeed,
+  SakuraPetals, KanjiWatermark,
 } from "@/game/ui";
 import { burstAt } from "@/utils/burst-fx";
 import { ActivityFeedPanel } from "./ui/ActivityFeed";
@@ -262,6 +263,7 @@ function GameScreenInner() {
       <ScorePopupProvider>
         <div style={{ minHeight: "100vh", background: colors.background.primary, position: "relative" }}>
           <AmbientBackground />
+          {view === "lobby" && effectiveGameMode === "kamikaze" && <SakuraPetals />}
           <div style={{ position: "relative", zIndex: 1 }}>
           <AppHeader
             view={view}

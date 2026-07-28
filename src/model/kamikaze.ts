@@ -284,9 +284,11 @@ export function recordCrateSpawn(state: KamikazeState, now: number, rng: () => n
 }
 
 // ── Machine taunts ──────────────────────────────────────────────
-
-const AI_TAUNTS_SAVE = ["SAVED!", "NICE TRY", "I WILL NOT LET YOU LOSE", "PATHETIC"];
-const AI_TAUNTS_DRAIN = ["NOOO", "HOW?", "REKT", "IMPOSSIBLE"];
+// Voice of the machine — a samurai-adjacent adversary that refuses to let
+// the blossom fall. Kanji marks the key moments (無駄 on a save, 神風 on a
+// drain); the rest stays in English with a poetic edge.
+const AI_TAUNTS_SAVE = ["無駄 — futile", "The blossom does not fall yet", "I will not let you fall", "Not today"];
+const AI_TAUNTS_DRAIN = ["神風! Divine wind!", "The blossom falls...", "Gone with the wind", "...impossible"];
 
 export function getRandomTaunt(drain: boolean, rng: () => number = Math.random): string {
     const pool = drain ? AI_TAUNTS_DRAIN : AI_TAUNTS_SAVE;
