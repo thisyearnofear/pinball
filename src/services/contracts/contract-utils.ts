@@ -10,9 +10,30 @@ import type { WalletPort } from "@/domains/wallet/wallet-port";
  * - CLEAN: explicit separation of read (public RPC) vs write (wallet runner).
  */
 
-export function getPublicProvider(): ethers.JsonRpcProvider {
-  const { rpcUrlPublic } = getContractsConfig();
-  return new ethers.JsonRpcProvider(rpcUrlPublic);
+// Backup public RPCs for Polygon Amoy (chain 80002). The primary comes from
+// env; these are fallbacks so a single endpoint going down doesn't break reads.
+const AMOY_FALLBACK_RPCS = [
+  "https://polygon-amoy.drpc.org",
+  "https://polygon-amoy-bor-rpc.publicnode.com",
+];
+
+let cachedProvider: ethers.FallbackProvider | null = null;
+
+export function getPublicProvider(): ethers.FallbackProvider {
+  if (cachedProvider) return cachedProvider;
+
+  const { rpcUrlPublic, chainId } = getContractsConfig();
+  // staticNetwork prevents ethers from auto-detecting the network on every
+  // call (which retries infinitely when the node is down).
+  const opts = { staticNetwork: ethers.Network.from(chainId) };
+
+  const urls = [rpcUrlPublic, ...AMOY_FALLBACK_RPCS.filter((u) => u !== rpcUrlPublic)];
+  const providers = urls.map((url) => new ethers.JsonRpcProvider(url, chainId, opts));
+
+  // quorum: 1 returns as soon as any provider answers, so a downed endpoint
+  // can't stall reads waiting for a second matching response.
+  cachedProvider = new ethers.FallbackProvider(providers, chainId, { quorum: 1 });
+  return cachedProvider;
 }
 
 export function getPublicContract(address: string, abi: readonly string[]): ethers.Contract {
