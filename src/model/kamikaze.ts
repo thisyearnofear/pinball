@@ -53,6 +53,7 @@ export function createKamikazeState(difficulty: AIDifficulty = "medium"): Kamika
         diveQueued: false,
         storedPowerUp: null,
         underworldCharge: 0,
+        drainStreak: 0,
     };
 }
 
@@ -115,7 +116,10 @@ export function updateAIFlippers(
     if (hasPowerUp(state, PowerUpType.FLIPPER_JAM, now)) return;
 
     const ironDome = hasPowerUp(state, PowerUpType.IRON_DOME, now);
-    const accuracy = ironDome ? 1.0 : state.aiAccuracy; // Iron Dome = perfect
+    const sakuraStorm = hasPowerUp(state, PowerUpType.SAKURA_STORM, now);
+    // Iron Dome = perfect aim. Sakura Storm = the petals blind the machine,
+    // slashing its accuracy so it flails and lets the ball through.
+    const accuracy = ironDome ? 1.0 : (sakuraStorm ? state.aiAccuracy * 0.3 : state.aiAccuracy);
 
     for (let i = 0; i < flippers.length; i++) {
         const flipper = flippers[i];
@@ -148,30 +152,36 @@ const PLAYER_POWERUPS: PowerUpType[] = [
     PowerUpType.HOMING_WARHEAD,
     PowerUpType.FLIPPER_JAM,
     PowerUpType.GHOST_BALL,
+    PowerUpType.SAKURA_STORM,
 ];
 
 const MACHINE_POWERUPS: PowerUpType[] = [
     PowerUpType.IRON_DOME,
     PowerUpType.FORCE_FIELD,
     PowerUpType.BUMPER_FRENZY,
+    PowerUpType.KAMIS_WRATH,
 ];
 
 const POWERUP_DURATION_MS: Record<PowerUpType, number> = {
     [PowerUpType.HOMING_WARHEAD]: 4000,
     [PowerUpType.FLIPPER_JAM]: 3000,
     [PowerUpType.GHOST_BALL]: 3000,
+    [PowerUpType.SAKURA_STORM]: 3500,
     [PowerUpType.IRON_DOME]: 5000,
     [PowerUpType.FORCE_FIELD]: 4000,
     [PowerUpType.BUMPER_FRENZY]: 4000,
+    [PowerUpType.KAMIS_WRATH]: 4500,
 };
 
 export const POWERUP_NAMES: Record<PowerUpType, string> = {
     [PowerUpType.HOMING_WARHEAD]: "Homing Warhead",
     [PowerUpType.FLIPPER_JAM]: "Flipper Jam",
     [PowerUpType.GHOST_BALL]: "Ghost Ball",
+    [PowerUpType.SAKURA_STORM]: "Sakura Storm",
     [PowerUpType.IRON_DOME]: "Iron Dome",
     [PowerUpType.FORCE_FIELD]: "Force Field",
     [PowerUpType.BUMPER_FRENZY]: "Bumper Frenzy",
+    [PowerUpType.KAMIS_WRATH]: "Kami's Wrath",
 };
 
 /**
@@ -260,7 +270,22 @@ export function applyPowerUpEffects(
         engine.launchBall(ballBody, { x: 0, y: pullForce });
     }
 
-    // Ghost Ball: handled in collision detection (skip bumper collisions)
+    // Kami's Wrath: the god of the table hurls the ball. Accelerate it toward
+    // ~1.8x normal speed with a sideways jitter, making it far harder to drain
+    // and feeding the machine. Impulse is proportional to keep control stable.
+    if (hasPowerUp(state, PowerUpType.KAMIS_WRATH, now)) {
+        const vx = ballBody.velocity.x;
+        const vy = ballBody.velocity.y;
+        const speed = Math.hypot(vx, vy) || 1;
+        const jitterX = (Math.random() - 0.5) * 0.6;
+        const boost = 0.12;
+        engine.launchBall(ballBody, {
+            x: (vx / speed) * boost + jitterX,
+            y: (vy / speed) * boost,
+        });
+    }
+
+    // Ghost Ball / Sakura Storm: handled in collision detection (skip bumper collisions)
     // Bumper Frenzy: handled in bumper collision (extra bounce)
     // Force Field: handled in drain detection (block drain)
     // Iron Dome: handled in AI flipper accuracy
@@ -317,6 +342,15 @@ const AI_TAUNTS_DRAIN = ["神風! Divine wind!", "The blossom falls...", "Gone w
 
 export function getRandomTaunt(drain: boolean, rng: () => number = Math.random): string {
     const pool = drain ? AI_TAUNTS_DRAIN : AI_TAUNTS_SAVE;
+    return pool[Math.floor(rng() * pool.length)];
+}
+// Per-element voices (Phase 3 anthropomorphization):
+// Sentinels = bumpers, Guards = flippers, Gate = the drain.
+const SENTINEL_TAUNTS = ["番兵: Begone!", "番兵: Not through us.", "番兵: The wind dies here."];
+const GUARD_TAUNTS = ["衛士: We hold the line.", "衛士: You shall not pass.", "衛士: The gate stays shut."];
+const GATE_TAUNTS = ["門: Come, little blossom...", "門: The wind calls you home.", "門: Fall. Be free."];
+export function getElementTaunt(element: "sentinel" | "guard" | "gate", rng: () => number = Math.random): string {
+    const pool = element === "sentinel" ? SENTINEL_TAUNTS : element === "guard" ? GUARD_TAUNTS : GATE_TAUNTS;
     return pool[Math.floor(rng() * pool.length)];
 }
 

@@ -79,6 +79,10 @@ export enum GameMessages {
     POWERUP_PLAYER,
     POWERUP_MACHINE,
     AI_TAUNT,
+    // Phase 3 immersion
+    SAKURA_STORM,     // player power-up: petals blind the machine
+    KAMIS_WRATH,      // machine power-up: the god hurls the ball
+    UNSTOPPABLE,      // streak: 3 consecutive drains without a save
 };
 
 export enum GameSounds {
@@ -125,10 +129,12 @@ export enum PowerUpType {
     HOMING_WARHEAD,    // Ball gets pulled toward drain
     FLIPPER_JAM,       // AI flippers freeze
     GHOST_BALL,        // Ball phases through bumpers
+    SAKURA_STORM,      // Petals blind the machine: ball phases through bumpers AND AI flips erratically
     // Machine countermeasures (keep ball alive)
     IRON_DOME,         // AI flippers become perfect
     FORCE_FIELD,       // Barrier over drain
     BUMPER_FRENZY,     // All bumpers activate
+    KAMIS_WRATH,       // The god of the table hurls the ball: speed doubles, harder to drain
 };
 
 export type PowerUpSide = "player" | "machine";
@@ -161,6 +167,8 @@ export type KamikazeState = {
     diveQueued: boolean;             // player swiped down: next drain bypasses the machine's save
     storedPowerUp: PowerUpType | null; // earned from trigger-group completion; player chooses when to deploy
     underworldCharge: number;        // 0-1 charge toward forcing an underworld dive
+    // ── Streak system (Phase 3) ──
+    drainStreak: number;             // consecutive drains without a machine save (reset on save)
 };
 
 /**

@@ -43,7 +43,7 @@ import * as haptics from "@/utils/haptics";
 import {
     createKamikazeState, updateAIFlippers, getKamikazeScore, getBestKamikazeScore, applyPowerUpEffects,
     hasPowerUp, rollPowerUp, activatePowerUp, cleanupPowerUps, shouldSpawnCrate,
-    recordCrateSpawn, getRandomTaunt, nudgeBall, isDrainBlocked, rollEmergencySave,
+    recordCrateSpawn, getElementTaunt, nudgeBall, isDrainBlocked, rollEmergencySave,
     updateRubberBand, bankStoredPowerUp, deployStoredPowerUp,
 } from "@/model/kamikaze";
 import { setKamikazeMode as setBumperKamikazeMode, setGhostMode as setBumperGhostMode, setFrenzyMode as setBumperFrenzyMode } from "@/renderers/bumper-renderer";
@@ -84,6 +84,19 @@ let ghostActive = false;
 let frenzyActive = false;
 let lastTauntText = "";
 let lastNudgeAt = -Infinity;
+// Phase 3 anthropomorphization: throttle per-element voices so they don't spam.
+let lastElementVoiceAt = -Infinity;
+
+// Phase 3 anthropomorphization: each machine part speaks with its own voice,
+// throttled so the chatter never overwhelms the action.
+function voiceElement(game: GameDef, element: "sentinel" | "guard" | "gate"): void {
+    if (!game.kamikaze?.enabled) return;
+    const now = window.performance.now();
+    if (now - lastElementVoiceAt < 2500) return;
+    lastElementVoiceAt = now;
+    lastTauntText = getElementTaunt(element, game.rng ?? Math.random);
+    messageHandler(GameMessages.AI_TAUNT, 1400);
+}
 
 const ENGINE_INCREMENT = 1000 / FRAME_RATE;
 let accumulator = 0;
@@ -186,8 +199,9 @@ export const init = async (
                 case ActorLabels.BUMPER: {
                     if (game.kamikaze?.enabled) {
                         const bNow = window.performance.now();
-                        if (hasPowerUp(game.kamikaze, PowerUpType.GHOST_BALL, bNow)) {
-                            break; // Ghost Ball: phases through (bumper bodies are sensors)
+                        if (hasPowerUp(game.kamikaze, PowerUpType.GHOST_BALL, bNow)
+                            || hasPowerUp(game.kamikaze, PowerUpType.SAKURA_STORM, bNow)) {
+                            break; // Ghost Ball / Sakura Storm: phases through (bumper bodies are sensors)
                         }
                         const frenzy = hasPowerUp(game.kamikaze, PowerUpType.BUMPER_FRENZY, bNow);
                         // bumper hits add penalty time (kept ball alive); doubled during Frenzy
@@ -206,6 +220,7 @@ export const init = async (
                     // Kamikaze: the machine's defense lands like a taiko drum.
                     if (game.kamikaze?.enabled) {
                         playTaikoHit();
+                        voiceElement(game, "sentinel");
                     }
                     break;
                 }
@@ -230,7 +245,14 @@ export const init = async (
                                 const resolveNow = window.performance.now();
                                 const { type, side } = rollPowerUp(kamikaze, game.rng ?? Math.random);
                                 activatePowerUp(kamikaze, type, side, resolveNow);
-                                messageHandler(side === "player" ? GameMessages.POWERUP_PLAYER : GameMessages.POWERUP_MACHINE);
+                                // Signature powers get their own dramatic callout.
+                                if (type === PowerUpType.SAKURA_STORM) {
+                                    messageHandler(GameMessages.SAKURA_STORM);
+                                } else if (type === PowerUpType.KAMIS_WRATH) {
+                                    messageHandler(GameMessages.KAMIS_WRATH);
+                                } else {
+                                    messageHandler(side === "player" ? GameMessages.POWERUP_PLAYER : GameMessages.POWERUP_MACHINE);
+                                }
                                 requestSlowMo(800, 0.25);
                             }, 1200);
                         }
@@ -544,8 +566,9 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
         updateAIFlippers(game.kamikaze, flippers, ballStates, now, game.rng ?? Math.random);
         updateRubberBand(game.kamikaze, now);
 
-        // Ghost Ball: ball phases through bumpers (bodies become sensors)
-        const ghost = hasPowerUp(game.kamikaze, PowerUpType.GHOST_BALL, now);
+        // Ghost Ball / Sakura Storm: ball phases through bumpers (bodies become sensors)
+        const ghost = hasPowerUp(game.kamikaze, PowerUpType.GHOST_BALL, now)
+            || hasPowerUp(game.kamikaze, PowerUpType.SAKURA_STORM, now);
         if (ghost !== ghostActive) {
             ghostActive = ghost;
             setBumperGhostMode(ghost);
@@ -605,7 +628,7 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
                     playSoundEffect(GameSounds.AI_SAVE);
                     duckMusic(600, 0.35);
                     haptics.aiSave();
-                    lastTauntText = getRandomTaunt(false, rng);
+                    lastTauntText = getElementTaunt("guard", rng);
                     messageHandler(GameMessages.AI_TAUNT, 1500);
                 };
                 if (ball.body.velocity.y <= 0) {
@@ -626,6 +649,7 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
                     const towardCenter = Math.sign(table.width / 2 - ball.body.position.x);
                     const sideKick = towardCenter * (2 + rng() * 4);
                     engine.launchBall(ball.body, { x: sideKick, y: -LAUNCH_SPEED * 0.95 });
+                    game.kamikaze.drainStreak = 0; // the machine broke the streak
                     aiSaveFeedback();
                     continue;
                 }
@@ -635,10 +659,18 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
                 duckMusic(1000, 0.2);
                 haptics.drainVictory();
                 messageHandler(GameMessages.DRAINED);
-                lastTauntText = getRandomTaunt(true, rng);
+                lastTauntText = getElementTaunt("gate", rng);
                 messageHandler(GameMessages.AI_TAUNT, 2000);
                 recordReplayEvent(tickCount, "drain");
                 removeBall(ball);
+
+                // Streak system: 3 consecutive drains without a save = UNSTOPPABLE
+                game.kamikaze.drainStreak += 1;
+                if (game.kamikaze.drainStreak >= 3) {
+                    game.kamikaze.drainStreak = 0;
+                    messageHandler(GameMessages.UNSTOPPABLE);
+                    requestSlowMo(1200, 0.2);
+                }
 
                 if (singleBall) {
                     // last remaining ball drained: this ball's run is complete
@@ -738,6 +770,7 @@ function startRound(game: GameDef): void {
         game.kamikaze.diveQueued = false;
         game.kamikaze.storedPowerUp = null;
         game.kamikaze.underworldCharge = 0;
+        game.kamikaze.drainStreak = 0;
 
         if (ghostActive) {
             ghostActive = false;

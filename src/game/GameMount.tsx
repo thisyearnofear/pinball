@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import { preloadAssets } from "@/services/asset-preloader";
 import { mountGame, type MountedGame } from "@/domains/game/mount-game";
-import { type GameDef, GameMessages, BALLS_PER_GAME } from "@/definitions/game";
+import { type GameDef, GameMessages, BALLS_PER_GAME, KAMIKAZE_BUMPER_PENALTY_MS, KAMIKAZE_TRIGGER_PENALTY_MS } from "@/definitions/game";
 import { START_TABLE_INDEX } from "@/definitions/tables";
 import { stopGame } from "@/services/high-scores-service";
 import { getPlayerInfo } from "@/services/contracts/tournament-client";
@@ -153,6 +153,10 @@ export default function GameMount(props: Props) {
   const [agencyBanner, setAgencyBanner] = useState<string | null>(null);
   const agencyBannerClearRef = useRef(0);
   const momentumShiftClearRef = useRef(0);
+  // Phase 3 HUD polish
+  const [drainStreak, setDrainStreak] = useState(0);
+  const [penaltyBumper, setPenaltyBumper] = useState(0);
+  const [penaltyTrigger, setPenaltyTrigger] = useState(0);
   const [ripples, setRipples] = useState<{ id: number; x: number; y: number }[]>([]);
   const rippleIdRef = useRef(0);
   // Victory FX: incrementing id keys the flash/shake/punch animations; confetti auto-clears.
@@ -284,13 +288,19 @@ export default function GameMount(props: Props) {
             [GameMessages.POWERUP_ROULETTE]: "Munitions crate! Rolling…",
             [GameMessages.POWERUP_PLAYER]: "Munition activated!",
             [GameMessages.POWERUP_MACHINE]: "Countermeasure deployed!",
+            [GameMessages.SAKURA_STORM]: "桜吹雪 · SAKURA STORM! The machine is blinded.",
+            [GameMessages.KAMIS_WRATH]: "神の怒り · KAMI'S WRATH! The table hurls the ball.",
+            [GameMessages.UNSTOPPABLE]: "無双 · UNSTOPPABLE!",
           };
           const kamMsg = msg === GameMessages.AI_TAUNT
             ? `MACHINE: "${getLastTaunt()}"`
             : kamikazeMessages[msg];
           if (kamMsg) {
             setKamikazeMessage(kamMsg);
-            window.setTimeout(() => setKamikazeMessage(null), 2500);
+            window.setTimeout(() => setKamikazeMessage(null), msg === GameMessages.UNSTOPPABLE ? 3200 : 2500);
+          }
+          if (msg === GameMessages.UNSTOPPABLE) {
+            fireVictoryFx();
           }
 
           if (String(msg).toLowerCase().includes("multiball")) {
@@ -399,6 +409,10 @@ export default function GameMount(props: Props) {
           return prev === next ? prev : next;
         });
         setUnderworldCharge((prev) => (Math.abs(prev - g.kamikaze!.underworldCharge) < 0.01 ? prev : g.kamikaze!.underworldCharge));
+        // Phase 3 HUD polish: streak + live penalty breakdown
+        setDrainStreak((prev) => (prev === g.kamikaze!.drainStreak ? prev : g.kamikaze!.drainStreak));
+        setPenaltyBumper((prev) => (prev === g.kamikaze!.totalBumperHits ? prev : g.kamikaze!.totalBumperHits));
+        setPenaltyTrigger((prev) => (prev === g.kamikaze!.totalTriggerGroupCompletions ? prev : g.kamikaze!.totalTriggerGroupCompletions));
         const shift = consumeMomentumShift();
         if (shift) {
           setMomentumShift(shift);
@@ -855,7 +869,48 @@ export default function GameMount(props: Props) {
             <>
               <div style={{ color: "#ff4444", fontWeight: "bold" }}>神風 KAMIKAZE BALL</div>
               <div>Time: {formatGameScore(hud.score, true)}</div>
-              <div>Balls: {hud.balls}</div>
+              {/* Lives as sakura petals: one per ball, faded when spent */}
+              <div style={{ marginTop: 4, display: "flex", gap: 3, alignItems: "center" }}>
+                <span style={{ fontSize: 9, opacity: 0.6, marginRight: 2, letterSpacing: "0.1em" }}>命</span>
+                {Array.from({ length: BALLS_PER_GAME }).map((_, i) => (
+                  <span
+                    key={i}
+                    style={{
+                      fontSize: 14,
+                      lineHeight: 1,
+                      opacity: i < hud.balls ? 1 : 0.18,
+                      filter: i < hud.balls ? "none" : "grayscale(1)",
+                      transition: "opacity 300ms ease, filter 300ms ease",
+                    }}
+                  >🌸</span>
+                ))}
+              </div>
+              {/* Streak: consecutive drains without a save */}
+              {drainStreak > 0 && (
+                <div style={{ marginTop: 4, fontSize: 10, color: "#fbbf24", fontWeight: 700, letterSpacing: "0.1em" }}>
+                  🔥 STREAK ×{drainStreak}{drainStreak >= 2 ? " — 無双 soon" : ""}
+                </div>
+              )}
+              {/* Penalty breakdown: how the machine is racking up your time */}
+              {(penaltyBumper > 0 || penaltyTrigger > 0) && (
+                <div style={{ marginTop: 6 }}>
+                  <div style={{ fontSize: 9, opacity: 0.6, marginBottom: 3, letterSpacing: "0.15em" }}>PENALTY</div>
+                  <div style={{ fontSize: 10, lineHeight: 1.6 }}>
+                    {penaltyBumper > 0 && (
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                        <span style={{ opacity: 0.7 }}>番兵 bumpers ×{penaltyBumper}</span>
+                        <span style={{ color: "#f87171" }}>+{formatGameScore(penaltyBumper * KAMIKAZE_BUMPER_PENALTY_MS, true)}</span>
+                      </div>
+                    )}
+                    {penaltyTrigger > 0 && (
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                        <span style={{ opacity: 0.7 }}>門 trigger groups ×{penaltyTrigger}</span>
+                        <span style={{ color: "#f87171" }}>+{formatGameScore(penaltyTrigger * KAMIKAZE_TRIGGER_PENALTY_MS, true)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               <div style={{ marginTop: 6 }}>
                 <StabilityMeter value={stability} machineSaving={machineSaving} />
               </div>
