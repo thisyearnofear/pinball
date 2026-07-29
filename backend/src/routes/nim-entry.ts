@@ -67,8 +67,12 @@ export async function nimEntryRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: 'Transaction not found on Nimiq chain' });
       }
 
+      // Nimiq user-friendly addresses may be returned with or without spaces,
+      // so compare on a normalized (space-stripped, upper-cased) form.
+      const norm = (a?: string) => (a ?? '').replace(/\s+/g, '').toUpperCase();
+
       // Verify recipient is our treasury
-      if (tx.to?.toLowerCase() !== expectedTreasury.toLowerCase()) {
+      if (norm(tx.to) !== norm(expectedTreasury)) {
         return reply.status(400).send({ error: 'Transaction recipient does not match treasury' });
       }
 
@@ -78,7 +82,7 @@ export async function nimEntryRoutes(app: FastifyInstance) {
       }
 
       // Verify sender matches claimed `from`
-      if (tx.from?.toLowerCase() !== from.toLowerCase()) {
+      if (norm(tx.from) !== norm(from)) {
         return reply.status(400).send({ error: 'Transaction sender mismatch' });
       }
     } catch (err: any) {
