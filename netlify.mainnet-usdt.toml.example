@@ -1,0 +1,47 @@
+# USDT mainnet activation — config flip
+#
+# Run the deploy first (USDT_ADDRESS = canonical Tether contract on Polygon,
+# 6 decimals; copy it from Polygonscan or the Nimiq mini-apps docs):
+#
+#   cd contracts
+#   USDT_ADDRESS=<USDT_ADDRESS> ENTRY_FEE=1000000 \
+#     npx hardhat run scripts/deploy-polygon-mainnet-usdt.ts --network polygon
+#
+# The deploy prints a TournamentManager address. Replace <TM_ADDRESS> below
+# with it, then replace the [build.environment] block in netlify.toml with
+# this. Commit + push to trigger the prod deploy.
+#
+# ⚠️  Only flip AFTER the mainnet deploy succeeds and you have verified the
+#     contract on Polygonscan. Flipping with no valid mainnet contract breaks
+#     the live game.
+
+[build.environment]
+  NODE_VERSION = "22"
+  NPM_FLAGS = "--version"
+  NEXT_PUBLIC_ECOSYSTEM_PROFILE = "nimiq"
+  NEXT_PUBLIC_WALLET_ADAPTER = "nimiq"
+  NEXT_PUBLIC_CHAIN_ID = "137"
+  NEXT_PUBLIC_RPC_URL_PUBLIC = "https://polygon-rpc.com"
+  NEXT_PUBLIC_CHAIN_NAME = "Polygon"
+  NEXT_PUBLIC_BLOCK_EXPLORER_URL = "https://polygonscan.com"
+  NEXT_PUBLIC_NATIVE_CURRENCY_NAME = "POL"
+  NEXT_PUBLIC_NATIVE_CURRENCY_SYMBOL = "POL"
+  NEXT_PUBLIC_NATIVE_CURRENCY_DECIMALS = "18"
+  NEXT_PUBLIC_PAYMENT_TOKEN_TYPE = "erc20"
+  NEXT_PUBLIC_PAYMENT_TOKEN_ADDRESS = "<USDT_ADDRESS>"
+  NEXT_PUBLIC_PAYMENT_TOKEN_SYMBOL = "USDT"
+  NEXT_PUBLIC_PAYMENT_TOKEN_DECIMALS = "6"
+  NEXT_PUBLIC_TOURNAMENT_MANAGER_ADDRESS = "<TM_ADDRESS>"
+  NEXT_PUBLIC_MISSION_POOL_ADDRESS = ""
+  NEXT_PUBLIC_ACTIVE_MISSION_ID = ""
+  NEXT_PUBLIC_BACKEND_URL = "https://api.pinball.sportwarren.com"
+  NEXT_PUBLIC_SCORE_PREFIX = "PINBALL_SCORE:v2"
+  NEXT_PUBLIC_NIM_TREASURY_ADDRESS = "<YOUR_REAL_NQ_ADDRESS>"
+  NEXT_PUBLIC_NIM_ENTRY_FEE = "1"
+
+# ── Backend env (separate deployment) ──────────────────────────────
+# CHAIN_ID=137
+# TOURNAMENT_MANAGER_ADDRESS=<TM_ADDRESS>
+# NIM_TREASURY_ADDRESS=<YOUR_REAL_NQ_ADDRESS>
+# NIM_ENTRY_FEE_LUNA=100000
+# NIMIQ_RPC_URL=https://rpc.nimiq-mainnet.nimiq-network.com
