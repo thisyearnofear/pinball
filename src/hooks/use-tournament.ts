@@ -11,6 +11,7 @@ import {
   getWinners,
 } from "@/services/contracts/tournament-client";
 import { getTournamentMeta } from "@/config/tournaments";
+import { friendlyChainError } from "@/services/contracts/contract-utils";
 
 export type TournamentState = {
   tournamentId: number | null;
@@ -91,7 +92,7 @@ export function useTournament(address: string | undefined, walletPort: WalletPor
       });
     } catch (e: any) {
       console.error(e);
-      setLoadError(e?.message ?? 'Failed to load tournament data. Check your connection and try again.');
+      setLoadError(friendlyChainError(e, 'Failed to load tournament data. Check your connection and try again.'));
     } finally {
       setIsLoading(false);
     }

@@ -10,30 +10,121 @@ import type { WalletPort } from "@/domains/wallet/wallet-port";
  * - CLEAN: explicit separation of read (public RPC) vs write (wallet runner).
  */
 
-// Backup public RPCs for Polygon Amoy (chain 80002). The primary comes from
-// env; these are fallbacks so a single endpoint going down doesn't break reads.
+// Backup public RPCs for Polygon Amoy (chain 80002). Ordered by reliability:
+// drpc.org is consistently up; publicnode endpoints are kept only as a last
+// resort (they have been observed dropping connections intermittently, which
+// ethers misreads as a contract revert). The env-configured primary is tried
+// first so operators can point at their own node.
 const AMOY_FALLBACK_RPCS = [
   "https://polygon-amoy.drpc.org",
+  "https://polygon-amoy.publicnode.com",
   "https://polygon-amoy-bor-rpc.publicnode.com",
 ];
 
-let cachedProvider: ethers.FallbackProvider | null = null;
+/**
+ * Is this error a transient transport failure rather than a genuine contract
+ * revert? When an RPC node drops the connection mid-call, ethers surfaces a
+ * CALL_EXCEPTION with data=null and no reason (there is no revert payload
+ * because the socket closed). We treat that — plus network/server/timeout
+ * codes — as retryable so the next endpoint gets a chance.
+ */
+function isTransientChainError(e: unknown): boolean {
+  const err = e as { code?: string; data?: unknown; reason?: string | null } | null;
+  if (!err) return false;
+  if (err.code === "NETWORK_ERROR" || err.code === "SERVER_ERROR" || err.code === "TIMEOUT") {
+    return true;
+  }
+  if (err.code === "CALL_EXCEPTION") {
+    const hasData = err.data !== null && err.data !== undefined && err.data !== "0x";
+    const hasReason = typeof err.reason === "string" && err.reason.length > 0;
+    return !hasData && !hasReason;
+  }
+  return false;
+}
 
-export function getPublicProvider(): ethers.FallbackProvider {
+/**
+ * A read-only provider that fails over across several RPC endpoints. Each call
+ * is tried against the endpoints in order; a transient failure (dropped
+ * connection) advances to the next endpoint, while a genuine revert is thrown
+ * immediately. This keeps reads working even when some endpoints are down, and
+ * never misreports a dropped connection as a contract revert to the UI.
+ */
+class ResilientPublicProvider extends ethers.JsonRpcProvider {
+  readonly #urls: string[];
+  readonly #chainId: number;
+  readonly #net: ethers.Network;
+  #pool: Map<string, ethers.JsonRpcProvider> = new Map();
+  constructor(urls: string[], chainId: number) {
+    const net = ethers.Network.from(chainId);
+    super(urls[0], chainId, { staticNetwork: net });
+    this.#urls = urls;
+    this.#chainId = chainId;
+    this.#net = net;
+  }
+
+  #endpoint(url: string): ethers.JsonRpcProvider {
+    let p = this.#pool.get(url);
+    if (!p) {
+      p = new ethers.JsonRpcProvider(url, this.#chainId, { staticNetwork: this.#net });
+      this.#pool.set(url, p);
+    }
+    return p;
+  }
+
+  override async send(method: string, params: Array<any> | Record<string, any>): Promise<any> {
+    let lastErr: unknown = null;
+    for (const url of this.#urls) {
+      try {
+        return await this.#endpoint(url).send(method, params);
+      } catch (e) {
+        lastErr = e;
+        if (!isTransientChainError(e)) throw e; // genuine revert / real failure
+      }
+    }
+    throw lastErr;
+  }
+}
+
+let cachedProvider: ResilientPublicProvider | null = null;
+
+export function getPublicProvider(): ethers.JsonRpcProvider {
   if (cachedProvider) return cachedProvider;
 
   const { rpcUrlPublic, chainId } = getContractsConfig();
-  // staticNetwork prevents ethers from auto-detecting the network on every
-  // call (which retries infinitely when the node is down).
-  const opts = { staticNetwork: ethers.Network.from(chainId) };
 
-  const urls = [rpcUrlPublic, ...AMOY_FALLBACK_RPCS.filter((u) => u !== rpcUrlPublic)];
-  const providers = urls.map((url) => new ethers.JsonRpcProvider(url, chainId, opts));
+  const urls = [rpcUrlPublic, ...AMOY_FALLBACK_RPCS].filter(
+    (u, i, a) => Boolean(u) && a.indexOf(u) === i
+  );
 
-  // quorum: 1 returns as soon as any provider answers, so a downed endpoint
-  // can't stall reads waiting for a second matching response.
-  cachedProvider = new ethers.FallbackProvider(providers, chainId, { quorum: 1 });
+  cachedProvider = new ResilientPublicProvider(urls, chainId);
   return cachedProvider;
+}
+
+/**
+ * Classify a thrown ethers error into a short, user-safe message.
+ *
+ * A dropped RPC connection surfaces to ethers as a CALL_EXCEPTION with
+ * data=null / reason=null (there is no revert payload because the socket
+ * closed). That is a transient network problem, not a real contract revert,
+ * so we never show the raw ethers blob to the user. Genuine reverts that
+ * carry a reason are surfaced with that reason.
+ */
+export function friendlyChainError(e: unknown, fallback = "Something went wrong talking to the network. Please try again."): string {
+  const err = e as { code?: string; reason?: string | null; message?: string } | null;
+  if (!err) return fallback;
+  if (err.code === "CALL_EXCEPTION") {
+    const reason = typeof err.reason === "string" && err.reason.trim() ? err.reason.trim() : null;
+    if (reason) return `The contract rejected this action: ${reason}`;
+    // No revert data → almost always a dropped/blocked RPC connection.
+    return "Network hiccup reaching the blockchain. Please try again in a moment.";
+  }
+  if (err.code === "NETWORK_ERROR" || err.code === "SERVER_ERROR" || err.code === "TIMEOUT") {
+    return "Couldn't reach the blockchain right now. Please try again.";
+  }
+  const msg = typeof err.message === "string" ? err.message : "";
+  // Never leak the raw ethers blob; only pass through short, clean messages.
+  if (msg && msg.length <= 120 && !msg.includes("{")) return msg;
+  return fallback;
 }
 
 export function getPublicContract(address: string, abi: readonly string[]): ethers.Contract {

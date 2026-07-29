@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { getAppConfig } from "@/config/app-config";
 import type { WalletPort } from "@/domains/wallet/wallet-port";
+import { friendlyChainError } from "@/services/contracts/contract-utils";
 import { stopGame, setSubmissionStateCallback, type SubmissionStep as LegacySubmissionStep } from "@/services/high-scores-service";
 import { getTournamentMeta, getAllTournaments, type GameMode } from "@/config/tournaments";
 import { getFromStorage } from "@/utils/local-storage";
@@ -229,7 +230,7 @@ function GameScreenInner() {
             setRunKey((k) => k + 1);
             setView("game");
           })
-          .catch((e: any) => toast.addToast(e?.message ?? "Failed to enter tournament. Check your MATIC balance.", "error"));
+          .catch((e: any) => toast.addToast(friendlyChainError(e, "Failed to enter tournament. Check your MATIC balance."), "error"));
       }
       return;
     }
@@ -386,7 +387,7 @@ function GameScreenInner() {
                       toast.addToast("Entered tournament!", "success");
                       activityFeed.log("entry", `Player entered tournament #${_id}`);
                     })
-                    .catch((e: any) => toast.addToast(e?.message ?? "Failed to enter tournament.", "error"));
+                    .catch((e: any) => toast.addToast(friendlyChainError(e, "Failed to enter tournament."), "error"));
                 }}
                 onStartTournament={(id) => {
                   setTournament((prev) => ({ ...prev, tournamentId: id }));
@@ -502,7 +503,7 @@ function GameScreenInner() {
                   toast.addToast("Score submitted!", "success");
                   refreshTournament();
                 } catch (e: any) {
-                  setSubmissionError(String(e?.message ?? "Retry failed."));
+                  setSubmissionError(friendlyChainError(e, "Retry failed."));
                   setSubmissionStep("error");
                 }
               } : undefined}
