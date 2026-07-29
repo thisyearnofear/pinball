@@ -27,7 +27,7 @@ const slides = [
   {
     icon: "⛓️",
     title: "Play for Real (Optional)",
-    body: "When you're ready, connect a wallet to enter onchain tournaments — entry fees fund the pot, scores are signed and settled on Polygon Amoy, payouts are automatic. Totally optional; practice is free.",
+    body: "When you're ready, connect a wallet to enter onchain tournaments. Pay with NIM (Nimiq native) or USDT on Polygon — entry fees fund the pot, scores are signed and settled onchain, payouts are automatic. Totally optional; practice is free.",
   },
 ];
 

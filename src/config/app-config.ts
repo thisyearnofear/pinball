@@ -83,6 +83,11 @@ export type AppBackendConfig = {
   baseUrl: string;
 };
 
+export type AppNimConfig = {
+  treasuryAddress: string;
+  entryFeeNim: number;
+};
+
 export type AppConfig = {
   ecosystem: EcosystemProfile;
   walletAdapter: WalletAdapter;
@@ -90,6 +95,7 @@ export type AppConfig = {
   contracts: AppContractsConfig;
   score: AppScoreConfig;
   backend: AppBackendConfig;
+  nim: AppNimConfig;
   missions: {
     /**
      * Optional: active mission ID to request Sponsored Mission awards during score signing.
@@ -112,6 +118,8 @@ const PUBLIC_ENV: Record<string, string | undefined> = {
   NEXT_PUBLIC_ECOSYSTEM_PROFILE: process.env.NEXT_PUBLIC_ECOSYSTEM_PROFILE,
   NEXT_PUBLIC_MISSION_POOL_ADDRESS: process.env.NEXT_PUBLIC_MISSION_POOL_ADDRESS,
   NEXT_PUBLIC_MUSD_ADDRESS: process.env.NEXT_PUBLIC_MUSD_ADDRESS,
+  NEXT_PUBLIC_NIM_ENTRY_FEE: process.env.NEXT_PUBLIC_NIM_ENTRY_FEE,
+  NEXT_PUBLIC_NIM_TREASURY_ADDRESS: process.env.NEXT_PUBLIC_NIM_TREASURY_ADDRESS,
   NEXT_PUBLIC_NATIVE_CURRENCY_DECIMALS: process.env.NEXT_PUBLIC_NATIVE_CURRENCY_DECIMALS,
   NEXT_PUBLIC_NATIVE_CURRENCY_NAME: process.env.NEXT_PUBLIC_NATIVE_CURRENCY_NAME,
   NEXT_PUBLIC_NATIVE_CURRENCY_SYMBOL: process.env.NEXT_PUBLIC_NATIVE_CURRENCY_SYMBOL,
@@ -216,6 +224,10 @@ export function getAppConfig(): AppConfig {
     },
     backend: {
       baseUrl: env("NEXT_PUBLIC_BACKEND_URL") ?? "",
+    },
+    nim: {
+      treasuryAddress: env("NEXT_PUBLIC_NIM_TREASURY_ADDRESS") ?? "",
+      entryFeeNim: Number(env("NEXT_PUBLIC_NIM_ENTRY_FEE") ?? 0),
     },
     missions: {
       activeMissionId: (() => {

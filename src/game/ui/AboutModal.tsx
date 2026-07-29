@@ -40,12 +40,12 @@ export function AboutModal(props: { onClose: () => void }) {
 
         <div>
           <h3 style={{ margin: `0 0 ${spacing.md}px`, fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text.primary }}>
-            Contracts (Polygon Amoy)
+            Payments &amp; Contracts
           </h3>
           <div style={{ fontSize: typography.size.sm, color: colors.text.secondary, fontFamily: typography.fontFamilyMono, lineHeight: typography.lineHeight.relaxed }}>
-            TournamentManager (native): 0xDD62...C1A4<br />
-            Chain: 80002 (Polygon Amoy)<br />
-            Entry fee: 0.01 MATIC
+            NIM (Nimiq native): 1 NIM entry · bonus-eligible<br />
+            USDT (Polygon): ERC-20 entry via Nimiq Pay EVM wallet<br />
+            Test (Amoy): native MATIC · 0xDD62...C1A4 · chain 80002
           </div>
         </div>
 

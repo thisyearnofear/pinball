@@ -44,6 +44,9 @@ import { PauseMenu } from "./ui/PauseMenu";
 import { InstallPrompt } from "./ui/InstallPrompt";
 import { KamiTrialModal } from "./ui/KamiTrialModal";
 import { ControlsPanel } from "./ui/ControlsPanel";
+import { PaymentMethodSelector, type PaymentMethod } from "./ui/PaymentMethodSelector";
+import { enterTournamentWithNim, isNimPaymentAvailable } from "@/services/nimiq/nimiq-payment";
+import { isInsideNimiqPay } from "@/services/nimiq/nimiq-provider";
 import type { ReplayDigest } from "@/model/replay-recorder";
 import { decodeReplay } from "@/model/replay-recorder";
 import { fetchBestReplay } from "@/services/backend-scores-client";
@@ -94,6 +97,8 @@ function GameScreenInner() {
   const [showTutorial, setShowTutorial] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [showKamiTrials, setShowKamiTrials] = useState(false);
+  const [showPaymentSelector, setShowPaymentSelector] = useState(false);
+  const [paymentBusy, setPaymentBusy] = useState(false);
   const [lastScore, setLastScore] = useState<number>(0);
   const [dailyResult, setDailyResult] = useState<{ dayKey: string; mode: "classic" | "kamikaze"; best: number; isPB: boolean } | null>(null);
   const [lastReplay, setLastReplay] = useState<ReplayDigest | null>(null);
@@ -216,28 +221,62 @@ function GameScreenInner() {
     activityFeed.log("entry", `Accepted ${invite.name ?? "a friend"}'s challenge · ${invite.worldId} · ${invite.mode}`);
   }
 
+  function proceedAfterEntry() {
+    setMode("tournament");
+    setShowCelebration(false);
+    if (!hasSeenTutorial()) setShowTutorial(true);
+    setRunKey((k) => k + 1);
+    setView("game");
+  }
+
+  function enterWithMethod(method: PaymentMethod) {
+    setPaymentBusy(true);
+    const tid = tournament.tournamentId;
+    if (!tid) { setPaymentBusy(false); return; }
+
+    if (method === "nim" && address) {
+      enterTournamentWithNim(tid, address)
+        .then(() => {
+          toast.addToast("Entered tournament with NIM! ありがとうございます", "success");
+          activityFeed.log("entry", `Entered tournament #${tid} with NIM`);
+          setShowPaymentSelector(false);
+          refreshTournament();
+          proceedAfterEntry();
+        })
+        .catch((e: any) => toast.addToast(e?.message ?? "NIM payment failed.", "error"))
+        .finally(() => setPaymentBusy(false));
+    } else {
+      doEnterTournament()
+        .then(() => {
+          toast.addToast("Entered tournament! Starting your run...", "success");
+          setShowPaymentSelector(false);
+          proceedAfterEntry();
+        })
+        .catch((e: any) => toast.addToast(friendlyChainError(e, "Failed to enter tournament."), "error"))
+        .finally(() => setPaymentBusy(false));
+    }
+  }
+
   function startTournament() {
     setMode("tournament");
     if (!canStartTournamentRun) {
       if (!isConnected) {
         toast.addToast("Connect your wallet using the button in the header, then try again.", "warning");
+      } else if (isInsideNimiqPay() && isNimPaymentAvailable()) {
+        setShowPaymentSelector(true);
       } else {
+        setPaymentBusy(true);
         doEnterTournament()
           .then(() => {
             toast.addToast("Entered tournament! Starting your run...", "success");
-            setShowCelebration(false);
-            if (!hasSeenTutorial()) setShowTutorial(true);
-            setRunKey((k) => k + 1);
-            setView("game");
+            proceedAfterEntry();
           })
-          .catch((e: any) => toast.addToast(friendlyChainError(e, "Failed to enter tournament. Check your MATIC balance."), "error"));
+          .catch((e: any) => toast.addToast(friendlyChainError(e, "Failed to enter tournament. Check your balance."), "error"))
+          .finally(() => setPaymentBusy(false));
       }
       return;
     }
-    setShowCelebration(false);
-    if (!hasSeenTutorial()) setShowTutorial(true);
-    setRunKey((k) => k + 1);
-    setView("game");
+    proceedAfterEntry();
   }
 
   const tournamentName = useMemo(() => {
@@ -382,12 +421,18 @@ function GameScreenInner() {
                 onSelectDifficulty={selectDifficulty}
                 onSelectTournament={(id) => setTournament((prev) => ({ ...prev, tournamentId: id }))}
                 onEnterTournament={(_id: number) => {
-                  doEnterTournament()
-                    .then(() => {
-                      toast.addToast("Entered tournament!", "success");
-                      activityFeed.log("entry", `Player entered tournament #${_id}`);
-                    })
-                    .catch((e: any) => toast.addToast(friendlyChainError(e, "Failed to enter tournament."), "error"));
+                  if (isInsideNimiqPay() && isNimPaymentAvailable()) {
+                    setShowPaymentSelector(true);
+                  } else {
+                    setPaymentBusy(true);
+                    doEnterTournament()
+                      .then(() => {
+                        toast.addToast("Entered tournament!", "success");
+                        activityFeed.log("entry", `Player entered tournament #${_id}`);
+                      })
+                      .catch((e: any) => toast.addToast(friendlyChainError(e, "Failed to enter tournament."), "error"))
+                      .finally(() => setPaymentBusy(false));
+                  }
                 }}
                 onStartTournament={(id) => {
                   setTournament((prev) => ({ ...prev, tournamentId: id }));
@@ -435,6 +480,14 @@ function GameScreenInner() {
                   }
                   setView("game");
                 }}
+              />
+            )}
+            {showPaymentSelector && (
+              <PaymentMethodSelector
+                entryFeeLabel={tournament.entryFeeWei ? `${Number(tournament.entryFeeWei) / 1e6} USDT` : "Free"}
+                busy={paymentBusy}
+                onSelect={enterWithMethod}
+                onCancel={() => setShowPaymentSelector(false)}
               />
             )}
 

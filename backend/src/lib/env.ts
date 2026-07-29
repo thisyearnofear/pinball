@@ -33,6 +33,10 @@ const EnvSchema = z.object({
   // Optional Redis URL. When set, rate limiter and nonce tracker use Redis.
   // Falls back to in-memory stores when unset (fine for local dev).
   REDIS_URL: z.string().optional(),
+  // NIM payment config (Nimiq Mini Apps Competition bonus points)
+  NIM_TREASURY_ADDRESS: z.string().optional(),
+  NIM_ENTRY_FEE_LUNA: z.coerce.number().int().nonnegative().default(100000),
+  NIMIQ_RPC_URL: z.string().optional(),
 });
 
 export const env = EnvSchema.parse(process.env);

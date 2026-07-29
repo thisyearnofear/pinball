@@ -133,7 +133,7 @@ export function ArcadeLobby(props: Props) {
           <div className={styles.connectPrompt}>
             <div className={styles.connectIcon}>🔌</div>
             <div className={styles.connectText}>Connect your wallet to enter tournaments and win prizes</div>
-            <div className={styles.connectChain}>Polygon Amoy · Chain 80002</div>
+            <div className={styles.connectChain}>NIM · USDT on Polygon · Nimiq Pay</div>
           </div>
         )}
 
