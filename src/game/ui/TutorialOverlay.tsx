@@ -29,11 +29,25 @@ export function TutorialOverlay(props: Props) {
 
   const slides = useMemo(() => {
     if (props.gameMode === "kamikaze") {
+      const controlSlides = touchscreen
+        ? [
+            "TAP to nudge the ball toward your finger.",
+            "HOLD to charge a power nudge — an aim line shows the direction.",
+            "SWIPE DOWN to DIVE: force a drain the machine can't save.",
+            "SWIPE UP to TILT-LOCK: freeze the machine's flippers briefly.",
+            "DOUBLE-TAP to deploy a banked munition.",
+          ]
+        : [
+            "CLICK to nudge the ball toward your cursor.",
+            "HOLD to charge a power nudge — an aim line shows the direction.",
+            "Press ↓ (or drag down) to DIVE: force a drain the machine can't save.",
+            "Press SHIFT (or drag up) to TILT-LOCK: freeze the machine's flippers.",
+            "Press D (or double-click) to deploy a banked munition.",
+          ];
       return [
         "The machine fights to SAVE the ball.",
         "You want to DRAIN it. Fastest drain wins.",
-        touchscreen ? "Tap anywhere on the table to nudge the ball." : "Click anywhere on the table to nudge the ball.",
-        "Grab munition crates for power-ups — some help you, some help the machine.",
+        ...controlSlides,
         "Bumpers and targets add penalty time. Avoid them.",
         "Beat the machine!",
       ];

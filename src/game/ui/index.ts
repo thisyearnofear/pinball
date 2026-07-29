@@ -34,3 +34,10 @@ export { SakuraPetals } from './SakuraPetals';
 export { ActivityFeedProvider, ActivityFeedPanel, useActivityFeed } from './ActivityFeed';
 export type { ActivityKind } from './ActivityFeed';
 export { StabilityMeter } from './StabilityMeter';
+// NOTE: KamiTrialModal is intentionally NOT exported from this barrel. It pulls
+// in @/model/game (matter-js/zcanvas), which references the browser-only `self`
+// global and breaks Next.js SSR prerendering of the layout barrel. Import it
+// directly via "@/game/ui/KamiTrialModal" where needed (see GameScreen).
+export { RankStrip } from './RankStrip';
+export { ChallengeBanner } from './ChallengeBanner';
+export { ControlsPanel } from './ControlsPanel';

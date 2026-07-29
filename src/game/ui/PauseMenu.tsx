@@ -12,6 +12,7 @@ type Props = {
   onRestart: () => void;
   onSettings?: () => void;
   onQuitToLobby: () => void;
+  onKamiTrials?: () => void;
 };
 
 export function PauseMenu(props: Props) {
@@ -74,6 +75,11 @@ export function PauseMenu(props: Props) {
           <Button fullWidth size="lg" onClick={props.onResume} style={{ minHeight: isSmall ? 52 : 44 }}>
             Resume
           </Button>
+          {props.kamikaze && props.onKamiTrials && (
+            <Button fullWidth variant="secondary" size="lg" onClick={props.onKamiTrials} style={{ minHeight: isSmall ? 52 : 44 }}>
+              🎋 Consult the Kami
+            </Button>
+          )}
           <Button fullWidth variant="secondary" size="lg" onClick={props.onRestart} style={{ minHeight: isSmall ? 52 : 44 }}>
             Restart
           </Button>

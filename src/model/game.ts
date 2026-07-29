@@ -45,6 +45,7 @@ import {
     hasPowerUp, rollPowerUp, activatePowerUp, cleanupPowerUps, shouldSpawnCrate,
     recordCrateSpawn, getElementTaunt, nudgeBall, isDrainBlocked, rollEmergencySave,
     updateRubberBand, bankStoredPowerUp, deployStoredPowerUp,
+    triggerTiltLock as triggerTiltLockKamikaze,
 } from "@/model/kamikaze";
 import { setKamikazeMode as setBumperKamikazeMode, setGhostMode as setBumperGhostMode, setFrenzyMode as setBumperFrenzyMode } from "@/renderers/bumper-renderer";
 import { setKamikazeMode as setFlipperKamikazeMode } from "@/renderers/flipper-renderer";
@@ -826,6 +827,13 @@ export const queueDive = (): boolean => {
 };
 
 /**
+ * Kamikaze Ball: is a munition currently banked? Used to gate double-tap
+ * deploy so a double nudge with an empty bank isn't swallowed.
+ */
+export const hasStoredMunition = (): boolean =>
+    Boolean(gameRef?.kamikaze?.enabled) && gameRef!.kamikaze!.storedPowerUp !== null;
+
+/**
  * Kamikaze Ball: deploy the banked munition (player agency).
  * Returns the deployed power-up type, or null if none was stored.
  */
@@ -836,6 +844,29 @@ export const deployStoredMunition = (): number | null => {
         recordReplayEvent(tickCount, "deploy");
     }
     return type;
+};
+/**
+ * Kamikaze Ball: fire tilt-lock (player agency). Freezes the machine's AI
+ * flippers for a short window on a cooldown. Returns false if on cooldown.
+ */
+export const triggerTiltLock = (): boolean => {
+    if (!gameRef?.kamikaze?.enabled) return false;
+    const fired = triggerTiltLockKamikaze(gameRef.kamikaze, window.performance.now());
+    if (fired) {
+        recordReplayEvent(tickCount, "tiltlock");
+    }
+    return fired;
+};
+/**
+ * Kamikaze Ball: grant a boon (player-side power-up) for a fixed duration.
+ * Used by Kami Trials to reward a successful pause-time challenge. The type
+ * comes from the trial's curated pool; the duration scales with accuracy.
+ * Returns false if no kamikaze run is active.
+ */
+export const grantBoon = (type: number, durationMs: number): boolean => {
+    if (!gameRef?.kamikaze?.enabled) return false;
+    activatePowerUp(gameRef.kamikaze, type as PowerUpType, "player", window.performance.now(), durationMs);
+    return true;
 };
 
 /**

@@ -120,8 +120,17 @@ export type KamikazeGestures = {
   onNudge: (x: number, y: number, power: number) => void;
   onDive: () => void;
   onDeploy: () => void;
+  onTiltLock: () => void;
+  /**
+   * Gates double-tap deploy: when provided and it returns false, a double-tap
+   * is treated as two ordinary nudges instead of a no-op deploy. Removes the
+   * tap vs double-tap ambiguity when nothing is banked.
+   */
+  hasMunition?: () => boolean;
   onChargeTick?: (power: number) => void;
   onChargeEnd?: () => void;
+  /** Reports the pointer's screen position while charging (null when released). */
+  onAim?: (pointerX: number | null, pointerY: number | null) => void;
   shouldHandle: () => boolean;
 };
 
@@ -129,6 +138,7 @@ const HOLD_TO_CHARGE_MS = 160;
 const CHARGE_FULL_MS = 900; // time from hold-start to max power
 const MAX_POWER = 3;
 const SWIPE_DOWN_PX = 60;
+const SWIPE_UP_PX = 60;
 const DOUBLE_TAP_MS = 280;
 
 export function attachKamikazeGestures(target: HTMLElement, g: KamikazeGestures): () => void {
@@ -139,6 +149,8 @@ export function attachKamikazeGestures(target: HTMLElement, g: KamikazeGestures)
   let chargeRaf = 0;
   let lastTapAt = 0;
   let swiped = false;
+  let curX = 0;
+  let curY = 0;
 
   function powerFor(elapsed: number): number {
     if (elapsed < HOLD_TO_CHARGE_MS) return 1;
@@ -151,6 +163,7 @@ export function attachKamikazeGestures(target: HTMLElement, g: KamikazeGestures)
     const loop = () => {
       if (!charging) return;
       g.onChargeTick?.(powerFor(window.performance.now() - downAt));
+      g.onAim?.(curX, curY);
       chargeRaf = requestAnimationFrame(loop);
     };
     chargeRaf = requestAnimationFrame(loop);
@@ -160,23 +173,32 @@ export function attachKamikazeGestures(target: HTMLElement, g: KamikazeGestures)
     charging = false;
     cancelAnimationFrame(chargeRaf);
     g.onChargeEnd?.();
+    g.onAim?.(null, null);
   }
 
   function onDown(e: PointerEvent) {
     if (!g.shouldHandle()) return;
     downX = e.clientX;
     downY = e.clientY;
+    curX = e.clientX;
+    curY = e.clientY;
     downAt = window.performance.now();
     swiped = false;
     startCharge();
   }
 
   function onMove(e: PointerEvent) {
+    curX = e.clientX;
+    curY = e.clientY;
     if (!charging || swiped) return;
     if (e.clientY - downY > SWIPE_DOWN_PX) {
       swiped = true;
       stopCharge();
       g.onDive();
+    } else if (downY - e.clientY > SWIPE_UP_PX) {
+      swiped = true;
+      stopCharge();
+      g.onTiltLock();
     }
   }
 
@@ -189,8 +211,10 @@ export function attachKamikazeGestures(target: HTMLElement, g: KamikazeGestures)
     const now = window.performance.now();
     const held = now - downAt;
 
-    // Double-tap detection (only for quick taps, not charged releases)
-    if (held < HOLD_TO_CHARGE_MS && now - lastTapAt < DOUBLE_TAP_MS) {
+    // Double-tap detection (only for quick taps, not charged releases).
+    // When no munition is banked the second tap falls through to a normal
+    // nudge, so a fast double nudge never silently eats the input.
+    if (held < HOLD_TO_CHARGE_MS && now - lastTapAt < DOUBLE_TAP_MS && g.hasMunition?.()) {
       lastTapAt = 0;
       g.onDeploy();
       return;

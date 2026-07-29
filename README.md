@@ -50,8 +50,8 @@ flowchart LR
     V[Replay verifier<br/>physics plausibility] --> S[EIP-191 score signer<br/>nonce + rate limits]
     B[(Replay store<br/>best-per-tournament)]
   end
-  subgraph Chain [Polygon Amoy]
-    TM[TournamentManager v2<br/>inverted win condition] --> P[USDT prizes<br/>O topN signed finalize]
+  subgraph Chain [Active profile chain: Mezo or Polygon Amoy]
+    TM[TournamentManager v2<br/>inverted win condition] --> P[Token prizes: MUSD / USDT<br/>O topN signed finalize]
     MP[MissionPool bounties]
   end
   R -- "upload replay (hash-bound)" --> B
@@ -122,7 +122,7 @@ deployment guide and Nimiq Pay Mini App testing instructions.
 Monorepo with three components:
 
 - **Frontend**: Next.js 16.2 App Router → static export to `out/`. Game runs client-side only via `dynamic({ ssr: false })`.
-- **Backend**: Node.js Express server for score signing, with Redis-backed rate limiting.
+- **Backend**: Node.js Fastify server for score signing and replay verification, with Redis-backed rate limiting.
 - **Contracts**: Solidity (Hardhat) — TournamentManager + MissionPool, with EIP-191 signed finalization.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full domain-driven design, dependency rules, and test coverage breakdown.

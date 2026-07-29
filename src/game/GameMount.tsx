@@ -96,6 +96,72 @@ function applyWorldReaction(reaction: WorldReaction): void {
   }
 }
 
+/**
+ * Faint directional guide drawn from the ball to the pointer while charging.
+ * Shows the player that their hold is aiming a nudge, not just waiting.
+ */
+function AimGuide(props: {
+  aimPoint: { x: number; y: number } | null;
+  charging: boolean;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  getBallClientPos: () => { x: number; y: number } | null;
+}) {
+  const [, force] = React.useState(0);
+  // Repaint every frame while charging so the line tracks the moving pointer.
+  React.useEffect(() => {
+    if (!props.charging) return;
+    let raf = 0;
+    const loop = () => { force((n) => (n + 1) % 1000); raf = requestAnimationFrame(loop); };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [props.charging]);
+
+  if (!props.charging || !props.aimPoint) return null;
+  const container = props.containerRef.current;
+  if (!container) return null;
+  const ball = props.getBallClientPos();
+  if (!ball) return null;
+  const rect = container.getBoundingClientRect();
+  const fromX = ball.x - rect.left;
+  const fromY = ball.y - rect.top;
+  const toX = props.aimPoint.x - rect.left;
+  const toY = props.aimPoint.y - rect.top;
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  const len = Math.hypot(dx, dy);
+  if (len < 4) return null;
+  const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const lineLen = Math.min(len, 160);
+  return (
+    <div aria-hidden style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 10 }}>
+      <div
+        style={{
+          position: "absolute",
+          left: fromX,
+          top: fromY,
+          width: lineLen,
+          height: 2,
+          transformOrigin: "0 50%",
+          transform: `rotate(${angle}deg)`,
+          background: "linear-gradient(90deg, rgba(74,222,128,0.9), rgba(74,222,128,0))",
+          boxShadow: "0 0 6px rgba(74,222,128,0.6)",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          left: fromX - 4,
+          top: fromY - 4,
+          width: 8,
+          height: 8,
+          borderRadius: "50%",
+          background: "rgba(74,222,128,0.85)",
+        }}
+      />
+    </div>
+  );
+}
+
 type Props = {
   runKey: number;
   mode: "practice" | "tournament";
@@ -151,6 +217,7 @@ export default function GameMount(props: Props) {
   const [storedMunition, setStoredMunition] = useState<string | null>(null);
   const [underworldCharge, setUnderworldCharge] = useState(0);
   const [agencyBanner, setAgencyBanner] = useState<string | null>(null);
+  const [aimPoint, setAimPoint] = useState<{ x: number; y: number } | null>(null);
   const agencyBannerClearRef = useRef(0);
   const momentumShiftClearRef = useRef(0);
   // Phase 3 HUD polish
@@ -267,11 +334,15 @@ export default function GameMount(props: Props) {
         touchscreen: true,
         onCharge: (power) => setChargePower(power),
         onDive: () => showAgencyBanner("突っ込む · DIVE!"),
+        onNudge: (power) => showAgencyBanner(power >= 2.9 ? "全力 · MAX NUDDGE!" : "突き · POWER NUDDGE!"),
         onDeploy: () => {
           const g = gameRef.current;
           const active = g?.kamikaze?.activePowerUps.find((p) => p.side === "player");
           showAgencyBanner(active ? `発動 · ${POWERUP_NAMES[active.type]}!` : "発動 · MUNITION DEPLOYED!");
         },
+        onTiltLock: () => showAgencyBanner("封 · TILT-LOCK!"),
+        onTiltLockCooldown: () => showAgencyBanner("…still charging"),
+        onAim: (x, y) => setAimPoint(x !== null && y !== null ? { x, y } : null),
         onMessage: (msg: GameMessages | null) => {
           if (!msg) return;
           setMessage(String(msg));
@@ -970,9 +1041,25 @@ export default function GameMount(props: Props) {
                   }} />
                 </div>
               </div>
-              <div style={{ fontSize: 9, opacity: 0.6, marginTop: 6, lineHeight: 1.5 }}>
-                HOLD charge · SWIPE↓ dive · tap×2 deploy
-              </div>
+              {/* Contextual hint: surfaces the most relevant verb right now
+                  instead of a static cheat-sheet players tune out. */}
+              {storedMunition ? (
+                <div style={{ fontSize: 10, opacity: 0.95, marginTop: 6, lineHeight: 1.5, color: "#4ade80", fontWeight: 700 }}>
+                  ⚡ {storedMunition} banked — double-tap to deploy!
+                </div>
+              ) : underworldCharge >= 1 ? (
+                <div style={{ fontSize: 10, opacity: 0.95, marginTop: 6, lineHeight: 1.5, color: "#c084fc", fontWeight: 700 }}>
+                  👆 UNDERWORLD READY — swipe up to tilt-lock!
+                </div>
+              ) : chargePower !== null && chargePower > 1.05 ? (
+                <div style={{ fontSize: 10, opacity: 0.95, marginTop: 6, lineHeight: 1.5, color: "#4ade80", fontWeight: 700 }}>
+                  Release to fire your nudge
+                </div>
+              ) : (
+                <div style={{ fontSize: 9, opacity: 0.6, marginTop: 6, lineHeight: 1.5 }}>
+                  HOLD charge · SWIPE↓ dive · SWIPE↑ tilt-lock · tap×2 deploy
+                </div>
+              )}
             </>
           ) : (
             <>
@@ -1096,6 +1183,9 @@ export default function GameMount(props: Props) {
             <div style={{ fontSize: 9, opacity: 0.7, marginTop: 4, letterSpacing: "0.15em" }}>CHARGE</div>
           </div>
         )}
+        {/* Aim guide: while charging, a faint line from ball → pointer shows the
+            nudge direction so the input feels deliberate, not random. */}
+        <AimGuide aimPoint={aimPoint} charging={chargePower !== null && chargePower > 1.05} containerRef={shakeRef} getBallClientPos={() => mountedRef.current?.getBallClientPosition() ?? null} />
         {/* Agency banner: dive / deploy feedback */}
         {agencyBanner && (
           <div

@@ -207,6 +207,128 @@ export const playFurinChime = (): void => {
     }
 };
 
+// ── Verb feedback sounds (control feel) ─────────────────────────────
+// Distinct SFX per player verb so every action audibly "lands".
+
+/** Nudge: a soft breathy whoosh rising in pitch with power. */
+export const playVerbNudge = ( power = 1 ): void => {
+    if ( !inited || fxMuted || suppressed || !audioContext || !masterGain ) {
+        return;
+    }
+    const t = audioContext.currentTime;
+    const noiseBuf = getNoiseBuffer();
+    if ( noiseBuf ) {
+        const noise = audioContext.createBufferSource();
+        noise.buffer = noiseBuf;
+        const f = audioContext.createBiquadFilter();
+        f.type = "bandpass";
+        f.frequency.setValueAtTime( 600 + power * 300, t );
+        f.frequency.exponentialRampToValueAtTime( 1800 + power * 500, t + 0.12 );
+        f.Q.value = 0.6;
+        const g = audioContext.createGain();
+        g.gain.setValueAtTime( 0.16 * Math.min( power, 3 ) / 3 + 0.08, t );
+        g.gain.exponentialRampToValueAtTime( 0.001, t + 0.15 );
+        noise.connect( f ).connect( g ).connect( masterGain );
+        noise.start( t );
+        noise.stop( t + 0.18 );
+    }
+};
+
+/** Dive: a deep descending thud — committing to the fall. */
+export const playVerbDive = (): void => {
+    if ( !inited || fxMuted || suppressed || !audioContext || !masterGain ) {
+        return;
+    }
+    const t = audioContext.currentTime;
+    const osc = audioContext.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime( 160, t );
+    osc.frequency.exponentialRampToValueAtTime( 38, t + 0.3 );
+    const g = audioContext.createGain();
+    g.gain.setValueAtTime( 0.85, t );
+    g.gain.exponentialRampToValueAtTime( 0.001, t + 0.35 );
+    osc.connect( g ).connect( masterGain );
+    osc.start( t );
+    osc.stop( t + 0.4 );
+    const noiseBuf = getNoiseBuffer();
+    if ( noiseBuf ) {
+        const noise = audioContext.createBufferSource();
+        noise.buffer = noiseBuf;
+        const nf = audioContext.createBiquadFilter();
+        nf.type = "lowpass";
+        nf.frequency.value = 400;
+        const ng = audioContext.createGain();
+        ng.gain.setValueAtTime( 0.4, t );
+        ng.gain.exponentialRampToValueAtTime( 0.001, t + 0.12 );
+        noise.connect( nf ).connect( ng ).connect( masterGain );
+        noise.start( t );
+        noise.stop( t + 0.15 );
+    }
+};
+
+/** Deploy: a bright metallic "shing" — unsheathing the banked munition. */
+export const playVerbDeploy = (): void => {
+    if ( !inited || fxMuted || suppressed || !audioContext || !masterGain ) {
+        return;
+    }
+    const t = audioContext.currentTime;
+    const partials = [
+        { freq: 1108, gain: 0.18, dur: 0.35 },
+        { freq: 1661, gain: 0.12, dur: 0.28 },
+        { freq: 2217, gain: 0.09, dur: 0.22 },
+    ];
+    for ( const p of partials ) {
+        const osc = audioContext.createOscillator();
+        osc.type = "triangle";
+        osc.frequency.value = p.freq;
+        const g = audioContext.createGain();
+        g.gain.setValueAtTime( 0.0001, t );
+        g.gain.exponentialRampToValueAtTime( p.gain, t + 0.008 );
+        g.gain.exponentialRampToValueAtTime( 0.0001, t + p.dur );
+        osc.connect( g ).connect( masterGain );
+        osc.start( t );
+        osc.stop( t + p.dur + 0.03 );
+    }
+};
+
+/** Charge: a rising pitch while the player holds — tension building. */
+export const playVerbChargeTick = ( power: number ): void => {
+    if ( !inited || fxMuted || suppressed || !audioContext || !masterGain ) {
+        return;
+    }
+    const t = audioContext.currentTime;
+    const osc = audioContext.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime( 220 + power * 180, t );
+    const g = audioContext.createGain();
+    g.gain.setValueAtTime( 0.04, t );
+    g.gain.exponentialRampToValueAtTime( 0.001, t + 0.06 );
+    osc.connect( g ).connect( masterGain );
+    osc.start( t );
+    osc.stop( t + 0.08 );
+};
+
+/** Tilt-lock: a hard metallic clank — seizing the table from the machine. */
+export const playVerbTiltLock = (): void => {
+    if ( !inited || fxMuted || suppressed || !audioContext || !masterGain ) {
+        return;
+    }
+    const t = audioContext.currentTime;
+    const osc = audioContext.createOscillator();
+    osc.type = "square";
+    osc.frequency.setValueAtTime( 180, t );
+    osc.frequency.exponentialRampToValueAtTime( 90, t + 0.12 );
+    const f = audioContext.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.value = 700;
+    const g = audioContext.createGain();
+    g.gain.setValueAtTime( 0.22, t );
+    g.gain.exponentialRampToValueAtTime( 0.001, t + 0.18 );
+    osc.connect( f ).connect( g ).connect( masterGain );
+    osc.start( t );
+    osc.stop( t + 0.2 );
+};
+
 /**
  * enqueue a track from the available pool for playing
  */

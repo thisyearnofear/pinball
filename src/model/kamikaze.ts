@@ -218,7 +218,8 @@ export function activatePowerUp(
     state: KamikazeState,
     type: PowerUpType,
     side: PowerUpSide,
-    now: number
+    now: number,
+    durationMs?: number
 ): void {
     // Remove existing power-ups of the same side (max 1 per side)
     state.activePowerUps = state.activePowerUps.filter(p => p.side !== side);
@@ -226,7 +227,7 @@ export function activatePowerUp(
     state.activePowerUps.push({
         type,
         side,
-        expiresAt: now + POWERUP_DURATION_MS[type],
+        expiresAt: now + (durationMs ?? POWERUP_DURATION_MS[type]),
     });
 
     playSoundEffect(GameSounds.POWERUP_ACTIVATE);
@@ -314,6 +315,28 @@ export function deployStoredPowerUp(state: KamikazeState, now: number): PowerUpT
     return type;
 }
 
+// ── Tilt-lock (player verb) ─────────────────────────────────────
+/** Cooldown between tilt-locks so it can't be spammed to freeze the AI. */
+export const TILT_LOCK_COOLDOWN_MS = 6000;
+/** How long the AI flippers stay frozen per tilt-lock. */
+const TILT_LOCK_FREEZE_MS = 1200;
+
+/**
+ * Tilt-lock: the player briefly seizes the table and freezes the machine's
+ * AI flippers, buying a controllable window to set up a drain. Reuses the
+ * FLIPPER_JAM power-up so the machine "respects" the freeze consistently.
+ *
+ * Returns true if the lock fired, false if still on cooldown.
+ */
+export function triggerTiltLock(state: KamikazeState, now: number): boolean {
+    const last = state.lastTiltLockAt ?? -Infinity;
+    if (now - last < TILT_LOCK_COOLDOWN_MS) return false;
+    state.lastTiltLockAt = now;
+    // Grant a short player-side FLIPPER_JAM: updateAIFlippers skips its check.
+    activatePowerUp(state, PowerUpType.FLIPPER_JAM, "player", now, TILT_LOCK_FREEZE_MS);
+    return true;
+}
+
 // ── Crate spawning ─────────────────────────────────────────────
 
 /**
@@ -362,6 +385,12 @@ export function getElementTaunt(element: "sentinel" | "guard" | "gate", rng: () 
  *
  * `power` (1-3) scales the impulse so a charged hold-nudge hits up to 3x
  * harder than a quick tap. Default 1 keeps the classic tap behaviour.
+ *
+ * Control-feel fix: instead of REPLACING the ball's velocity (which read as a
+ * teleport and made input feel ignored), we BLEND the nudge into the current
+ * velocity. Quick taps bend a fast ball slightly; a max charge can override
+ * it. The combined magnitude is capped so a charge can never launch the ball
+ * into untrackable chaos.
  */
 export function nudgeBall(
     engine: IPhysicsEngine,
@@ -377,14 +406,26 @@ export function nudgeBall(
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist === 0) return;
 
-    // Small impulse, normalized; scaled by charge power
-    const force = 4 * power; // tunable
-    const impulse = {
-        x: (dx / dist) * force,
-        y: (dy / dist) * force,
-    };
+    const { velocity } = ballBody;
+    // Fraction of current momentum kept: a tap barely resists, a max charge
+    // nearly overrides. Scaled by power 1→3.
+    const retention = 1 - 0.15 * power; // 0.85 → 0.55
+    const nudgeMag = 3 + power * 4;     // tap ~7, max ~15
+    const nx = (dx / dist) * nudgeMag;
+    const ny = (dy / dist) * nudgeMag;
 
-    engine.launchBall(ballBody, impulse);
+    let vx = velocity.x * retention + nx;
+    let vy = velocity.y * retention + ny;
+
+    // Cap combined speed just above LAUNCH_SPEED (~21) for predictability.
+    const speed = Math.hypot(vx, vy);
+    const maxMag = 26;
+    if (speed > maxMag) {
+        vx = (vx / speed) * maxMag;
+        vy = (vy / speed) * maxMag;
+    }
+
+    engine.launchBall(ballBody, { x: vx, y: vy });
 }
 
 // ── Drain detection ─────────────────────────────────────────────

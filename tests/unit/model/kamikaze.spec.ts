@@ -257,11 +257,20 @@ describe("Kamikaze Ball", () => {
     });
 
     describe("tap-to-nudge", () => {
-        it("should apply a normalized impulse toward the tap position", () => {
+        it("should blend a normalized impulse toward the tap position into current velocity", () => {
             const engine = getMockPhysicsEngine();
-            const ballBody = { position: { x: 100, y: 100 } } as never;
+            const ballBody = { position: { x: 100, y: 100 }, velocity: { x: 0, y: 0 } } as never;
             nudgeBall(engine, ballBody, 100, 200); // straight down
-            expect(engine.launchBall).toHaveBeenCalledWith(ballBody, { x: 0, y: 4 });
+            // power 1 → nudgeMag 7, retention 0.85 on a stationary ball
+            expect(engine.launchBall).toHaveBeenCalledWith(ballBody, { x: 0, y: 7 });
+        });
+
+        it("should keep a fraction of current momentum (control-feel blend)", () => {
+            const engine = getMockPhysicsEngine();
+            const ballBody = { position: { x: 100, y: 100 }, velocity: { x: 10, y: 0 } } as never;
+            nudgeBall(engine, ballBody, 100, 200);
+            // vx = 10 * 0.85 + 0 = 8.5, vy = 0 * 0.85 + 7 = 7
+            expect(engine.launchBall).toHaveBeenCalledWith(ballBody, { x: 8.5, y: 7 });
         });
 
         it("should do nothing when tapping exactly on the ball", () => {

@@ -6,6 +6,8 @@ import { stopGame, setSubmissionStateCallback, type SubmissionStep as LegacySubm
 import { getTournamentMeta, getAllTournaments, type GameMode } from "@/config/tournaments";
 import { getFromStorage } from "@/utils/local-storage";
 import { getDailyChallenge, recordDailyRun } from "@/config/daily-challenge";
+import { getProgress, recordRunProgress, type PlayerProgress, type ProgressUpdate } from "@/config/progression";
+import { parseChallengeUrl, didBeatChallenge, type ChallengeInvite } from "@/utils/challenge-link";
 import { STORED_WORLD_ID } from "@/definitions/settings";
 import { START_TABLE_INDEX } from "@/definitions/tables";
 import type { AIDifficulty } from "@/model/kamikaze";
@@ -16,6 +18,7 @@ import { usePlayerStats } from "@/hooks/use-player-stats";
 import { useWalletPort } from "@/hooks/use-wallet-port";
 import { useWalletState } from "@/hooks/use-wallet-state";
 import { useTournament } from "@/hooks/use-tournament";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import {
   useToast, ErrorBoundary,
   ScorePopupProvider, ScreenFxProvider,
@@ -38,6 +41,8 @@ import { CelebrationOverlay } from "./ui/CelebrationOverlay";
 import { ReplayViewer } from "./ui/ReplayViewer";
 import { PauseMenu } from "./ui/PauseMenu";
 import { InstallPrompt } from "./ui/InstallPrompt";
+import { KamiTrialModal } from "./ui/KamiTrialModal";
+import { ControlsPanel } from "./ui/ControlsPanel";
 import type { ReplayDigest } from "@/model/replay-recorder";
 import { decodeReplay } from "@/model/replay-recorder";
 import { fetchBestReplay } from "@/services/backend-scores-client";
@@ -67,6 +72,7 @@ function GameScreenInner() {
   const { stats, recordRun } = usePlayerStats();
   const walletPort = useWalletPort();
   const { tournament, setTournament, isLoading: isLoadingTournament, loadError, refresh: refreshTournament, enterTournament: doEnterTournament } = useTournament(address, walletPort);
+  const isDesktop = useMediaQuery("(min-width: 980px)");
 
   const [mode, setMode] = useState<"practice" | "tournament">("practice");
   const [gameMode, setGameMode] = useState<GameMode>(() => {
@@ -86,6 +92,7 @@ function GameScreenInner() {
   });
   const [showTutorial, setShowTutorial] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
+  const [showKamiTrials, setShowKamiTrials] = useState(false);
   const [lastScore, setLastScore] = useState<number>(0);
   const [dailyResult, setDailyResult] = useState<{ dayKey: string; mode: "classic" | "kamikaze"; best: number; isPB: boolean } | null>(null);
   const [lastReplay, setLastReplay] = useState<ReplayDigest | null>(null);
@@ -99,6 +106,15 @@ function GameScreenInner() {
   const [showOnboarding, setShowOnboarding] = useState(() => {
     try { return !localStorage.getItem(ONBOARDING_SEEN_KEY); } catch { return true; }
   });
+  // Meta-progression (rank / XP / streak) and friend-challenge state.
+  const [progress, setProgress] = useState<PlayerProgress>(() => getProgress());
+  const [progressUpdate, setProgressUpdate] = useState<ProgressUpdate | null>(null);
+  const [pendingChallenge, setPendingChallenge] = useState<ChallengeInvite | null>(() => {
+    if (typeof window === "undefined") return null;
+    return parseChallengeUrl(window.location.search);
+  });
+  const [activeChallenge, setActiveChallenge] = useState<ChallengeInvite | null>(null);
+  const [challengeOutcome, setChallengeOutcome] = useState<{ invite: ChallengeInvite; beat: boolean } | null>(null);
 
   // Judge demo mode (?demo=1): skip onboarding/tutorial and launch a guided
   // kamikaze practice run with narrated step toasts.
@@ -182,6 +198,23 @@ function GameScreenInner() {
     activityFeed.log("entry", `Daily challenge started · ${challenge.worldId} · ${challenge.mode}`);
   }
 
+  // Friend challenge accepted from a deep link: same world, mode and machine
+  // difficulty as the challenger's run, then compare scores at run end.
+  function acceptChallenge(invite: ChallengeInvite) {
+    setSelectedWorldId(invite.worldId);
+    setGameMode(invite.mode);
+    setAiDifficulty(invite.aiDifficulty);
+    setMode("practice");
+    setShowCelebration(false);
+    setChallengeOutcome(null);
+    markTutorialSeen();
+    setActiveChallenge(invite);
+    setPendingChallenge(null);
+    setRunKey((k) => k + 1);
+    setView("game");
+    activityFeed.log("entry", `Accepted ${invite.name ?? "a friend"}'s challenge · ${invite.worldId} · ${invite.mode}`);
+  }
+
   function startTournament() {
     setMode("tournament");
     if (!canStartTournamentRun) {
@@ -221,7 +254,7 @@ function GameScreenInner() {
     return gameMode;
   }, [mode, tournament.tournamentId, gameMode]);
 
-  const pausedEffective = view === "paused" || activeModal !== null || showTutorial || showCelebration || showReplay || submissionStep !== null;
+  const pausedEffective = view === "paused" || activeModal !== null || showTutorial || showCelebration || showReplay || submissionStep !== null || showKamiTrials;
 
   // Ghost racing: fetch the tournament leader's replay for each run. Skip when
   // the leader's replay is for a different mode or the leader is the player.
@@ -265,12 +298,27 @@ function GameScreenInner() {
     // Daily Challenge retention: only runs matching today's mode count toward
     // the day's PB, so classic scores never pollute a kamikaze drain-time PB.
     const challenge = getDailyChallenge();
+    let isDailyPB = false;
     if (challenge.mode === effectiveGameMode) {
       const res = recordDailyRun(challenge, score);
+      isDailyPB = res.isPB;
       setDailyResult({ dayKey: challenge.dayKey, mode: challenge.mode, best: res.best, isPB: res.isPB });
     } else {
       setDailyResult(null);
     }
+    // Friend challenge verdict (one-shot: cleared after the run it applied to).
+    const wonChallenge = activeChallenge ? didBeatChallenge(activeChallenge, score) : false;
+    setChallengeOutcome(activeChallenge ? { invite: activeChallenge, beat: wonChallenge } : null);
+    if (activeChallenge) setActiveChallenge(null);
+    // Meta-progression: XP, rank-ups and streaks.
+    const update = recordRunProgress({
+      gameMode: effectiveGameMode,
+      isDailyPB,
+      wonChallenge,
+      dayKey: challenge.dayKey,
+    });
+    setProgress(update.progress);
+    setProgressUpdate(update);
     setShowCelebration(true);
     activityFeed.log(
       effectiveGameMode === "kamikaze" ? "drain" : "score",
@@ -278,7 +326,7 @@ function GameScreenInner() {
         ? `Ball drained in ${(score / 1000).toFixed(1)}s`
         : `Score submitted: ${score.toLocaleString()} pts`,
     );
-  }, [mode, effectiveGameMode, activeWorldId, tournament.tournamentId, recordRun, activityFeed]);
+  }, [mode, effectiveGameMode, activeWorldId, tournament.tournamentId, activeChallenge, recordRun, activityFeed]);
 
   return (
     <ScreenFxProvider>
@@ -350,6 +398,10 @@ function GameScreenInner() {
                 }}
                 onPractice={startPractice}
                 onPlayDaily={startDailyChallenge}
+                progress={progress}
+                pendingChallenge={pendingChallenge}
+                onAcceptChallenge={acceptChallenge}
+                onDismissChallenge={() => setPendingChallenge(null)}
               />
             )}
             {view === "lobby" && (
@@ -366,39 +418,63 @@ function GameScreenInner() {
                 onRestart={() => { setRunKey((k) => k + 1); setView("game"); }}
                 onSettings={() => setActiveModal("settings")}
                 onQuitToLobby={() => setView("lobby")}
+                onKamiTrials={() => setShowKamiTrials(true)}
+              />
+            )}
+            {showKamiTrials && (
+              <KamiTrialModal
+                onClose={() => setShowKamiTrials(false)}
+                onResult={(boon, _accuracy) => {
+                  setShowKamiTrials(false);
+                  if (boon) {
+                    toast.addToast(`神のご加護 · Boon granted: ${boon}!`, "success");
+                    activityFeed.log("powerup", `Consulted the Kami and earned ${boon}`);
+                  } else {
+                    toast.addToast("The kami remain silent. No boon this time.", "info");
+                  }
+                  setView("game");
+                }}
               />
             )}
 
             {view === "game" && (
-              <ErrorBoundary>
-                <CRTOverlay intensity={0.25}>
-                  <GameMount
-                    runKey={runKey}
-                    mode={mode}
-                    gameMode={effectiveGameMode}
-                    aiDifficulty={aiDifficulty}
-                    tournamentId={tournament.tournamentId}
-                    worldId={mode === "practice" ? selectedWorldId : tournament.worldId}
-                    playerAddress={address ?? null}
-                    walletPort={walletPort}
-                    playerName={playerName}
-                    tableIndex={tableIndex}
-                    paused={pausedEffective}
-                    ghost={ghost}
-                    onActiveChange={setGameActive}
-                    onRunEnd={handleRunEnd}
-                    onReplayAvailable={setLastReplay}
-                    onSubmissionStep={(step, err) => { setSubmissionStep(step); setSubmissionError(err ?? ""); }}
-                    onSubmissionAvailable={setSubmission}
-                    onSubmitted={() => {
-                      refreshTournament();
-                      activityFeed.log("score", "Score verified and submitted onchain");
-                    }}
-                    onStatus={() => {}}
-                    onError={(e) => toast.addToast(e, "error")}
+              <div style={{ display: "flex", gap: spacing.xl, alignItems: "flex-start", justifyContent: "center" }}>
+                <ErrorBoundary>
+                  <CRTOverlay intensity={0.25}>
+                    <GameMount
+                      runKey={runKey}
+                      mode={mode}
+                      gameMode={effectiveGameMode}
+                      aiDifficulty={aiDifficulty}
+                      tournamentId={tournament.tournamentId}
+                      worldId={mode === "practice" ? selectedWorldId : tournament.worldId}
+                      playerAddress={address ?? null}
+                      walletPort={walletPort}
+                      playerName={playerName}
+                      tableIndex={tableIndex}
+                      paused={pausedEffective}
+                      ghost={ghost}
+                      onActiveChange={setGameActive}
+                      onRunEnd={handleRunEnd}
+                      onReplayAvailable={setLastReplay}
+                      onSubmissionStep={(step, err) => { setSubmissionStep(step); setSubmissionError(err ?? ""); }}
+                      onSubmissionAvailable={setSubmission}
+                      onSubmitted={() => {
+                        refreshTournament();
+                        activityFeed.log("score", "Score verified and submitted onchain");
+                      }}
+                      onStatus={() => {}}
+                      onError={(e) => toast.addToast(e, "error")}
+                    />
+                  </CRTOverlay>
+                </ErrorBoundary>
+                {isDesktop && (
+                  <ControlsPanel
+                    touchscreen={false}
+                    onConsultKami={() => { setView("paused"); setShowKamiTrials(true); }}
                   />
-                </CRTOverlay>
-              </ErrorBoundary>
+                )}
+              </div>
             )}
           </main>
 
@@ -442,6 +518,9 @@ function GameScreenInner() {
               worldId={mode === "practice" ? selectedWorldId : tournament.worldId || undefined}
               tournamentName={tournamentName || undefined}
               isNewBest={Boolean(dailyResult?.isPB)}
+              progress={progressUpdate}
+              challengeOutcome={challengeOutcome}
+              playerName={playerName || undefined}
               onDismiss={() => setShowCelebration(false)}
               onPlayAgain={() => { setShowCelebration(false); if (mode === "practice") startPractice(); else startTournament(); }}
               onPlayTournament={() => { setShowCelebration(false); startTournament(); }}

@@ -14,6 +14,7 @@ export type ReplayEventType =
     | "nudge"       // kamikaze tap-to-nudge (x/y = tap position)
     | "dive"        // kamikaze deliberate dive (bypass machine save)
     | "deploy"      // kamikaze deploy banked munition
+    | "tiltlock"    // kamikaze tilt-lock (freeze AI flippers)
     | "spawn"       // ball spawned
     | "drain";      // ball drained
 

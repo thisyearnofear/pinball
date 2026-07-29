@@ -4,10 +4,14 @@ import { getTournamentWorld } from "@/config/tournaments";
 import type { AIDifficulty } from "@/model/kamikaze";
 import { getDailyChallenge, getDailyBest, type DailyChallenge } from "@/config/daily-challenge";
 import { getWorldById } from "@/config/worlds";
+import type { PlayerProgress } from "@/config/progression";
+import type { ChallengeInvite } from "@/utils/challenge-link";
 
 import { Button, Skeleton, NeonTitle, CRTOverlay, PlayerCard } from "@/game/ui";
 import { burstOnElement } from "@/utils/burst-fx";
 import { AttractMode } from "./AttractMode";
+import { RankStrip } from "./RankStrip";
+import { ChallengeBanner } from "./ChallengeBanner";
 import styles from "./ArcadeLobby.module.scss";
 
 type Props = {
@@ -32,6 +36,12 @@ type Props = {
   onStartTournament: (id: number) => void;
   onPractice: () => void;
   onPlayDaily: (challenge: DailyChallenge) => void;
+  /** Local meta-progression (rank, level, streak) shown without a wallet. */
+  progress?: PlayerProgress;
+  /** Inbound friend challenge from a deep link, awaiting accept/dismiss. */
+  pendingChallenge?: ChallengeInvite | null;
+  onAcceptChallenge?: (invite: ChallengeInvite) => void;
+  onDismissChallenge?: () => void;
 };
 
 const DIFFICULTIES: AIDifficulty[] = ["easy", "medium", "hard"];
@@ -115,12 +125,24 @@ export function ArcadeLobby(props: Props) {
           </div>
         )}
 
+        {props.progress && props.progress.totalRuns > 0 && (
+          <RankStrip progress={props.progress} />
+        )}
+
         {!props.isConnected && (
           <div className={styles.connectPrompt}>
             <div className={styles.connectIcon}>🔌</div>
             <div className={styles.connectText}>Connect your wallet to enter tournaments and win prizes</div>
             <div className={styles.connectChain}>Polygon Amoy · Chain 80002</div>
           </div>
+        )}
+
+        {props.pendingChallenge && props.onAcceptChallenge && props.onDismissChallenge && (
+          <ChallengeBanner
+            invite={props.pendingChallenge}
+            onAccept={props.onAcceptChallenge}
+            onDismiss={props.onDismissChallenge}
+          />
         )}
 
         <DailyBanner onPlayDaily={props.onPlayDaily} />
@@ -156,12 +178,6 @@ export function ArcadeLobby(props: Props) {
             <PlayerCard address={props.playerAddress} stats={props.playerStats} />
           </div>
         )}
-
-        <div className={styles.practiceWrap}>
-          <Button variant="ghost" size="lg" onClick={props.onPractice}>
-            Practice Mode
-          </Button>
-        </div>
       </div>
     </CRTOverlay>
   );

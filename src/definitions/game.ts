@@ -167,6 +167,7 @@ export type KamikazeState = {
     diveQueued: boolean;             // player swiped down: next drain bypasses the machine's save
     storedPowerUp: PowerUpType | null; // earned from trigger-group completion; player chooses when to deploy
     underworldCharge: number;        // 0-1 charge toward forcing an underworld dive
+    lastTiltLockAt?: number;         // when the player last fired tilt-lock (cooldown tracking)
     // ── Streak system (Phase 3) ──
     drainStreak: number;             // consecutive drains without a machine save (reset on save)
 };

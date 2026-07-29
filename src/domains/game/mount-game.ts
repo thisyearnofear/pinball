@@ -5,10 +5,11 @@ import type { Size } from "zcanvas";
 import type { GameDef, GameMessages } from "@/definitions/game";
 import { ActorTypes, FRAME_RATE, GameSounds } from "@/definitions/game";
 
-import { init, scaleCanvas, setFlipperState, bumpTable, update, panViewport, setPaused, getBallPosition, getBallCount, nudgeBallToward, isKamikazeMode, queueDive, deployStoredMunition } from "@/model/game";
+import { init, scaleCanvas, setFlipperState, bumpTable, update, panViewport, setPaused, getBallPosition, getBallCount, nudgeBallToward, isKamikazeMode, queueDive, deployStoredMunition, triggerTiltLock, hasStoredMunition } from "@/model/game";
 import SpriteCache from "@/utils/sprite-cache";
 import { createInputController, attachKamikazeGestures } from "@/utils/input-controller";
 import * as haptics from "@/utils/haptics";
+import { playVerbNudge, playVerbDive, playVerbDeploy, playVerbTiltLock } from "@/services/audio-service";
 
 export type MountGameOptions = {
   /**
@@ -42,6 +43,10 @@ export type MountGameOptions = {
   onCharge?: (power: number | null) => void;
   onDive?: () => void;
   onDeploy?: () => void;
+  onNudge?: (power: number) => void;
+  onTiltLock?: () => void;
+  onTiltLockCooldown?: () => void;
+  onAim?: (pointerX: number | null, pointerY: number | null) => void;
 };
 
 export type MountedGame = {
@@ -49,6 +54,7 @@ export type MountedGame = {
   setPaused: (paused: boolean) => void;
   destroy: () => void;
   getBallPosition: () => { x: number; y: number } | null;
+  getBallClientPosition: () => { x: number; y: number } | null;
   getBallCount: () => number;
   getTableHeight: () => number;
 };
@@ -136,6 +142,22 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
       y: (vp?.top ?? 0) + ((clientY - rect.top) / rect.height) * worldHeight,
     };
   }
+  /**
+   * Convert world (table) coordinates back to client (screen) coordinates.
+   * Inverse of clientToWorld; used for the aim-guide overlay.
+   */
+  function worldToClient(x: number, y: number): { x: number; y: number } | null {
+    const el = (canvas as any).getElement?.() as HTMLElement | undefined;
+    const rect = (el ?? canvasContainer).getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    const vp = (canvas as any).getViewport?.();
+    const worldWidth = vp?.width ?? tableSize?.width ?? 600;
+    const worldHeight = vp?.height ?? tableSize?.height ?? 800;
+    return {
+      x: rect.left + (((x - (vp?.left ?? 0)) / worldWidth) * rect.width),
+      y: rect.top + (((y - (vp?.top ?? 0)) / worldHeight) * rect.height),
+    };
+  }
 
   const bumpHandler = throttle(() => {
     bumpTable(gameRef);
@@ -176,11 +198,14 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     if (!world) return;
     nudgeBallToward(world.x, world.y, power);
     haptics.bump();
+    playVerbNudge(power);
+    if (power > 1.3) opts.onNudge?.(power);
   }
   function dive() {
     if (!isKamikazeMode()) return;
     queueDive();
     haptics.bump();
+    playVerbDive();
     opts.onDive?.();
   }
   function deploy() {
@@ -188,7 +213,19 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     const type = deployStoredMunition();
     if (type !== null) {
       haptics.flip();
+      playVerbDeploy();
       opts.onDeploy?.();
+    }
+  }
+  function tiltLock() {
+    if (!isKamikazeMode()) return;
+    const fired = triggerTiltLock();
+    if (fired) {
+      haptics.nudge();
+      playVerbTiltLock();
+      opts.onTiltLock?.();
+    } else {
+      opts.onTiltLockCooldown?.();
     }
   }
 
@@ -202,6 +239,9 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
       e.preventDefault();
     } else if (e.code === "KeyD") {
       deploy();
+      e.preventDefault();
+    } else if (e.code === "ShiftLeft" || e.code === "ShiftRight") {
+      tiltLock();
       e.preventDefault();
     }
   }
@@ -287,6 +327,8 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
           onNudge: nudgeAt,
           onDive: dive,
           onDeploy: deploy,
+          onTiltLock: tiltLock,
+          hasMunition: hasStoredMunition,
           onChargeTick: (power) => opts.onCharge?.(power),
           onChargeEnd: () => opts.onCharge?.(null),
           shouldHandle: () => isKamikazeMode() && !gameRef.paused,
@@ -330,6 +372,10 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     setPaused: (paused: boolean) => setPaused(paused),
     destroy,
     getBallPosition,
+    getBallClientPosition: () => {
+      const p = getBallPosition();
+      return p ? worldToClient(p.x, p.y) : null;
+    },
     getBallCount,
     getTableHeight: () => tableSize?.height ?? 0,
   };
