@@ -4,6 +4,7 @@ import { Button, Card } from "./index";
 import { ShareCard } from "./ShareCard";
 import { formatGameScore } from "@/utils/score-format";
 import { getRandomTaunt } from "@/model/kamikaze";
+import { getRunVerdict, type RunVerdict, type VerdictDifficulty } from "@/config/run-verdict";
 import type { ProgressUpdate } from "@/config/progression";
 import type { ChallengeInvite } from "@/utils/challenge-link";
 
@@ -34,6 +35,11 @@ export function CelebrationOverlay(props: Props) {
   const kamikaze = Boolean(props.kamikaze);
   const [showShare, setShowShare] = useState(false);
   const taunt = useMemo(() => (kamikaze ? getRandomTaunt(true) : undefined), [kamikaze]);
+  const verdict = useMemo<RunVerdict>(() => {
+    const difficulty: VerdictDifficulty =
+      props.aiDifficulty === "easy" || props.aiDifficulty === "hard" ? props.aiDifficulty : "medium";
+    return getRunVerdict(kamikaze, props.score, difficulty);
+  }, [kamikaze, props.score, props.aiDifficulty]);
 
   if (showShare) {
     return (
@@ -64,6 +70,47 @@ export function CelebrationOverlay(props: Props) {
             {kamikaze ? " " : ""}
             {props.isPractice ? "Practice run complete." : "Tournament run complete."}
           </div>
+
+          {/* Run verdict: an earned, on-theme grade reacting to performance. */}
+          <div
+            style={{
+              marginTop: spacing.md,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: spacing.md,
+              padding: `${spacing.sm}px ${spacing.lg}px`,
+              borderRadius: radius.md,
+              border: "1px solid rgba(212,160,23,0.4)",
+              background: "linear-gradient(135deg, rgba(212,160,23,0.12), rgba(227,66,52,0.08))",
+            }}
+          >
+            <div
+              aria-hidden
+              style={{
+                fontFamily: "'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif",
+                fontSize: 34,
+                lineHeight: 1,
+                color: "#fbbf24",
+                textShadow: "0 0 14px rgba(212,160,23,0.6)",
+              }}
+            >
+              {verdict.kanji}
+            </div>
+            <div style={{ textAlign: "left" }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: spacing.xs }}>
+                <span style={{ fontSize: typography.size["2xl"], fontWeight: typography.weight.bold, color: colors.text.primary }}>
+                  {verdict.grade}
+                </span>
+                <span style={{ fontSize: typography.size.xs, letterSpacing: "0.12em", color: colors.text.muted, textTransform: "uppercase" }}>
+                  Rank
+                </span>
+              </div>
+              <div style={{ fontSize: typography.size.xs, color: colors.text.secondary, fontStyle: "italic" }}>
+                {verdict.line}
+              </div>
+            </div>
+          </div>
+
           {props.isNewBest && (
             <div style={{
               marginTop: spacing.sm,
