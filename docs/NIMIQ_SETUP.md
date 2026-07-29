@@ -4,6 +4,54 @@ Deployment guide for the **Nimiq Pay Mini App Competition** profile of
 Pinball Arcade. Uses Polygon Amoy testnet for EVM contract deployment with
 a test USDT (ERC-20, 6 decimals) as the payment token.
 
+## ⚠️ Competition readiness — PENDING ACTIVATION
+
+The payment code (USDT via EVM + NIM via the Nimiq provider) is **built and
+merged**, but production is still pointed at Polygon **Amoy with native
+MATIC**. Two manual steps remain before the submission clears the rules. Do
+NOT flip prod until the mainnet deploy succeeds and is verified on Polygonscan.
+
+### Step 1 — Deploy USDT TournamentManager to Polygon mainnet (you run this)
+
+```bash
+cd contracts
+USDT_ADDRESS=<USDT_ADDRESS> ENTRY_FEE=1000000 \
+  npx hardhat run scripts/deploy-polygon-mainnet-usdt.ts --network polygon
+```
+
+- `<USDT_ADDRESS>` = canonical Tether on Polygon (6 decimals).
+- `contracts/.env` needs `PRIVATE_KEY` + `SCORE_SIGNER_ADDR`; the wallet must hold POL for gas.
+- The script prints the exact env lines to paste and the new `<TM_ADDRESS>`.
+
+### Step 2 — Flip prod config (you apply after Step 1)
+
+Copy `netlify.mainnet-usdt.toml.example` over the `[build.environment]` block
+in `netlify.toml`, filling:
+- `<TM_ADDRESS>` from the deploy output
+- `<USDT_ADDRESS>` (the Tether contract)
+- `<YOUR_REAL_NQ_ADDRESS>` (your Nimiq treasury, see Step 3)
+
+Then update backend env: `CHAIN_ID=137`, `TOURNAMENT_MANAGER_ADDRESS`,
+`NIM_TREASURY_ADDRESS`, `NIM_ENTRY_FEE_LUNA=100000`, `NIMIQ_RPC_URL`.
+
+### Step 3 — Provide a real NIM treasury address (BLOCKING for the bonus)
+
+NIM payments are **dormant** until `NEXT_PUBLIC_NIM_TREASURY_ADDRESS`
+(frontend) and `NIM_TREASURY_ADDRESS` (backend) are set to a **real Nimiq
+address you control**. The placeholder was intentionally removed so no funds
+can route to an uncontrolled address. Provide the NQ address to enable the
+NIM bonus path.
+
+### Status snapshot
+
+| Item | State |
+|---|---|
+| NIM payment path (code) | ✅ built, dormant until real treasury set |
+| USDT payment path (code) | ✅ built, ERC-20 flow ready |
+| Mainnet USDT contract | ⏳ pending Step 1 deploy |
+| Prod config flip (USDT) | ⏳ pending Step 2 |
+| NIM treasury address | ❗ pending user input (Step 3) |
+
 ## Live deployment (Polygon Amoy)
 
 | Contract | Address |
@@ -87,8 +135,12 @@ To test inside Nimiq Pay:
 
 The Nimiq Pay app supports both the Nimiq provider (for NIM payments via
 `@nimiq/mini-app-sdk`) and the EVM provider (for USDT on Polygon). The game
-uses the EVM provider for tournament contracts. A future NIM bonus flow can
-use the Nimiq provider for side-pot payments.
+uses the EVM provider for the onchain tournament contract, and the Nimiq
+provider for the NIM bonus path (`src/services/nimiq/`): the player pays NIM
+to the treasury via `sendBasicTransactionWithData`, and the backend
+`/api/nim-entry` verifies the tx on the Nimiq chain before registering entry.
+The `PaymentMethodSelector` modal lets a player choose USDT or NIM when
+running inside Nimiq Pay.
 
 See:
 - [Nimiq Mini Apps overview](https://nimiq.dev/mini-apps/)
