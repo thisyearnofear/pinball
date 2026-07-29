@@ -8,7 +8,7 @@
   NEXT_PUBLIC_ECOSYSTEM_PROFILE = "nimiq"
   NEXT_PUBLIC_WALLET_ADAPTER = "nimiq"
   NEXT_PUBLIC_CHAIN_ID = "80002"
-  NEXT_PUBLIC_RPC_URL_PUBLIC = "https://polygon-amoy.publicnode.com"
+  NEXT_PUBLIC_RPC_URL_PUBLIC = "https://polygon-amoy.drpc.org"
   NEXT_PUBLIC_CHAIN_NAME = "Polygon Amoy"
   NEXT_PUBLIC_BLOCK_EXPLORER_URL = "https://amoy.polygonscan.com"
   NEXT_PUBLIC_NATIVE_CURRENCY_NAME = "POL"
