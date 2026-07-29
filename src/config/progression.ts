@@ -33,6 +33,8 @@ export type PlayerProgress = {
   longestStreak: number;
   /** Day key (yyyy-mm-dd) of the most recent run, null before the first. */
   lastRunDay: string | null;
+  /** One-time early-win bonus already granted (first in-game action). */
+  earlyWinClaimed: boolean;
 };
 
 export type ProgressEvent = {
@@ -66,6 +68,8 @@ export const XP_KAMIKAZE_RUN = 5;
 export const XP_DAILY_PB = 25;
 export const XP_STREAK_DAY = 15;
 export const XP_CHALLENGE_WON = 30;
+/** One-time bonus for the player's very first in-game action (early win). */
+export const XP_FIRST_ACTION = 15;
 
 /** Cumulative XP required to be at `level`. L1 = 0, L2 = 40, L3 = 120, … */
 export function xpForLevel(level: number): number {
@@ -98,7 +102,7 @@ export function levelProgress(xp: number): { level: number; intoLevel: number; n
 }
 
 function emptyProgress(): PlayerProgress {
-  return { xp: 0, totalRuns: 0, kamikazeRuns: 0, currentStreak: 0, longestStreak: 0, lastRunDay: null };
+  return { xp: 0, totalRuns: 0, kamikazeRuns: 0, currentStreak: 0, longestStreak: 0, lastRunDay: null, earlyWinClaimed: false };
 }
 
 export function getProgress(): PlayerProgress {
@@ -152,6 +156,7 @@ export function applyRun(prev: PlayerProgress, event: ProgressEvent): ProgressUp
     currentStreak,
     longestStreak: Math.max(prev.longestStreak, currentStreak),
     lastRunDay: event.dayKey,
+    earlyWinClaimed: prev.earlyWinClaimed,
   };
 
   return {
@@ -174,4 +179,33 @@ export function recordRunProgress(event: ProgressEvent): ProgressUpdate {
     setInStorage(STORAGE_KEY, JSON.stringify(update.progress));
   } catch {}
   return update;
+}
+
+export type EarlyWinResult = {
+  granted: boolean;
+  progress: PlayerProgress;
+  level: number;
+  rank: Rank;
+  leveledUp: boolean;
+  previousLevel: number;
+};
+
+/**
+ * One-time "early win": the first deliberate in-game action grants bonus XP so
+ * the player feels rewarded before their first run even ends. Idempotent — once
+ * claimed it never fires again. Returns whether a grant happened this call.
+ */
+export function grantEarlyWin(): EarlyWinResult {
+  const prev = getProgress();
+  const previousLevel = levelForXp(prev.xp);
+  if (prev.earlyWinClaimed) {
+    return { granted: false, progress: prev, level: previousLevel, rank: rankForLevel(previousLevel), leveledUp: false, previousLevel };
+  }
+  const xp = prev.xp + XP_FIRST_ACTION;
+  const level = levelForXp(xp);
+  const progress: PlayerProgress = { ...prev, xp, earlyWinClaimed: true };
+  try {
+    setInStorage(STORAGE_KEY, JSON.stringify(progress));
+  } catch {}
+  return { granted: true, progress, level, rank: rankForLevel(level), leveledUp: level > previousLevel, previousLevel };
 }

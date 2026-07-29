@@ -3,6 +3,7 @@ import {
   applyRun,
   dayDiff,
   getProgress,
+  grantEarlyWin,
   levelForXp,
   levelProgress,
   rankForLevel,
@@ -13,6 +14,7 @@ import {
   XP_DAILY_PB,
   XP_STREAK_DAY,
   XP_CHALLENGE_WON,
+  XP_FIRST_ACTION,
   type PlayerProgress,
 } from "@/config/progression";
 
@@ -23,6 +25,7 @@ const EMPTY: PlayerProgress = {
   currentStreak: 0,
   longestStreak: 0,
   lastRunDay: null,
+  earlyWinClaimed: false,
 };
 
 // Day keys are generated at runtime from a fixed UTC base so the suite never
@@ -148,5 +151,28 @@ describe("persistence", () => {
         const p = getProgress();
         expect(p.totalRuns).toBe(0);
         expect(p.xp).toBe(0);
+    });
+
+    it("grants the one-time early-win XP on first action", () => {
+        const first = grantEarlyWin();
+        expect(first.granted).toBe(true);
+        expect(first.progress.xp).toBe(XP_FIRST_ACTION);
+        expect(first.progress.earlyWinClaimed).toBe(true);
+        expect(getProgress().xp).toBe(XP_FIRST_ACTION);
+    });
+
+    it("never grants the early win twice", () => {
+        grantEarlyWin();
+        const second = grantEarlyWin();
+        expect(second.granted).toBe(false);
+        expect(second.progress.xp).toBe(XP_FIRST_ACTION); // unchanged
+    });
+
+    it("preserves earlyWinClaimed across subsequent runs", () => {
+        grantEarlyWin();
+        recordRunProgress({ gameMode: "classic", isDailyPB: false, wonChallenge: false, dayKey: day(0) });
+        const p = getProgress();
+        expect(p.earlyWinClaimed).toBe(true);
+        expect(p.xp).toBe(XP_FIRST_ACTION + XP_RUN + XP_STREAK_DAY);
     });
 });

@@ -10,6 +10,7 @@ import { awardMissionWinner } from '../lib/mission-awarder.js';
 import { adminAuth } from '../lib/admin-auth.js';
 import { verifyReplay } from '../lib/replay-verifier.js';
 import { getStoredReplay, maybeStoreBestReplay } from './replays.js';
+import { recordCommunityRun, getRecentRuns } from '../lib/community-feed.js';
 
 const SignBody = z.object({
   tournamentId: z.number().int().positive(),
@@ -137,6 +138,21 @@ export async function scoresRoutes(app: FastifyInstance) {
       // Persist the issued nonce so the next request gets nonce+1
       await nonceTracker.recordNonce(tid, addr, nonce);
 
+      // Community feed: record this finished run so other players see live
+      // arena activity and gain a rival to race (Socializer loop). Non-fatal.
+      try {
+        recordCommunityRun({
+          address: addr,
+          name: n,
+          score: s,
+          mode: m.mode === 'kamikaze' ? 'kamikaze' : 'classic',
+          tournamentId: tid,
+          at: Date.now(),
+        });
+      } catch (e: any) {
+        app.log.warn({ event: 'COMMUNITY_FEED_RECORD_FAILED', error: e?.message });
+      }
+
       // Keep the leader's verified replay for ghost racing (non-fatal)
       if (replayVerified && verifiedReplayJson) {
         try {
@@ -207,6 +223,15 @@ export async function scoresRoutes(app: FastifyInstance) {
         message: 'Failed to sign score. Please try again later.'
       });
     }
+  });
+
+  // Public community feed: recent finished runs across all players.
+  // Powers the lobby "LIVE ARENA" panel (Socializer loop). No auth required;
+  // only public wallet prefixes + scores are exposed.
+  app.get('/api/community/recent', async (req, reply) => {
+    const limitParam = Number((req.query as any)?.limit ?? 10);
+    const limit = Number.isFinite(limitParam) ? Math.max(1, Math.min(20, Math.floor(limitParam))) : 10;
+    return reply.send({ runs: getRecentRuns(limit) });
   });
 
   // Admin endpoint to get rate limit status (optional)

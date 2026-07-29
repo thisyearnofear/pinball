@@ -68,6 +68,33 @@ export type BestReplay = {
   replay: string; // encoded ReplayDigest JSON
 };
 
+export type CommunityRun = {
+  address: string;
+  name: string;
+  score: number;
+  mode: 'classic' | 'kamikaze';
+  tournamentId: number;
+  at: number;
+};
+
+/**
+ * Fetch recent finished runs across all players (Socializer loop).
+ * Returns [] on any failure so the lobby degrades gracefully offline.
+ */
+export async function fetchCommunityFeed(limit = 10): Promise<CommunityRun[]> {
+  if (!API_BASE) return [];
+  try {
+    const { data } = await axios.get(`${API_BASE}/api/community/recent`, {
+      params: { limit },
+      timeout: 5000,
+    });
+    if (Array.isArray(data?.runs)) return data.runs as CommunityRun[];
+    return [];
+  } catch {
+    return [];
+  }
+}
+
 const BEST_REPLAY_TTL_MS = 30_000;
 const bestReplayCache = new Map<number, { at: number; value: BestReplay | null }>();
 

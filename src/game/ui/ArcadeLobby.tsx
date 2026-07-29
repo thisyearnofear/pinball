@@ -12,6 +12,8 @@ import { burstOnElement } from "@/utils/burst-fx";
 import { AttractMode } from "./AttractMode";
 import { RankStrip } from "./RankStrip";
 import { ChallengeBanner } from "./ChallengeBanner";
+import { CommunityFeedPanel } from "./CommunityFeedPanel";
+import type { CommunityRun } from "@/services/backend-scores-client";
 import styles from "./ArcadeLobby.module.scss";
 
 type Props = {
@@ -42,6 +44,8 @@ type Props = {
   pendingChallenge?: ChallengeInvite | null;
   onAcceptChallenge?: (invite: ChallengeInvite) => void;
   onDismissChallenge?: () => void;
+  /** Challenge a rival's recent community run (persistent socializer loop). */
+  onChallengeCommunityRun?: (run: CommunityRun) => void;
 };
 
 const DIFFICULTIES: AIDifficulty[] = ["easy", "medium", "hard"];
@@ -159,6 +163,10 @@ export function ArcadeLobby(props: Props) {
         </div>
 
         <div className={styles.tournamentList}>
+          <CommunityFeedPanel
+            playerAddress={props.playerAddress}
+            onChallengeRun={props.onChallengeCommunityRun}
+          />
           {tournaments.map((t) => (
             <ArcadeCard
               key={t.id}

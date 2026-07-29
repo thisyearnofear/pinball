@@ -47,6 +47,13 @@ export type MountGameOptions = {
   onTiltLock?: () => void;
   onTiltLockCooldown?: () => void;
   onAim?: (pointerX: number | null, pointerY: number | null) => void;
+  /**
+   * Fired exactly once, the first time the player performs any deliberate
+   * in-run action (nudge / dive / deploy / tilt-lock). Used for the
+   * "early win" micro-reward so the first dopamine hit lands before the
+   * first run even ends.
+   */
+  onFirstAction?: () => void;
 };
 
 export type MountedGame = {
@@ -187,18 +194,26 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
       if (!world) return;
       nudgeBallToward(world.x, world.y);
       haptics.bump();
+      markFirstAction();
     },
     isKamikaze: () => isKamikazeMode(),
   }, root);
 
   // ── Kamikaze Ball agency gestures (Phase 2) ──────────────────────
   // Shared handlers so pointer gestures and keyboard agree.
+  let firstActionFired = false;
+  function markFirstAction() {
+    if (firstActionFired || opts.attract) return;
+    firstActionFired = true;
+    opts.onFirstAction?.();
+  }
   function nudgeAt(clientX: number, clientY: number, power = 1) {
     const world = clientToWorld(clientX, clientY);
     if (!world) return;
     nudgeBallToward(world.x, world.y, power);
     haptics.bump();
     playVerbNudge(power);
+    markFirstAction();
     if (power > 1.3) opts.onNudge?.(power);
   }
   function dive() {
@@ -206,6 +221,7 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     queueDive();
     haptics.bump();
     playVerbDive();
+    markFirstAction();
     opts.onDive?.();
   }
   function deploy() {
@@ -214,6 +230,7 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     if (type !== null) {
       haptics.flip();
       playVerbDeploy();
+      markFirstAction();
       opts.onDeploy?.();
     }
   }
@@ -223,6 +240,7 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     if (fired) {
       haptics.nudge();
       playVerbTiltLock();
+      markFirstAction();
       opts.onTiltLock?.();
     } else {
       opts.onTiltLockCooldown?.();

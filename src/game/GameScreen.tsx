@@ -7,7 +7,7 @@ import { stopGame, setSubmissionStateCallback, type SubmissionStep as LegacySubm
 import { getTournamentMeta, getAllTournaments, type GameMode } from "@/config/tournaments";
 import { getFromStorage } from "@/utils/local-storage";
 import { getDailyChallenge, recordDailyRun } from "@/config/daily-challenge";
-import { getProgress, recordRunProgress, type PlayerProgress, type ProgressUpdate } from "@/config/progression";
+import { getProgress, recordRunProgress, grantEarlyWin, XP_FIRST_ACTION, type PlayerProgress, type ProgressUpdate } from "@/config/progression";
 import { parseChallengeUrl, didBeatChallenge, type ChallengeInvite } from "@/utils/challenge-link";
 import { STORED_WORLD_ID } from "@/definitions/settings";
 import { START_TABLE_INDEX } from "@/definitions/tables";
@@ -30,6 +30,7 @@ import {
   SakuraPetals, KanjiWatermark,
 } from "@/game/ui";
 import { burstAt } from "@/utils/burst-fx";
+import { playFurinChime } from "@/services/audio-service";
 import { ActivityFeedPanel } from "./ui/ActivityFeed";
 import GameMount from "./GameMount";
 import { SettingsModal } from "./ui/SettingsModal";
@@ -59,6 +60,11 @@ const ONBOARDING_SEEN_KEY = "pinball_onboarding_seen";
 
 function markOnboardingSeen(): void {
   try { localStorage.setItem(ONBOARDING_SEEN_KEY, "true"); } catch {}
+}
+
+function shortAddr(addr: string): string {
+  if (!addr || addr.length < 10) return "rival";
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
 export default function GameScreen() {
@@ -221,6 +227,31 @@ function GameScreenInner() {
     activityFeed.log("entry", `Accepted ${invite.name ?? "a friend"}'s challenge · ${invite.worldId} · ${invite.mode}`);
   }
 
+  // Challenge a rival from the persistent community feed. The rival's mode +
+  // score become the target; we reuse the player's current world + difficulty
+  // (the feed doesn't carry those), keeping the duel fair and instant.
+  function challengeCommunityRun(run: { address: string; name: string; score: number; mode: GameMode }) {
+    const invite: ChallengeInvite = {
+      mode: run.mode,
+      worldId: selectedWorldId,
+      aiDifficulty,
+      score: run.score,
+      name: run.name || shortAddr(run.address),
+    };
+    setSelectedWorldId(invite.worldId);
+    setGameMode(invite.mode);
+    setMode("practice");
+    setShowCelebration(false);
+    setChallengeOutcome(null);
+    markTutorialSeen();
+    setActiveChallenge(invite);
+    setPendingChallenge(null);
+    setRunKey((k) => k + 1);
+    setView("game");
+    toast.addToast(`挑戦 · Challenging ${invite.name}!`, "info");
+    activityFeed.log("entry", `Challenged ${invite.name} · ${invite.mode} · beat ${run.mode === "kamikaze" ? `${(run.score / 1000).toFixed(1)}s` : run.score.toLocaleString()}`);
+  }
+
   function proceedAfterEntry() {
     setMode("tournament");
     setShowCelebration(false);
@@ -331,6 +362,18 @@ function GameScreenInner() {
     setSubmissionStateCallback(cb);
     return () => setSubmissionStateCallback(null);
   }, []);
+
+  const handleFirstAction = useCallback(() => {
+    // Early win: reward the player's very first deliberate action so the
+    // first dopamine hit lands before the first run ends (pacing hook).
+    const result = grantEarlyWin();
+    if (!result.granted) return;
+    setProgress(result.progress);
+    playFurinChime();
+    burstAt(window.innerWidth / 2, window.innerHeight / 2, { count: 14, colors: ["#d4a017", "#e34234", "#fbbf24"] });
+    toast.addToast(`風が吹いた · First touch! +${XP_FIRST_ACTION} XP`, "success");
+    activityFeed.log("powerup", `The wind answers your first touch (+${XP_FIRST_ACTION} XP)`);
+  }, [toast, activityFeed]);
 
   const handleRunEnd = useCallback((score: number) => {
     setLastScore(score);
@@ -448,6 +491,7 @@ function GameScreenInner() {
                 pendingChallenge={pendingChallenge}
                 onAcceptChallenge={acceptChallenge}
                 onDismissChallenge={() => setPendingChallenge(null)}
+                onChallengeCommunityRun={challengeCommunityRun}
               />
             )}
             {view === "lobby" && (
@@ -510,6 +554,7 @@ function GameScreenInner() {
                       ghost={ghost}
                       onActiveChange={setGameActive}
                       onRunEnd={handleRunEnd}
+                      onFirstAction={handleFirstAction}
                       onReplayAvailable={setLastReplay}
                       onSubmissionStep={(step, err) => { setSubmissionStep(step); setSubmissionError(err ?? ""); }}
                       onSubmissionAvailable={setSubmission}

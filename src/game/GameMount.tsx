@@ -178,6 +178,8 @@ type Props = {
   ghost?: { digest: ReplayDigest; score: number; address: string } | null;
   onActiveChange?: (active: boolean) => void;
   onRunEnd?: (score: number) => void;
+  /** Fired once on the player's first deliberate in-run action (early win). */
+  onFirstAction?: () => void;
   onReplayAvailable?: (replay: ReplayDigest) => void;
   onSubmissionStep?: (step: SubmissionStep, errorMessage?: string) => void;
   onSubmissionAvailable?: (submission: {
@@ -342,6 +344,7 @@ export default function GameMount(props: Props) {
         },
         onTiltLock: () => showAgencyBanner("封 · TILT-LOCK!"),
         onTiltLockCooldown: () => showAgencyBanner("…still charging"),
+        onFirstAction: () => props.onFirstAction?.(),
         onAim: (x, y) => setAimPoint(x !== null && y !== null ? { x, y } : null),
         onMessage: (msg: GameMessages | null) => {
           if (!msg) return;
