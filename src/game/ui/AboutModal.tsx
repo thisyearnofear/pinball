@@ -43,9 +43,9 @@ export function AboutModal(props: { onClose: () => void }) {
             Payments &amp; Contracts
           </h3>
           <div style={{ fontSize: typography.size.sm, color: colors.text.secondary, fontFamily: typography.fontFamilyMono, lineHeight: typography.lineHeight.relaxed }}>
-            NIM (Nimiq native): 1 NIM entry · bonus-eligible<br />
-            USDT (Polygon): ERC-20 entry via Nimiq Pay EVM wallet<br />
-            Test (Amoy): native MATIC · 0xDD62...C1A4 · chain 80002
+            USDT (Polygon mainnet): ERC-20 entry · 0.1 USDT · chain 137<br />
+            TournamentManager: 0x3906...cfa0<br />
+            NIM (Nimiq native): 1 NIM entry · bonus-eligible
           </div>
         </div>
 

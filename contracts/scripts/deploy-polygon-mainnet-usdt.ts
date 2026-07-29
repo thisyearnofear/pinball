@@ -46,7 +46,12 @@ async function main() {
   const USDT_ADDRESS = requireEnv("USDT_ADDRESS", process.env.USDT_ADDRESS);
   // Default 1 USDT entry fee (6 decimals). Override with ENTRY_FEE.
   const entryFee = process.env.ENTRY_FEE ? BigInt(process.env.ENTRY_FEE) : 10n ** USDT_DECIMALS;
-  const lowGasPrice = 40n * 10n ** 9n; // 40 gwei (mainnet-safe floor)
+
+  // Use EIP-1559 dynamic fees from the network instead of a hardcoded floor.
+  const feeData = await hre.ethers.provider.getFeeData();
+  const gasOpts = feeData.maxFeePerGas
+    ? { maxFeePerGas: feeData.maxFeePerGas, maxPriorityFeePerGas: feeData.maxPriorityFeePerGas ?? 30n * 10n ** 9n }
+    : { gasPrice: feeData.gasPrice ?? 50n * 10n ** 9n };
 
   if (hre.network.name !== "polygon") {
     console.warn("\nWARNING: target network is", hre.network.name, "— expected 'polygon'.\n");
@@ -58,7 +63,8 @@ async function main() {
   console.log("Balance:", hre.ethers.formatEther(balance), "POL");
   console.log("USDT:", USDT_ADDRESS);
   console.log("Entry fee:", hre.ethers.formatUnits(entryFee, USDT_DECIMALS), "USDT");
-  console.log("Gas price:", hre.ethers.formatUnits(lowGasPrice, 9), "gwei\n");
+  console.log("Fee mode:", feeData.maxFeePerGas ? `EIP-1559 (maxFee ${hre.ethers.formatUnits(feeData.maxFeePerGas, 9)} gwei)` : `legacy (${hre.ethers.formatUnits(gasOpts.gasPrice, 9)} gwei)`);
+  console.log("");
 
   // ── 1. TournamentManager (ERC-20 / USDT) ────────────────────────
   let tmAddr = process.env.EXISTING_TM_ADDRESS;
@@ -71,7 +77,7 @@ async function main() {
       ["address", "address", "uint256"],
       [scoreSigner, USDT_ADDRESS, entryFee]
     ).slice(2);
-    const tmTx = await deployer.sendTransaction({ data: tmData, gasPrice: lowGasPrice });
+    const tmTx = await deployer.sendTransaction({ data: tmData, ...gasOpts });
     const tmReceipt = await tmTx.wait();
     tmAddr = tmReceipt.contractAddress;
     console.log("   TournamentManager deployed:", tmAddr);
@@ -95,7 +101,7 @@ async function main() {
   for (let i = 0; i < tournamentModes.length; i++) {
     const inverted = tournamentModes[i];
     const createTx = await tm.createTournament(startTime, endTime, topN, prizeBps, inverted, {
-      gasLimit: 500_000n, gasPrice: lowGasPrice,
+      gasLimit: 500_000n, ...gasOpts,
     });
     await createTx.wait();
     console.log(`   Tournament #${i + 1} created (${inverted ? "KAMIKAZE / inverted" : "CLASSIC"})`);
@@ -116,7 +122,7 @@ async function main() {
   console.log("═══════════════════════════════════════════════════════════");
   console.log("\nPaste these into netlify.toml [build.environment]:");
   console.log(`  NEXT_PUBLIC_CHAIN_ID = "137"`);
-  console.log(`  NEXT_PUBLIC_RPC_URL_PUBLIC = "https://polygon-rpc.com"`);
+  console.log(`  NEXT_PUBLIC_RPC_URL_PUBLIC = "https://polygon.drpc.org"`);
   console.log(`  NEXT_PUBLIC_CHAIN_NAME = "Polygon"`);
   console.log(`  NEXT_PUBLIC_BLOCK_EXPLORER_URL = "https://polygonscan.com"`);
   console.log(`  NEXT_PUBLIC_PAYMENT_TOKEN_TYPE = "erc20"`);

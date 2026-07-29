@@ -4,6 +4,7 @@ import { Button, Card } from "./index";
 import { ShareCard } from "./ShareCard";
 import { formatGameScore } from "@/utils/score-format";
 import { getRandomTaunt } from "@/model/kamikaze";
+import { getAppConfig } from "@/config/app-config";
 import { getRunVerdict, type RunVerdict, type VerdictDifficulty } from "@/config/run-verdict";
 import type { ProgressUpdate } from "@/config/progression";
 import type { ChallengeInvite } from "@/utils/challenge-link";
@@ -35,6 +36,14 @@ export function CelebrationOverlay(props: Props) {
   const kamikaze = Boolean(props.kamikaze);
   const [showShare, setShowShare] = useState(false);
   const taunt = useMemo(() => (kamikaze ? getRandomTaunt(true) : undefined), [kamikaze]);
+  const chainLabel = useMemo(() => {
+    try {
+      const cfg = getAppConfig();
+      return cfg.chain.chainName ?? `Chain ${cfg.chain.chainId}`;
+    } catch {
+      return "Polygon";
+    }
+  }, []);
   const verdict = useMemo<RunVerdict>(() => {
     const difficulty: VerdictDifficulty =
       props.aiDifficulty === "easy" || props.aiDifficulty === "hard" ? props.aiDifficulty : "medium";
@@ -207,7 +216,7 @@ export function CelebrationOverlay(props: Props) {
 
         {!props.isPractice && (
           <div style={{ textAlign: "center", fontSize: typography.size.sm, color: colors.text.muted, padding: `${spacing.xs}px 0` }}>
-            Polygon Amoy · Prizes via TournamentManager
+            {chainLabel} · Prizes via TournamentManager
           </div>
         )}
 

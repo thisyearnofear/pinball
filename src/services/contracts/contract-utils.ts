@@ -10,16 +10,25 @@ import type { WalletPort } from "@/domains/wallet/wallet-port";
  * - CLEAN: explicit separation of read (public RPC) vs write (wallet runner).
  */
 
-// Backup public RPCs for Polygon Amoy (chain 80002). Ordered by reliability:
-// drpc.org is consistently up; publicnode endpoints are kept only as a last
-// resort (they have been observed dropping connections intermittently, which
-// ethers misreads as a contract revert). The env-configured primary is tried
-// first so operators can point at their own node.
-const AMOY_FALLBACK_RPCS = [
-  "https://polygon-amoy.drpc.org",
-  "https://polygon-amoy.publicnode.com",
-  "https://polygon-amoy-bor-rpc.publicnode.com",
-];
+// Backup public RPCs, keyed by chain ID. Ordered by reliability within each
+// chain: drpc.org is consistently up; publicnode endpoints are kept only as a
+// last resort (they have been observed dropping connections intermittently,
+// which ethers misreads as a contract revert). The env-configured primary is
+// tried first so operators can point at their own node.
+const FALLBACK_RPCS: Record<number, string[]> = {
+  // Polygon mainnet (chain 137)
+  137: [
+    "https://polygon.drpc.org",
+    "https://polygon-bor-rpc.publicnode.com",
+    "https://polygon.llamarpc.com",
+  ],
+  // Polygon Amoy testnet (chain 80002)
+  80002: [
+    "https://polygon-amoy.drpc.org",
+    "https://polygon-amoy.publicnode.com",
+    "https://polygon-amoy-bor-rpc.publicnode.com",
+  ],
+};
 
 /**
  * Is this error a transient transport failure rather than a genuine contract
@@ -92,7 +101,8 @@ export function getPublicProvider(): ethers.JsonRpcProvider {
 
   const { rpcUrlPublic, chainId } = getContractsConfig();
 
-  const urls = [rpcUrlPublic, ...AMOY_FALLBACK_RPCS].filter(
+  const chainFallbacks = FALLBACK_RPCS[chainId] ?? [];
+  const urls = [rpcUrlPublic, ...chainFallbacks].filter(
     (u, i, a) => Boolean(u) && a.indexOf(u) === i
   );
 

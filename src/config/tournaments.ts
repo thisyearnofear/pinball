@@ -52,7 +52,7 @@ export const TOURNAMENT_META: Record<number, TournamentMeta> = {
     worldId: 'pirate-ship',
     mode: 'kamikaze',
     description: 'Kamikaze Ball — drain fast, the galleon fights back.',
-    entryFee: '1',  // symbol appended dynamically
+    entryFee: '0.1',  // symbol appended dynamically
     prizePool: 'Pot grows with each entry',
   },
   2: {
@@ -61,7 +61,7 @@ export const TOURNAMENT_META: Record<number, TournamentMeta> = {
     worldId: 'spaceship',
     mode: 'kamikaze',
     description: 'Kamikaze Ball in zero gravity. Fastest drain wins.',
-    entryFee: '1',
+    entryFee: '0.1',
     prizePool: 'Pot grows with each entry',
   },
   3: {
@@ -70,7 +70,7 @@ export const TOURNAMENT_META: Record<number, TournamentMeta> = {
     worldId: 'hobbiton',
     mode: 'classic',
     description: 'Classic pinball in the Shire. Highest score wins.',
-    entryFee: '1',
+    entryFee: '0.1',
     prizePool: 'Pot grows with each entry',
   },
   4: {
@@ -79,7 +79,7 @@ export const TOURNAMENT_META: Record<number, TournamentMeta> = {
     worldId: 'haunted-house',
     mode: 'classic',
     description: 'Classic pinball. Spooky bumpers, spectral jackpots.',
-    entryFee: '1',
+    entryFee: '0.1',
     prizePool: 'Pot grows with each entry',
   },
 };
