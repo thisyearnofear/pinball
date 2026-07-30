@@ -4,7 +4,7 @@ import { Providers } from "./providers";
 // Absolute base for all metadata URLs (og:image etc.). Social crawlers require
 // absolute URLs; without this, relative image paths resolve against localhost
 // and no card renders. Override with the real deployed host via env.
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://pinball.sportwarren.com";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://kamikazeball.netlify.app";
 
 const TITLE = "Kamikaze Ball — The World's First Verifiable Arcade";
 const DESCRIPTION =

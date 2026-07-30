@@ -5,6 +5,7 @@
 [build.environment]
   NODE_VERSION = "22"
   NPM_FLAGS = "--version"
+  NEXT_PUBLIC_SITE_URL = "https://kamikazeball.netlify.app"
   NEXT_PUBLIC_ECOSYSTEM_PROFILE = "nimiq"
   NEXT_PUBLIC_WALLET_ADAPTER = "nimiq"
   NEXT_PUBLIC_CHAIN_ID = "137"

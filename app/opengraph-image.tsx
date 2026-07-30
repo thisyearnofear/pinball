@@ -147,7 +147,7 @@ export default async function Image() {
           }}
         >
           <div style={{ display: "flex" }}>ON-CHAIN TOURNAMENTS · PROVABLY FAIR SCORES</div>
-          <div style={{ display: "flex", color: "#fbbf24" }}>pinball.sportwarren.com</div>
+          <div style={{ display: "flex", color: "#fbbf24" }}>kamikazeball.netlify.app</div>
         </div>
       </div>
     ),
