@@ -40,7 +40,7 @@ import { createEngine } from "@/model/physics/engine";
 import type { IPhysicsEngine, CollisionEvent } from "@/model/physics/engine";
 import { Body } from "matter-js";
 import { worldGravityX, worldGravityY } from "@/model/world-physics";
-import { enqueueTrack, setFrequency, playSoundEffect, duckMusic, playTaikoHit, playFurinChime } from "@/services/audio-service";
+import { enqueueTrack, setFrequency, playSoundEffect, duckMusic, playTaikoHit, playFurinChime, momentarySilence } from "@/services/audio-service";
 import * as haptics from "@/utils/haptics";
 import {
     loadMemory, greetingLine, dominantHabit, habitTaunt, emptyHabits,
@@ -723,6 +723,7 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
                     engine.launchBall(ball.body, { x: sideKick, y: -LAUNCH_SPEED * 0.95 });
                     game.kamikaze.drainStreak = 0; // the machine broke the streak
                     aiSaveFeedback();
+                    momentarySilence(200); // B3 audio dodge: the table holds its breath
                     continue;
                 }
                 // Drain successful! The blossom falls.

@@ -21,6 +21,7 @@ import { createKamikazeState, POWERUP_NAMES, type AIDifficulty } from "@/model/k
 import type { PowerUpSide } from "@/definitions/game";
 import { mulberry32, createRunSeed } from "@/utils/rng";
 import * as haptics from "@/utils/haptics";
+import { startMachinePulse, stopMachinePulse } from "@/services/audio-service";
 import { formatGameScore } from "@/utils/score-format";
 import { startReplayRecording, finishReplayRecording, encodeReplay, type ReplayDigest } from "@/model/replay-recorder";
 import { uploadReplay } from "@/services/backend-scores-client";
@@ -415,6 +416,10 @@ export default function GameMount(props: Props) {
 
       // Enable ball-following camera when world is loaded
       worldHandleRef.current?.setBallTracking(true);
+
+      // B3: MAMORU's heartbeat — the machine pulse reads the live mood and
+      // beats under the music (calm 60bpm → desperate 120bpm → grieving stops).
+      if (props.gameMode === "kamikaze") startMachinePulse(getMachineMood);
     }
 
     run().catch((e) => {
@@ -424,6 +429,7 @@ export default function GameMount(props: Props) {
 
     return () => {
       cancelled = true;
+      stopMachinePulse();
       mountedRef.current?.destroy();
       mountedRef.current = null;
       worldHandleRef.current?.dispose();

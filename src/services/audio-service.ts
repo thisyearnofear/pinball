@@ -133,6 +133,25 @@ export const duckMusic = ( durationMs = 700, level = 0.25 ): void => {
     masterGain.gain.linearRampToValueAtTime( 1, now + Math.max( 0.1, durationMs / 1000 ));
 };
 
+/**
+ * B3 "audio dodge": cut the master bus to near-silence for a beat, then
+ * restore. On a near-drain save the sudden vacuum reads louder than any SFX —
+ * the table holds its breath, then the save lands. Cancels any pending duck
+ * so it wins when both fire on the same moment.
+ */
+export const momentarySilence = ( durationMs = 200 ): void => {
+    if ( !audioContext || !masterGain ) {
+        return;
+    }
+    const now = audioContext.currentTime;
+    const hold = Math.max( 0.05, durationMs / 1000 );
+    masterGain.gain.cancelScheduledValues( now );
+    masterGain.gain.setValueAtTime( masterGain.gain.value, now );
+    masterGain.gain.linearRampToValueAtTime( 0.0001, now + 0.015 );
+    masterGain.gain.setValueAtTime( 0.0001, now + hold );
+    masterGain.gain.linearRampToValueAtTime( 1, now + hold + 0.08 );
+};
+
 // ── Japanese identity sounds (synthesized, no new assets) ────────
 // Taiko: a deep drum thump for bumper hits during Kamikaze mode.
 // Furin: a glass wind-chime ring for the winning drain.
@@ -487,3 +506,96 @@ function setupWebAudioAPI(): void {
         setFrequency();
     }
 }
+
+// ── B3 Machine pulse (adaptive taiko heartbeat) ────────────────
+// MAMORU's emotional state drives a synthesized heartbeat under the music:
+// calm 60bpm single low hit · wary 90bpm doublet · desperate 120bpm + noise
+// burst · enraged irregular · grieving stops dead. Lookahead scheduler
+// (100ms tick, 200ms schedule-ahead). Wall-clock cosmetic only — never feeds
+// physics, so it can use Math.random() freely (hard rule 1 is physics-only).
+// Mixed ~-18dB under the music loop; respects suppress + music mute.
+
+let pulseTimer: number | null = null;
+let pulseNextTime = 0;
+let pulseGetMood: () => string = () => "calm";
+
+const PULSE_BPM: Record<string, number> = {
+    calm: 60, smug: 60, wary: 90, desperate: 120, enraged: 120, grieving: 0,
+};
+
+/** Tempo (bpm) for a mood; 0 = the heartbeat stops (grieving). Pure (B3). */
+export const pulseBpmForMood = ( mood: string ): number => PULSE_BPM[ mood ] ?? 60;
+
+function schedulePulseHit( time: number, mood: string ): void {
+    if ( !audioContext || !masterGain ) return;
+    const osc = audioContext.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime( 70, time );
+    osc.frequency.exponentialRampToValueAtTime( 38, time + 0.14 );
+    const g = audioContext.createGain();
+    const peak = ( mood === "desperate" || mood === "enraged" ) ? 0.18 : 0.125;
+    g.gain.setValueAtTime( peak, time );
+    g.gain.exponentialRampToValueAtTime( 0.001, time + 0.2 );
+    osc.connect( g ).connect( masterGain );
+    osc.start( time );
+    osc.stop( time + 0.25 );
+    // desperate adds a breathy noise burst on top of the thump
+    if ( mood === "desperate" ) {
+        const nb = getNoiseBuffer();
+        if ( nb ) {
+            const noise = audioContext.createBufferSource();
+            noise.buffer = nb;
+            const nf = audioContext.createBiquadFilter();
+            nf.type = "bandpass";
+            nf.frequency.value = 600;
+            nf.Q.value = 0.7;
+            const ng = audioContext.createGain();
+            ng.gain.setValueAtTime( 0.08, time );
+            ng.gain.exponentialRampToValueAtTime( 0.001, time + 0.08 );
+            noise.connect( nf ).connect( ng ).connect( masterGain );
+            noise.start( time );
+            noise.stop( time + 0.1 );
+        }
+    }
+}
+
+function pulseTick(): void {
+    if ( !audioContext || !masterGain ) return;
+    // No catch-up bursts: if we fell behind (e.g. context just started), resume
+    // from now. While suppressed/music-muted the pulse is silent but keeps time.
+    if ( pulseNextTime < audioContext.currentTime ) {
+        pulseNextTime = audioContext.currentTime;
+    }
+    if ( suppressed || musicMuted ) return;
+    const mood = pulseGetMood();
+    const bpm = pulseBpmForMood( mood );
+    if ( bpm === 0 ) return; // grieving: the heartbeat stops
+    const secondsPerBeat = 60 / bpm;
+    while ( pulseNextTime < audioContext.currentTime + 0.2 ) {
+        const interval = mood === "enraged"
+            ? secondsPerBeat * ( 0.6 + Math.random() * 0.8 )
+            : secondsPerBeat;
+        schedulePulseHit( pulseNextTime, mood );
+        if ( mood === "wary" ) {
+            schedulePulseHit( pulseNextTime + interval * 0.5, mood ); // doublet
+        }
+        pulseNextTime += interval;
+    }
+}
+
+/**
+ * Start the machine heartbeat, reading the live mood from `getMood`. Idempotent.
+ */
+export const startMachinePulse = ( getMood: () => string ): void => {
+    pulseGetMood = getMood;
+    if ( pulseTimer !== null ) return;
+    pulseNextTime = audioContext ? audioContext.currentTime : 0;
+    pulseTimer = window.setInterval( pulseTick, 100 );
+};
+
+export const stopMachinePulse = (): void => {
+    if ( pulseTimer !== null ) {
+        window.clearInterval( pulseTimer );
+        pulseTimer = null;
+    }
+};
