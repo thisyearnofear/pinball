@@ -23,6 +23,7 @@
 import { GameSounds } from "@/definitions/game";
 import { STORED_MUTED_FX_SETTING, STORED_MUTED_MUSIC_SETTING } from "@/definitions/settings";
 import { getFromStorage, setInStorage } from "@/utils/local-storage";
+import { IMMERSION } from "@/config/immersion-tuning";
 
 let inited  = false;
 let playing = false;
@@ -519,9 +520,7 @@ let pulseTimer: number | null = null;
 let pulseNextTime = 0;
 let pulseGetMood: () => string = () => "calm";
 
-const PULSE_BPM: Record<string, number> = {
-    calm: 60, smug: 60, wary: 90, desperate: 120, enraged: 120, grieving: 0,
-};
+const PULSE_BPM: Record<string, number> = IMMERSION.pulse.bpm;
 
 /** Tempo (bpm) for a mood; 0 = the heartbeat stops (grieving). Pure (B3). */
 export const pulseBpmForMood = ( mood: string ): number => PULSE_BPM[ mood ] ?? 60;
@@ -533,7 +532,7 @@ function schedulePulseHit( time: number, mood: string ): void {
     osc.frequency.setValueAtTime( 70, time );
     osc.frequency.exponentialRampToValueAtTime( 38, time + 0.14 );
     const g = audioContext.createGain();
-    const peak = ( mood === "desperate" || mood === "enraged" ) ? 0.18 : 0.125;
+    const peak = ( mood === "desperate" || mood === "enraged" ) ? IMMERSION.pulse.intenseGain : IMMERSION.pulse.gain;
     g.gain.setValueAtTime( peak, time );
     g.gain.exponentialRampToValueAtTime( 0.001, time + 0.2 );
     osc.connect( g ).connect( masterGain );
@@ -571,7 +570,7 @@ function pulseTick(): void {
     const bpm = pulseBpmForMood( mood );
     if ( bpm === 0 ) return; // grieving: the heartbeat stops
     const secondsPerBeat = 60 / bpm;
-    while ( pulseNextTime < audioContext.currentTime + 0.2 ) {
+    while ( pulseNextTime < audioContext.currentTime + IMMERSION.pulse.scheduleAheadS ) {
         const interval = mood === "enraged"
             ? secondsPerBeat * ( 0.6 + Math.random() * 0.8 )
             : secondsPerBeat;
@@ -590,7 +589,7 @@ export const startMachinePulse = ( getMood: () => string ): void => {
     pulseGetMood = getMood;
     if ( pulseTimer !== null ) return;
     pulseNextTime = audioContext ? audioContext.currentTime : 0;
-    pulseTimer = window.setInterval( pulseTick, 100 );
+    pulseTimer = window.setInterval( pulseTick, IMMERSION.pulse.lookaheadTickMs );
 };
 
 export const stopMachinePulse = (): void => {

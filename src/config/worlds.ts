@@ -1,4 +1,5 @@
 import type { TablePhysics } from "@/definitions/game";
+import { IMMERSION } from "@/config/immersion-tuning";
 
 export interface WorldPalette {
   primary: string;
@@ -87,7 +88,10 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
       overview: { position: [0, 25, 20], target: [0, 6.5, 0] },
       drain: { position: [0, 6, 8], target: [0, 4, 0] },
     },
-    physics: { gravityScale: 0.92, sway: { amplitude: 0.02, periodTicks: 600 } },
+    physics: {
+      gravityScale: IMMERSION.worlds.spaceship.gravityScale,
+      sway: { amplitude: IMMERSION.worlds.spaceship.swayAmplitude, periodTicks: IMMERSION.worlds.spaceship.swayPeriodTicks },
+    },
     physicsLabel: 'low-g drift (floaty, slow roll)',
   },
   COTTAGE: {
@@ -136,8 +140,8 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
       drain: { position: [0, 1, 6], target: [0, -3, 0] },
       side: { position: [12, 4, 0], target: [0, 0, 0] },
     },
-    physics: { sway: { amplitude: 0.06, periodTicks: 240 } },
-    physicsLabel: 'rolling seas (table sways ±2°)',
+    physics: { sway: { amplitude: IMMERSION.worlds.pirateShip.swayAmplitude, periodTicks: IMMERSION.worlds.pirateShip.swayPeriodTicks } },
+    physicsLabel: 'rolling seas (table sways ±3°)',
   },
   SAKURA_SHRINE: {
     id: 'sakura-shrine',

@@ -19,6 +19,7 @@ import type { IPhysicsEngine } from "@/model/physics/engine";
 import type { Body } from "matter-js";
 import { playSoundEffect } from "@/services/audio-service";
 import * as haptics from "@/utils/haptics";
+import { IMMERSION } from "@/config/immersion-tuning";
 
 // ── AI flipper parameters by difficulty ─────────────────────────
 
@@ -384,22 +385,23 @@ export type MoodSignals = {
  */
 export function computeMood(signals: MoodSignals): MachineMood {
     const { timeAliveMs, drainStreak, recentSaveMs, nearDrain, playerPowerUpActive } = signals;
+    const m = IMMERSION.mood;
 
     // Grieving is reserved for the kill-cam spike (caller sets it directly),
     // but a ball at the very gate with no recent save reads as grief-adjacent.
-    if (nearDrain > 0.9 && recentSaveMs > 1500) return "grieving";
+    if (nearDrain > m.grievingNearDrain && recentSaveMs > m.smugAfterSaveMaxMs) return "grieving";
 
-    // Smug spike: 0.5–3s after a save, the machine gloats.
-    if (recentSaveMs >= 500 && recentSaveMs <= 3000) return "smug";
+    // Smug spike: briefly after a save, the machine gloats.
+    if (recentSaveMs >= m.smugAfterSaveMinMs && recentSaveMs <= m.smugAfterSaveMaxMs) return "smug";
 
     // Enraged: the player is draining too fast — the guardian is losing its composure.
-    if (drainStreak >= 2) return "enraged";
+    if (drainStreak >= m.enragedDrainStreak) return "enraged";
 
     // Desperate: long rally, the machine is over-committed (mirrors bias 0.7).
-    if (timeAliveMs > 15000) return "desperate";
+    if (timeAliveMs > m.desperateTimeAliveMs) return "desperate";
 
     // Wary: the player has tools, or the rally is heating up.
-    if (playerPowerUpActive || timeAliveMs > 8000) return "wary";
+    if (playerPowerUpActive || timeAliveMs > m.waryTimeAliveMs) return "wary";
 
     return "calm";
 }
@@ -421,9 +423,10 @@ export function setMood(state: KamikazeState, mood: MachineMood, now: number): b
  * Desperate machines over-commit (+0.05); enraged machines get sloppy (−0.05).
  */
 export function moodAccuracyDelta(mood: MachineMood): number {
+    const v = IMMERSION.mood.accuracyVariance;
     switch (mood) {
-        case "desperate": return 0.05;
-        case "enraged":   return -0.05;
+        case "desperate": return v;
+        case "enraged":   return -v;
         default:          return 0;
     }
 }

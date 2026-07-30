@@ -349,7 +349,7 @@ describe("Kamikaze Ball", () => {
         });
 
         it("should read grief-adjacent at the gate with no recent save", () => {
-            expect(computeMood(signals({ nearDrain: 0.95, recentSaveMs: 2000 }))).toEqual("grieving");
+            expect(computeMood(signals({ nearDrain: 0.95, recentSaveMs: 2500 }))).toEqual("grieving");
         });
 
         it("should prefer the smug spike over a sustained wary state", () => {

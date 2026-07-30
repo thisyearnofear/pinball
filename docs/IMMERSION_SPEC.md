@@ -48,6 +48,18 @@ Name proposal: **MAMORU** (守, "to protect"). HUD prefix changes from `MACHINE:
 
 ---
 
+## Tuning
+
+Every feel knob lives in one file: [`src/config/immersion-tuning.ts`](../src/config/immersion-tuning.ts)
+— mood pacing, kill-cam timing, auto slow-mo, audio-dodge duration, pulse
+tempos/gains, habit reading, and per-world gravity. Playtest by editing it
+under `pnpm dev` (hot-reloads, no rebuild). Each value carries a rationale.
+`tests/unit/config/immersion-tuning.spec.ts` guards the bounds (e.g. mood
+accuracy variance stays within the rubber-band precedent; kill-cam timeScale
+stays in (0,1)) so a stray edit can't silently break the moat.
+
+---
+
 ## Hard rules (protect the moat)
 
 These constraints keep every feature below compatible with replay verification and tournaments:

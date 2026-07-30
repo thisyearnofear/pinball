@@ -40,6 +40,7 @@ import { createEngine } from "@/model/physics/engine";
 import type { IPhysicsEngine, CollisionEvent } from "@/model/physics/engine";
 import { Body } from "matter-js";
 import { worldGravityX, worldGravityY } from "@/model/world-physics";
+import { IMMERSION } from "@/config/immersion-tuning";
 import { enqueueTrack, setFrequency, playSoundEffect, duckMusic, playTaikoHit, playFurinChime, momentarySilence } from "@/services/audio-service";
 import * as haptics from "@/utils/haptics";
 import {
@@ -530,8 +531,8 @@ export const update = (timestamp: DOMHighResTimeStamp, framesSinceLastRender: nu
         if (b) {
             const tableBottom = (!tableHasUnderworld || gameRef.underworld) ? table.height : table.underworld;
             const proximity = b.bounds.top / tableBottom;
-            if (proximity > 0.82 && b.body.velocity.y > 0) {
-                requestSlowMo(600, 0.3);
+            if (proximity > IMMERSION.autoSlowMo.proximity && b.body.velocity.y > 0) {
+                requestSlowMo(IMMERSION.autoSlowMo.durationMs, IMMERSION.autoSlowMo.timeScale);
             }
         }
     }
@@ -731,7 +732,7 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
                     engine.launchBall(ball.body, { x: sideKick, y: -LAUNCH_SPEED * 0.95 });
                     game.kamikaze.drainStreak = 0; // the machine broke the streak
                     aiSaveFeedback();
-                    momentarySilence(200); // B3 audio dodge: the table holds its breath
+                    momentarySilence(IMMERSION.audioDodge.durationMs); // B3 audio dodge: the table holds its breath
                     continue;
                 }
                 // Drain successful! The blossom falls.
@@ -850,8 +851,8 @@ function startKillCam(game: GameDef, ball: Ball, unstoppable: boolean): void {
     // on subsequent ticks — so the cam never re-triggers.
     Body.setStatic(ball.body, true);
 
-    requestSlowMo(900, 0.18);   // deeper + longer than the proximity auto slow-mo
-    duckMusic(900, 0.10);
+    requestSlowMo(IMMERSION.killCam.durationMs, IMMERSION.killCam.timeScale); // deeper + longer than the proximity auto slow-mo
+    duckMusic(IMMERSION.killCam.durationMs, IMMERSION.killCam.duckLevel);
     playTaikoHit(true);          // deep variant — the gate closes
     playFurinChime();
     haptics.drainVictory();
@@ -864,7 +865,7 @@ function startKillCam(game: GameDef, ball: Ball, unstoppable: boolean): void {
     window.setTimeout(() => {
         removeBall(ball);
         endRound(game, 2000);
-    }, 900);
+    }, IMMERSION.killCam.releaseDelayMs);
 }
 
 function endRound(game: GameDef, timeout = 3500): void {
@@ -956,7 +957,7 @@ export function getBallCount(): number {
 function maybeHabitTaunt(now: number): void {
     const label = dominantHabit(runHabits);
     if (!label || label === lastHabitCalled) return;
-    if (now - lastHabitTauntAt < 8000) return;
+    if (now - lastHabitTauntAt < IMMERSION.habits.calloutThrottleMs) return;
     lastHabitTauntAt = now;
     lastHabitCalled = label;
     lastTauntText = habitTaunt(label);

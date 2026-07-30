@@ -8,15 +8,15 @@
  * without a browser; load/save sit on the shared `ps_data` blob.
  */
 import { getFromStorage, setInStorage } from "./local-storage";
+import { IMMERSION } from "@/config/immersion-tuning";
 
 const MEMORY_KEY = "machine_memory";
 
-/** The nemesis threshold: a best drain under this earns the machine's dread. */
-export const NEMESIS_DRAIN_MS = 6000;
-/** Habit call-outs need at least this many nudges before the machine reads you. */
-export const HABIT_MIN_NUDGES = 10;
-/** A bucket must be at least this share of nudges to be "predictable". */
-export const HABIT_DOMINANCE = 0.6;
+// Feel knobs sourced from the central tuning config (re-exported so callers
+// and tests keep a stable import).
+export const NEMESIS_DRAIN_MS = IMMERSION.nemesisDrainMs;
+export const HABIT_MIN_NUDGES = IMMERSION.habits.minNudges;
+export const HABIT_DOMINANCE = IMMERSION.habits.dominance;
 
 export type MachineHabits = {
     left: number;
