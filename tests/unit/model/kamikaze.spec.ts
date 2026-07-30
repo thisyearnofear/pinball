@@ -15,7 +15,9 @@ import {
     rollPowerUp, activatePowerUp, cleanupPowerUps, hasPowerUp, applyPowerUpEffects,
     isDrainBlocked, shouldSpawnCrate, recordCrateSpawn, getRandomTaunt, nudgeBall,
     updateAIFlippers, rollEmergencySave,
+    computeMood, setMood, moodAccuracyDelta, getMoodTaunt,
 } from "@/model/kamikaze";
+import type { MoodSignals } from "@/model/kamikaze";
 import { mulberry32 } from "@/utils/rng";
 import { getMockPhysicsEngine } from "../__mocks";
 
@@ -309,6 +311,77 @@ describe("Kamikaze Ball", () => {
             expect(rollEmergencySave(state, 5000, 4500, () => justBelowBase)).toBe(false);
             // stale nudge (>1s): full chance applies
             expect(rollEmergencySave(state, 5000, 3000, () => justBelowBase)).toBe(true);
+        });
+    });
+
+    describe("machine mood (A1)", () => {
+        const signals = (over: Partial<MoodSignals> = {}): MoodSignals => ({
+            timeAliveMs: 3000,
+            drainStreak: 0,
+            recentSaveMs: Infinity,
+            nearDrain: 0,
+            playerPowerUpActive: false,
+            ...over,
+        });
+
+        it("should default to calm on a fresh rally", () => {
+            expect(computeMood(signals())).toEqual("calm");
+        });
+
+        it("should turn wary once the rally passes 8s", () => {
+            expect(computeMood(signals({ timeAliveMs: 9000 }))).toEqual("wary");
+        });
+
+        it("should turn wary when the player has a munition active", () => {
+            expect(computeMood(signals({ playerPowerUpActive: true }))).toEqual("wary");
+        });
+
+        it("should turn desperate on a long rally (>15s)", () => {
+            expect(computeMood(signals({ timeAliveMs: 16000 }))).toEqual("desperate");
+        });
+
+        it("should turn enraged when the player is draining fast (streak >= 2)", () => {
+            expect(computeMood(signals({ drainStreak: 2, timeAliveMs: 16000 }))).toEqual("enraged");
+        });
+
+        it("should spike smug shortly after a save", () => {
+            expect(computeMood(signals({ recentSaveMs: 1500 }))).toEqual("smug");
+        });
+
+        it("should read grief-adjacent at the gate with no recent save", () => {
+            expect(computeMood(signals({ nearDrain: 0.95, recentSaveMs: 2000 }))).toEqual("grieving");
+        });
+
+        it("should prefer the smug spike over a sustained wary state", () => {
+            expect(computeMood(signals({ timeAliveMs: 9000, recentSaveMs: 1500 }))).toEqual("smug");
+        });
+
+        it("should only change mood state when the value differs", () => {
+            const state = getState();
+            state.mood = "calm";
+            expect(setMood(state, "calm", 5000)).toBe(false);
+            expect(setMood(state, "wary", 5000)).toBe(true);
+            expect(state.mood).toEqual("wary");
+            expect(state.moodSince).toEqual(5000);
+        });
+
+        it("should nudge accuracy within the bounded ±0.05 band", () => {
+            expect(moodAccuracyDelta("desperate")).toEqual(0.05);
+            expect(moodAccuracyDelta("enraged")).toEqual(-0.05);
+            expect(moodAccuracyDelta("calm")).toEqual(0);
+            expect(moodAccuracyDelta("smug")).toEqual(0);
+        });
+
+        it("should fall back to the classic pools when calm", () => {
+            const rng = () => 0;
+            expect(getMoodTaunt("calm", true, rng)).toEqual(getRandomTaunt(true, rng));
+            expect(getMoodTaunt("calm", false, rng)).toEqual(getRandomTaunt(false, rng));
+        });
+
+        it("should draw from the mood pool when not calm", () => {
+            const line = getMoodTaunt("desperate", false, () => 0);
+            expect(typeof line).toEqual("string");
+            expect(line.length).toBeGreaterThan(0);
         });
     });
 });

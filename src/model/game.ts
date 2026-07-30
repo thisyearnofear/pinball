@@ -38,6 +38,7 @@ import Rect from "@/model/rect";
 import TriggerGroup from "@/model/trigger-group";
 import { createEngine } from "@/model/physics/engine";
 import type { IPhysicsEngine, CollisionEvent } from "@/model/physics/engine";
+import { Body } from "matter-js";
 import { enqueueTrack, setFrequency, playSoundEffect, duckMusic, playTaikoHit, playFurinChime } from "@/services/audio-service";
 import * as haptics from "@/utils/haptics";
 import {
@@ -46,6 +47,7 @@ import {
     recordCrateSpawn, getElementTaunt, nudgeBall, isDrainBlocked, rollEmergencySave,
     updateRubberBand, bankStoredPowerUp, deployStoredPowerUp,
     triggerTiltLock as triggerTiltLockKamikaze,
+    computeMood, setMood, moodAccuracyDelta, getMoodTaunt,
 } from "@/model/kamikaze";
 import { setKamikazeMode as setBumperKamikazeMode, setGhostMode as setBumperGhostMode, setFrenzyMode as setBumperFrenzyMode } from "@/renderers/bumper-renderer";
 import { setKamikazeMode as setFlipperKamikazeMode } from "@/renderers/flipper-renderer";
@@ -127,6 +129,25 @@ export const consumeMomentumShift = (): MomentumShift => {
     const s = pendingMomentumShift;
     pendingMomentumShift = null;
     return s;
+};
+
+// ── Machine mood exposure (A1) ──────────────────────────────────
+// UI/audio read the machine's emotional state here, following the momentum
+// precedent. Wall-clock cosmetic only; never feeds back into physics.
+export const getMachineMood = (): string => gameRef?.kamikaze?.mood ?? "calm";
+
+// ── Kill cam (A2) ────────────────────────────────────────────────
+// The presentation layer polls this once per frame to fire the directed
+// camera push on the decisive drain. Wall-clock cosmetic only; the score is
+// already frozen before the cam starts (hard rule 3). Suppressed during ghost
+// replay viewing so the comparison timeline stays pure.
+let pendingKillCam = false;
+let killCamEnabled = true;
+export const setKillCamEnabled = (enabled: boolean): void => { killCamEnabled = enabled; };
+export const consumeKillCam = (): boolean => {
+    const k = pendingKillCam;
+    pendingKillCam = false;
+    return k;
 };
 
 // test/sim hook
@@ -593,6 +614,27 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
         if (!game.kamikaze.scoreFrozen) {
             game.score = getKamikazeScore(game.kamikaze, now);
         }
+
+        // A1: surface the rubber-band math as visible emotion. Cheap — runs
+        // once per engine update, no physics effect. nearDrain mirrors the
+        // auto slow-mo proximity so the mood and the cam agree.
+        const moodBall = balls[0];
+        if (moodBall) {
+            const tableBottomMood = (!tableHasUnderworld || game.underworld) ? table.height : table.underworld;
+            const proximity = moodBall.bounds.top / tableBottomMood;
+            const nearDrain = Math.max(0, Math.min(1, (proximity - 0.7) / 0.3));
+            const mood = computeMood({
+                timeAliveMs: now - game.kamikaze.roundStartTime,
+                drainStreak: game.kamikaze.drainStreak,
+                recentSaveMs: now - game.kamikaze.recentSaveAt,
+                nearDrain,
+                playerPowerUpActive: hasPowerUp(game.kamikaze, PowerUpType.HOMING_WARHEAD, now)
+                    || hasPowerUp(game.kamikaze, PowerUpType.FLIPPER_JAM, now)
+                    || hasPowerUp(game.kamikaze, PowerUpType.GHOST_BALL, now)
+                    || hasPowerUp(game.kamikaze, PowerUpType.SAKURA_STORM, now),
+            });
+            setMood(game.kamikaze, mood, now);
+        }
     }
 
     for (ball of balls) {
@@ -629,7 +671,8 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
                     playSoundEffect(GameSounds.AI_SAVE);
                     duckMusic(600, 0.35);
                     haptics.aiSave();
-                    lastTauntText = getElementTaunt("guard", rng);
+                    game.kamikaze.recentSaveAt = now; // A1: smug spike window
+                    lastTauntText = getMoodTaunt(game.kamikaze.mood, false, rng);
                     messageHandler(GameMessages.AI_TAUNT, 1500);
                 };
                 if (ball.body.velocity.y <= 0) {
@@ -654,32 +697,40 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
                     aiSaveFeedback();
                     continue;
                 }
-                // Drain successful! Record score and show taunt
-                playSoundEffect(GameSounds.DRAIN_VICTORY);
-                playFurinChime();
-                duckMusic(1000, 0.2);
-                haptics.drainVictory();
-                messageHandler(GameMessages.DRAINED);
-                lastTauntText = getElementTaunt("gate", rng);
-                messageHandler(GameMessages.AI_TAUNT, 2000);
+                // Drain successful! The blossom falls.
                 recordReplayEvent(tickCount, "drain");
-                removeBall(ball);
+                setMood(game.kamikaze, "grieving", now); // A1: the guardian grieves
+                lastTauntText = getMoodTaunt("grieving", true, rng);
 
                 // Streak system: 3 consecutive drains without a save = UNSTOPPABLE
                 game.kamikaze.drainStreak += 1;
-                if (game.kamikaze.drainStreak >= 3) {
-                    game.kamikaze.drainStreak = 0;
-                    messageHandler(GameMessages.UNSTOPPABLE);
-                    requestSlowMo(1200, 0.2);
-                }
+                const unstoppable = game.kamikaze.drainStreak >= 3;
+                if (unstoppable) game.kamikaze.drainStreak = 0;
 
                 if (singleBall) {
-                    // last remaining ball drained: this ball's run is complete
+                    // A2 KILL CAM — the signature moment. Freeze the score
+                    // BEFORE the drama (hard rule 3), capture the ball in the
+                    // drain's gravity well, dilate time, and let the
+                    // presentation layer push the camera. removeBall + endRound
+                    // follow after the 900ms sequence so the slow-mo has a subject.
                     const ballScore = getKamikazeScore(game.kamikaze, now);
                     game.kamikaze.completedBallScores.push(ballScore);
                     game.kamikaze.scoreFrozen = true;
                     game.score = getBestKamikazeScore(game.kamikaze);
-                    endRound(game, 2000);
+                    startKillCam(game, ball, unstoppable);
+                } else {
+                    // Intermediate multiball drain: quick feedback, no kill cam.
+                    playSoundEffect(GameSounds.DRAIN_VICTORY);
+                    playFurinChime();
+                    duckMusic(1000, 0.2);
+                    haptics.drainVictory();
+                    messageHandler(GameMessages.DRAINED);
+                    messageHandler(GameMessages.AI_TAUNT, 2000);
+                    removeBall(ball);
+                    if (unstoppable) {
+                        messageHandler(GameMessages.UNSTOPPABLE);
+                        requestSlowMo(1200, 0.2);
+                    }
                 }
                 continue;
             }
@@ -733,6 +784,52 @@ function createMultiball(amount: number, left: number, top: number): void {
     }
 }
 
+/**
+ * A2 KILL CAM — the signature moment of every run. The score is already
+ * frozen by the caller (hard rule 3); this directs the 900ms drama:
+ * capture the ball in the drain's gravity well (static, so it hangs while
+ * time dilates instead of vanishing), deep-slow the simulation, land the
+ * deep taiko + furin + grief line, and signal the presentation layer to
+ * push the camera. removeBall + endRound follow once the sequence lands.
+ *
+ * Suppressed during ghost replay viewing (setKillCamEnabled(false)) so the
+ * comparison timeline stays pure — the ball is then removed immediately.
+ */
+function startKillCam(game: GameDef, ball: Ball, unstoppable: boolean): void {
+    if (!killCamEnabled) {
+        playSoundEffect(GameSounds.DRAIN_VICTORY);
+        playFurinChime();
+        duckMusic(1000, 0.2);
+        haptics.drainVictory();
+        messageHandler(GameMessages.DRAINED);
+        messageHandler(GameMessages.AI_TAUNT, 2000);
+        removeBall(ball);
+        endRound(game, 2000);
+        return;
+    }
+
+    // Capture: a static body has zero velocity, which both freezes the ball
+    // in the drain glow AND makes the drain-guard (velocity.y <= 0) skip it
+    // on subsequent ticks — so the cam never re-triggers.
+    Body.setStatic(ball.body, true);
+
+    requestSlowMo(900, 0.18);   // deeper + longer than the proximity auto slow-mo
+    duckMusic(900, 0.10);
+    playTaikoHit(true);          // deep variant — the gate closes
+    playFurinChime();
+    haptics.drainVictory();
+    messageHandler(GameMessages.DRAINED);
+    messageHandler(GameMessages.AI_TAUNT, 2000);
+    if (unstoppable) messageHandler(GameMessages.UNSTOPPABLE);
+
+    pendingKillCam = true;       // presentation: camera push on containerRef
+
+    window.setTimeout(() => {
+        removeBall(ball);
+        endRound(game, 2000);
+    }, 900);
+}
+
 function endRound(game: GameDef, timeout = 3500): void {
     playSoundEffect(GameSounds.BALL_OUT);
     setFrequency(1000);
@@ -772,6 +869,9 @@ function startRound(game: GameDef): void {
         game.kamikaze.storedPowerUp = null;
         game.kamikaze.underworldCharge = 0;
         game.kamikaze.drainStreak = 0;
+        game.kamikaze.mood = "calm";
+        game.kamikaze.moodSince = window.performance.now();
+        game.kamikaze.recentSaveAt = -Infinity;
 
         if (ghostActive) {
             ghostActive = false;

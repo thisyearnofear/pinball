@@ -19,7 +19,7 @@ import path from "path";
 import { svgPathProperties } from "svg-path-properties";
 
 import { seedVertexCache } from "@/services/svg-loader";
-import { init, update, nudgeBallToward, getBallPosition, getPhysicsEngine } from "@/model/game";
+import { init, update, nudgeBallToward, getBallPosition, getPhysicsEngine, setKillCamEnabled } from "@/model/game";
 import Matter from "matter-js";
 import { BALLS_PER_GAME, type GameDef } from "@/definitions/game";
 import Tables from "@/definitions/tables";
@@ -167,6 +167,60 @@ async function simulateRun(difficulty: AIDifficulty, seed: number, activePlayer:
   return { drainMs: null, bumperHits: kamikaze.totalBumperHits };
 }
 
+/**
+ * Rule-3 probe: run a single seeded active-player game to the first drain and
+ * return the frozen score. Used to prove the kill cam (which only stretches
+ * physics ticks AFTER the drain) never alters the scored time-alive.
+ */
+async function drainScore(
+  difficulty: AIDifficulty, seed: number, killCam: boolean
+): Promise<{ score: number; frozen: boolean; drained: boolean }> {
+  vi.clearAllTimers();
+  setKillCamEnabled(killCam);
+
+  const game: GameDef = {
+    id: "sim-rule3",
+    active: false,
+    paused: false,
+    table: TABLE_INDEX,
+    score: 0,
+    balls: BALLS_PER_GAME,
+    multiplier: 1,
+    underworld: false,
+    kamikaze: createKamikazeState(difficulty),
+    rngSeed: seed,
+    rng: mulberry32(seed),
+  };
+
+  await init(
+    mockCanvas,
+    game,
+    (readyCallback, timeout) => { setTimeout(readyCallback, timeout); },
+    () => {},
+  );
+  realignSvgBodies();
+
+  const kamikaze = game.kamikaze!;
+  let lastNudge = 0;
+  const maxFrames = Math.ceil(RUN_CAP_MS / FRAME_MS);
+  for (let frame = 0; frame < maxFrames; frame++) {
+    const now = performance.now();
+    update(now, 1);
+    if (now - lastNudge >= NUDGE_INTERVAL_MS) {
+      const pos = getBallPosition();
+      if (pos) {
+        nudgeBallToward(pos.x, Tables[TABLE_INDEX].underworld ?? Tables[TABLE_INDEX].height);
+        lastNudge = now;
+      }
+    }
+    vi.advanceTimersByTime(FRAME_MS);
+    if (kamikaze.completedBallScores.length >= 1) {
+      return { score: game.score, frozen: kamikaze.scoreFrozen, drained: true };
+    }
+  }
+  return { score: game.score, frozen: kamikaze.scoreFrozen, drained: false };
+}
+
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted.length ? sorted[Math.floor(sorted.length / 2)] : NaN;
@@ -220,5 +274,23 @@ describe("kamikaze balance simulation", () => {
     // Sanity floor: an active player on easy must be able to drain within the cap.
     const easyActive = summaries.find((s) => s.label.startsWith("easy (active)"))!;
     expect(easyActive.drains).toBeGreaterThan(0);
+  });
+
+  it("freezes the same drain score whether the kill cam plays or not (rule 3)", async () => {
+    const seed = 11;
+    const withCam = await drainScore("easy", seed, true);
+    const noCam = await drainScore("easy", seed, false);
+    // restore the default so this test never leaks state into the balance run
+    setKillCamEnabled(true);
+
+    expect(withCam.drained).toBe(true);
+    expect(noCam.drained).toBe(true);
+    expect(withCam.frozen).toBe(true);
+    expect(noCam.frozen).toBe(true);
+    // The kill cam fires only after the score is captured + frozen, and only
+    // stretches physics ticks (timeScale) — never the wall-clock `now` used for
+    // scoring. So the scored time-alive must be byte-identical cam on/off.
+    expect(withCam.score).toBeGreaterThan(0);
+    expect(withCam.score).toEqual(noCam.score);
   });
 });

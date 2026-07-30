@@ -139,6 +139,22 @@ export enum PowerUpType {
 
 export type PowerUpSide = "player" | "machine";
 
+/**
+ * The machine's emotional state (MAMORU, 守). Surfaced from the rubber-band
+ * math so difficulty reads as character. See docs/IMMERSION_SPEC.md (A1).
+ */
+export type MachineMood = "calm" | "smug" | "wary" | "desperate" | "enraged" | "grieving";
+
+/**
+ * Per-world physics modifier: the world bends the table, so tournament
+ * choice becomes ruleset choice. Applied deterministically from tickCount
+ * (never wall clock) so replays stay verifiable. See docs/IMMERSION_SPEC.md (A4).
+ */
+export type TablePhysics = {
+    sway?: { amplitude: number; periodTicks: number }; // gravity.x oscillation
+    gravityScale?: number;                             // multiplies gravity.y
+};
+
 export type ActivePowerUp = {
     type: PowerUpType;
     side: PowerUpSide;
@@ -170,6 +186,10 @@ export type KamikazeState = {
     lastTiltLockAt?: number;         // when the player last fired tilt-lock (cooldown tracking)
     // ── Streak system (Phase 3) ──
     drainStreak: number;             // consecutive drains without a machine save (reset on save)
+    // ── Immersion (A1): the machine's visible emotional state ──
+    mood: MachineMood;               // current mood, surfaced from rubber-band math
+    moodSince: number;               // wall-clock ms when mood last changed (cosmetic only)
+    recentSaveAt: number;            // wall-clock ms of the last AI emergency save (smug spike)
 };
 
 /**

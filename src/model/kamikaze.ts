@@ -9,7 +9,7 @@
  *
  * See docs/KAMIKAZE_BALL.md for the full design spec.
  */
-import type { GameDef, KamikazeState, PowerUpSide, ActivePowerUp } from "@/definitions/game";
+import type { GameDef, KamikazeState, PowerUpSide, ActivePowerUp, MachineMood } from "@/definitions/game";
 import {
     GameMessages, GameSounds, PowerUpType,
     KAMIKAZE_BUMPER_PENALTY_MS, KAMIKAZE_TRIGGER_PENALTY_MS, AI_FLIPPER_HOLD_MS,
@@ -54,6 +54,9 @@ export function createKamikazeState(difficulty: AIDifficulty = "medium"): Kamika
         storedPowerUp: null,
         underworldCharge: 0,
         drainStreak: 0,
+        mood: "calm",
+        moodSince: 0,
+        recentSaveAt: -Infinity,
     };
 }
 
@@ -119,7 +122,9 @@ export function updateAIFlippers(
     const sakuraStorm = hasPowerUp(state, PowerUpType.SAKURA_STORM, now);
     // Iron Dome = perfect aim. Sakura Storm = the petals blind the machine,
     // slashing its accuracy so it flails and lets the ball through.
-    const accuracy = ironDome ? 1.0 : (sakuraStorm ? state.aiAccuracy * 0.3 : state.aiAccuracy);
+    // A1: mood adds a bounded ±0.05 variance (desperate over-commits, enraged
+    // gets sloppy) — stays within the rubber-band precedent.
+    const accuracy = ironDome ? 1.0 : (sakuraStorm ? state.aiAccuracy * 0.3 : state.aiAccuracy + moodAccuracyDelta(state.mood));
 
     for (let i = 0; i < flippers.length; i++) {
         const flipper = flippers[i];
@@ -354,6 +359,93 @@ export function recordCrateSpawn(state: KamikazeState, now: number, rng: () => n
     state.lastCrateSpawn = now;
     // Randomize next cooldown between 8-12s
     state.crateCooldownMs = 8000 + rng() * 4000;
+}
+
+// ── Machine mood (A1: "The Machine Has a Self") ───────────────
+// MAMORU (守) — a guardian that loves the ball. Draining is bereavement.
+// The mood is surfaced from state that already exists (rubber-band math,
+// drain streak, save spikes, drain proximity) so difficulty reads as
+// character. Pure + deterministic: no wall-clock branching, no side effects.
+// See docs/IMMERSION_SPEC.md (A1).
+
+export type MoodSignals = {
+    timeAliveMs: number;
+    drainStreak: number;
+    recentSaveMs: number;       // ms since the last AI emergency save (Infinity if none)
+    nearDrain: number;          // 0..1, ball proximity to the drain (1 = at the gate)
+    playerPowerUpActive: boolean;
+};
+
+/**
+ * Derive the machine's mood from live signals. Transitions follow the spec
+ * table (IMMERSION_SPEC.md A1). Order matters: spikes (grieving/smug) win
+ * over sustained states (wary/desperate/enraged), which win over the calm
+ * baseline. Hysteresis is the caller's job — this is a pure lookup.
+ */
+export function computeMood(signals: MoodSignals): MachineMood {
+    const { timeAliveMs, drainStreak, recentSaveMs, nearDrain, playerPowerUpActive } = signals;
+
+    // Grieving is reserved for the kill-cam spike (caller sets it directly),
+    // but a ball at the very gate with no recent save reads as grief-adjacent.
+    if (nearDrain > 0.9 && recentSaveMs > 1500) return "grieving";
+
+    // Smug spike: 0.5–3s after a save, the machine gloats.
+    if (recentSaveMs >= 500 && recentSaveMs <= 3000) return "smug";
+
+    // Enraged: the player is draining too fast — the guardian is losing its composure.
+    if (drainStreak >= 2) return "enraged";
+
+    // Desperate: long rally, the machine is over-committed (mirrors bias 0.7).
+    if (timeAliveMs > 15000) return "desperate";
+
+    // Wary: the player has tools, or the rally is heating up.
+    if (playerPowerUpActive || timeAliveMs > 8000) return "wary";
+
+    return "calm";
+}
+
+/**
+ * Apply a mood transition to state, recording when it changed. Returns true
+ * if the mood actually changed (so the caller can fire mood-keyed effects).
+ */
+export function setMood(state: KamikazeState, mood: MachineMood, now: number): boolean {
+    if (state.mood === mood) return false;
+    state.mood = mood;
+    state.moodSince = now;
+    return true;
+}
+
+/**
+ * Bounded accuracy nudge for mood-driven AI variance. Stays within the
+ * rubber-band precedent (±0.05) and never outside the difficulty band.
+ * Desperate machines over-commit (+0.05); enraged machines get sloppy (−0.05).
+ */
+export function moodAccuracyDelta(mood: MachineMood): number {
+    switch (mood) {
+        case "desperate": return 0.05;
+        case "enraged":   return -0.05;
+        default:          return 0;
+    }
+}
+
+// Mood-keyed taunt pools. The calm tier reuses the existing save/drain
+// voices; the others add emotional range. Kanji anchors the key beats.
+const MOOD_TAUNTS: Record<Exclude<MachineMood, "calm">, string[]> = {
+    smug:      ["MINE.", "Not today. Not ever.", "I read you like a table schematic.", "守: predictable."],
+    wary:      ["Persistent.", "You fight like the last one. They drained too.", "守: I am watching."],
+    desperate: ["STAY. STAY—", "Please. Not this one.", "I cannot lose another.", "守: no—"],
+    enraged:   ["ENOUGH.", "You think this is skill?", "守: ENOUGH."],
+    grieving:  ["…I failed it.", "It trusted me.", "NOOO", "守: …"],
+};
+
+/**
+ * Pick a taunt appropriate to the machine's mood. Falls back to the classic
+ * save/drain pools when calm (so existing behaviour is unchanged).
+ */
+export function getMoodTaunt(mood: MachineMood, drain: boolean, rng: () => number = Math.random): string {
+    if (mood === "calm") return getRandomTaunt(drain, rng);
+    const pool = MOOD_TAUNTS[mood];
+    return pool[Math.floor(rng() * pool.length)];
 }
 
 // ── Machine taunts ──────────────────────────────────────────────

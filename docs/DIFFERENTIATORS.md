@@ -153,6 +153,37 @@ deterministic replay mode, on-chain/IPFS storage of run data, ghost-rendering
 in the playfield. Heavier work; better suited to post-hackathon. This is the
 foundation for the trustless-settlement protocol.
 
+### Inversion 4 — The machine has a self (MAMORU 守)
+
+**The pitch:** the AI opponent is not a heuristic with taunt strings — it is a
+named guardian, **MAMORU (守, "to protect")**, that *loves the ball*. Draining
+is bereavement. Its difficulty is surfaced as visible emotion (calm → smug →
+wary → desperate → enraged → grieving), its taunts are mood-keyed, and every
+run ends on a directed **kill cam** — a 900ms slow-motion drain that is the
+clip people share. The verdict kanji carries a **hanko seal derived from the
+replay hash**, so the proof of honesty literally is the aesthetic.
+
+**Why it compounds the moat:**
+- Character is cheap to build and hard to copy well. GLaDOS and the Dealer in
+  Inscryption are remembered; "AI opponent #412" is not. A guardian that
+  grieves each drained ball has emotional range no evil-AI script can match.
+- The kill cam is the signature moment — the single clip-able instant that
+  ends up in every shared video. Time dilation + camera push + deep taiko, all
+  fired *after* the score is frozen, so it never touches scoring.
+- The sealed stamp fuses the two strongest differentiators — the kanji
+  identity and Inversion 3's cryptographic replays — into one object. No one
+  can copy the *meaning* of a stamp that literally is its own proof.
+- **Moat-safe by construction:** mood is derived from seeded/run state; memory
+  talks but never touches physics; the kill cam is post-outcome. Every
+  immersion feature stays replay-verifiable (see the hard rules in
+  [IMMERSION_SPEC.md](./IMMERSION_SPEC.md)).
+
+**Implementation surface:** `computeMood` + mood-keyed taunts in `kamikaze.ts`,
+mood exposure + kill-cam signal in `game.ts`, mood-colored overlay + camera
+push in `GameMount.tsx`, deep taiko variant in `audio-service.ts`. See
+[IMMERSION_SPEC.md](./IMMERSION_SPEC.md) for the full spec and Phase B
+(persistent machine memory, relationship-skinned ranks, adaptive taiko).
+
 ---
 
 ## Production-quality architecture (the schlep that deters copiers)

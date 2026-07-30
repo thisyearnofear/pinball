@@ -148,22 +148,26 @@ function getNoiseBuffer(): AudioBuffer | null {
     return taikoNoiseBuffer;
 }
 
-export const playTaikoHit = (): void => {
+export const playTaikoHit = ( deep = false ): void => {
     if ( !inited || fxMuted || suppressed || !audioContext || !masterGain ) {
         return;
     }
     const t = audioContext.currentTime;
-    // Body thump: pitched-down sine.
+    // Body thump: pitched-down sine. The kill-cam variant (deep) drops the
+    // fundamental lower and rings longer — the gate closing on the blossom.
+    const startFreq = deep ? 62 : 95;
+    const endFreq = deep ? 28 : 45;
+    const decay = deep ? 0.42 : 0.22;
     const osc = audioContext.createOscillator();
     osc.type = "sine";
-    osc.frequency.setValueAtTime( 95, t );
-    osc.frequency.exponentialRampToValueAtTime( 45, t + 0.16 );
+    osc.frequency.setValueAtTime( startFreq, t );
+    osc.frequency.exponentialRampToValueAtTime( endFreq, t + ( deep ? 0.28 : 0.16 ) );
     const g = audioContext.createGain();
-    g.gain.setValueAtTime( 0.9, t );
-    g.gain.exponentialRampToValueAtTime( 0.001, t + 0.22 );
+    g.gain.setValueAtTime( deep ? 1.0 : 0.9, t );
+    g.gain.exponentialRampToValueAtTime( 0.001, t + decay );
     osc.connect( g ).connect( masterGain );
     osc.start( t );
-    osc.stop( t + 0.25 );
+    osc.stop( t + decay + 0.05 );
     // Stick attack: short band-passed noise burst.
     const noiseBuf = getNoiseBuffer();
     if ( noiseBuf ) {

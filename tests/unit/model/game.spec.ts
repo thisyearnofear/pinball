@@ -7,7 +7,7 @@ import {
     AwardablePoints, GameMessages, GameSounds, ActorTypes, ActorLabels,
     TriggerTarget, TriggerTypes,
 } from "@/definitions/game";
-import { getBallPosition, getBallCount, setPaused } from "@/model/game";
+import { getBallPosition, getBallCount, setPaused, getMachineMood, consumeKillCam, setKillCamEnabled } from "@/model/game";
 
 afterEach(() => {
     vi.restoreAllMocks();
@@ -212,6 +212,28 @@ describe( "Game engine public API", () => {
 
         it( "should not throw when toggling pause off without canvas", () => {
             expect(() => setPaused( false )).not.toThrow();
+        });
+    });
+
+    describe( "getMachineMood() (A1)", () => {
+        it( "should default to calm when no game is running", () => {
+            expect( getMachineMood() ).toEqual( "calm" );
+        });
+    });
+
+    describe( "kill cam signal (A2)", () => {
+        it( "should not consume a kill cam when none is pending", () => {
+            expect( consumeKillCam() ).toBe( false );
+        });
+
+        it( "should stay consumed on repeated reads (one-shot)", () => {
+            consumeKillCam();
+            expect( consumeKillCam() ).toBe( false );
+        });
+
+        it( "should toggle enablement without throwing", () => {
+            expect(() => setKillCamEnabled( false )).not.toThrow();
+            expect(() => setKillCamEnabled( true )).not.toThrow();
         });
     });
 });

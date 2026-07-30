@@ -16,7 +16,7 @@ import { GhostRace } from "./ui/GhostRace";
 import { StabilityMeter } from "./ui/StabilityMeter";
 import { KanjiWatermark } from "./ui/KanjiWatermark";
 import { type WorldReaction } from "@/presentation/world-reactor";
-import { isKamikazeMode, getLastTaunt, getTickCount, getTimeScale, consumeMomentumShift } from "@/model/game";
+import { isKamikazeMode, getLastTaunt, getTickCount, getTimeScale, consumeMomentumShift, getMachineMood, consumeKillCam, setKillCamEnabled } from "@/model/game";
 import { createKamikazeState, POWERUP_NAMES, type AIDifficulty } from "@/model/kamikaze";
 import type { PowerUpSide } from "@/definitions/game";
 import { mulberry32, createRunSeed } from "@/utils/rng";
@@ -95,6 +95,20 @@ function applyWorldReaction(reaction: WorldReaction): void {
       break;
   }
 }
+
+/**
+ * A1: the machine's mood drives the taunt overlay color. Calm reads as the
+ * classic adversary red; as MAMORU destabilizes the palette shifts toward
+ * amber (desperate), white-hot (enraged), and dim indigo (grieving).
+ */
+const MOOD_COLORS: Record<string, { color: string; border: string }> = {
+    calm:      { color: "#ff4444", border: "rgba(255,68,68,0.4)" },
+    smug:      { color: "#ff6b6b", border: "rgba(255,107,107,0.5)" },
+    wary:      { color: "#fbbf24", border: "rgba(251,191,36,0.5)" },
+    desperate: { color: "#f59e0b", border: "rgba(245,158,11,0.6)" },
+    enraged:   { color: "#ffffff", border: "rgba(255,255,255,0.8)" },
+    grieving:  { color: "#818cf8", border: "rgba(129,140,248,0.5)" },
+};
 
 /**
  * Faint directional guide drawn from the ball to the pointer while charging.
@@ -210,6 +224,7 @@ export default function GameMount(props: Props) {
   const [stability, setStability] = useState(0);
   const [machineSaving, setMachineSaving] = useState(false);
   const [kamikazeMessage, setKamikazeMessage] = useState<string | null>(null);
+  const [machineMood, setMachineMood] = useState<string>("calm");
   const [activePowerUps, setActivePowerUps] = useState<{ name: string; side: PowerUpSide; remainingMs: number }[]>([]);
   const [slowMoActive, setSlowMoActive] = useState(false);
   const [momentum, setMomentum] = useState(0.5);
@@ -367,7 +382,7 @@ export default function GameMount(props: Props) {
             [GameMessages.UNSTOPPABLE]: "無双 · UNSTOPPABLE!",
           };
           const kamMsg = msg === GameMessages.AI_TAUNT
-            ? `MACHINE: "${getLastTaunt()}"`
+            ? `守: "${getLastTaunt()}"`
             : kamikazeMessages[msg];
           if (kamMsg) {
             setKamikazeMessage(kamMsg);
@@ -385,6 +400,10 @@ export default function GameMount(props: Props) {
       });
 
       gameRef.current = initialGame;
+
+      // A2: the kill cam plays in live + attract modes but is suppressed while
+      // racing/viewing a ghost so the comparison timeline stays pure.
+      setKillCamEnabled(!props.ghost);
 
       // The runKey effect can't record the first run (it bails while the mount
       // is still in flight), so start recording for the initial game here.
@@ -470,6 +489,9 @@ export default function GameMount(props: Props) {
           : { score: g.score, balls: g.balls, multiplier: g.multiplier },
       );
       setKamikazeActive(isKamikazeMode());
+      // A1: surface the machine's mood so the taunt overlay can color-shift.
+      const mood = getMachineMood();
+      setMachineMood((prev) => (prev === mood ? prev : mood));
 
       // Slow-mo + momentum (Phase 1 immersion)
       const ts = getTimeScale();
@@ -492,6 +514,22 @@ export default function GameMount(props: Props) {
           setMomentumShift(shift);
           window.clearTimeout(momentumShiftClearRef.current);
           momentumShiftClearRef.current = window.setTimeout(() => setMomentumShift(null), 2200);
+        }
+        // A2 KILL CAM: directed camera push on the playfield frame. Applied to
+        // containerRef (inner, overflow:hidden) so it never fights the
+        // victoryShake animation running on shakeRef (outer). The 3D world
+        // impact + fly-to-drain already fire from fireVictoryFx on DRAINED;
+        // this adds the slow push-in that makes the drain a clip-able moment.
+        if (consumeKillCam()) {
+          const frame = containerRef.current;
+          if (frame) {
+            frame.style.transition = "transform 900ms cubic-bezier(0.16, 1, 0.3, 1)";
+            frame.style.transform = "scale(1.06) translateY(-2%)";
+            window.setTimeout(() => {
+              frame.style.transition = "transform 450ms ease-out";
+              frame.style.transform = "";
+            }, 900);
+          }
         }
       }
 
@@ -1102,7 +1140,7 @@ export default function GameMount(props: Props) {
                   minWidth: 140,
                 }}
               >
-                <div>{p.side === "player" ? "YOU" : "MACHINE"} · {p.name}</div>
+                <div>{p.side === "player" ? "YOU" : "守"} · {p.name}</div>
                 <div
                   style={{
                     marginTop: 4,
@@ -1143,8 +1181,8 @@ export default function GameMount(props: Props) {
               padding: "12px 24px",
               borderRadius: 12,
               background: "rgba(0,0,0,0.75)",
-              border: "1px solid rgba(255,68,68,0.4)",
-              color: "#ff4444",
+              border: `1px solid ${MOOD_COLORS[machineMood]?.border ?? MOOD_COLORS.calm.border}`,
+              color: MOOD_COLORS[machineMood]?.color ?? MOOD_COLORS.calm.color,
               fontSize: 18,
               fontWeight: "bold",
               textTransform: "uppercase",
@@ -1152,6 +1190,7 @@ export default function GameMount(props: Props) {
               pointerEvents: "none",
               zIndex: 10,
               animation: "fadeIn 0.3s ease-out",
+              transition: "color 0.4s ease, border-color 0.4s ease",
             }}
           >
             {kamikazeMessage}
