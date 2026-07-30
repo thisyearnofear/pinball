@@ -3,6 +3,7 @@ import { getWorldById } from '@/config/worlds';
 import { formatGameScore } from '@/utils/score-format';
 import { buildShareText } from '@/utils/share-text';
 import { buildChallengeUrl, type ChallengeInvite } from '@/utils/challenge-link';
+import { sealFromReplayHash } from '@/utils/seal';
 import {
   renderShareCardImage,
   shareCardToBlob,
@@ -22,6 +23,10 @@ interface ShareCardProps {
   playerName?: string;
   rankKanji?: string;
   rankName?: string;
+  /** keccak256 replay hash — the share card stamps its seal from it (A3). */
+  replayHash?: string;
+  /** Verdict kanji stamped inside the seal ring (e.g. 神). */
+  verdictKanji?: string;
   onDismiss: () => void;
   onShare?: () => void;
 }
@@ -75,6 +80,8 @@ export function ShareCard(props: ShareCardProps) {
         taunt: props.taunt,
         rankKanji: props.rankKanji,
         rankName: props.rankName,
+        seal: sealFromReplayHash(props.replayHash),
+        verdictKanji: props.verdictKanji,
         footerHost: window.location.host,
       });
       if (cancelled) return;
@@ -87,7 +94,7 @@ export function ShareCard(props: ShareCardProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kamikaze, scoreText, props.worldId, props.taunt, props.rankName]);
+  }, [kamikaze, scoreText, props.worldId, props.taunt, props.rankName, props.replayHash]);
 
   function flash(next: ShareState) {
     setState(next);

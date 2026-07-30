@@ -106,6 +106,7 @@ function GameScreenInner() {
   const [showPaymentSelector, setShowPaymentSelector] = useState(false);
   const [paymentBusy, setPaymentBusy] = useState(false);
   const [lastScore, setLastScore] = useState<number>(0);
+  const [lastReplayHash, setLastReplayHash] = useState<string | undefined>(undefined);
   const [dailyResult, setDailyResult] = useState<{ dayKey: string; mode: "classic" | "kamikaze"; best: number; isPB: boolean } | null>(null);
   const [lastReplay, setLastReplay] = useState<ReplayDigest | null>(null);
   const [showReplay, setShowReplay] = useState(false);
@@ -375,8 +376,9 @@ function GameScreenInner() {
     activityFeed.log("powerup", `The wind answers your first touch (+${XP_FIRST_ACTION} XP)`);
   }, [toast, activityFeed]);
 
-  const handleRunEnd = useCallback((score: number) => {
+  const handleRunEnd = useCallback((score: number, replayHash?: string) => {
     setLastScore(score);
+    setLastReplayHash(replayHash);
     recordRun({ score, mode, gameMode: effectiveGameMode, worldId: activeWorldId, tournamentId: tournament.tournamentId ?? undefined });
     // Daily Challenge retention: only runs matching today's mode count toward
     // the day's PB, so classic scores never pollute a kamikaze drain-time PB.
@@ -620,6 +622,7 @@ function GameScreenInner() {
               progress={progressUpdate}
               challengeOutcome={challengeOutcome}
               playerName={playerName || undefined}
+              replayHash={lastReplayHash}
               onDismiss={() => setShowCelebration(false)}
               onPlayAgain={() => { setShowCelebration(false); if (mode === "practice") startPractice(); else startTournament(); }}
               onPlayTournament={() => { setShowCelebration(false); startTournament(); }}

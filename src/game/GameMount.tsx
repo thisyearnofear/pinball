@@ -191,7 +191,7 @@ type Props = {
   /** Tournament leader's replay for live ghost racing. */
   ghost?: { digest: ReplayDigest; score: number; address: string } | null;
   onActiveChange?: (active: boolean) => void;
-  onRunEnd?: (score: number) => void;
+  onRunEnd?: (score: number, replayHash?: string) => void;
   /** Fired once on the player's first deliberate in-run action (early win). */
   onFirstAction?: () => void;
   onReplayAvailable?: (replay: ReplayDigest) => void;
@@ -623,7 +623,7 @@ export default function GameMount(props: Props) {
           Math.max(1, Math.round(performance.now() - runStartRef.current)),
         );
 
-        props.onRunEnd?.(g.score);
+        props.onRunEnd?.(g.score, replayHash);
 
         if (props.mode !== "tournament") return;
 

@@ -4,6 +4,8 @@
  * clipboard text. Images travel; text doesn't.
  */
 
+import { SEAL_VERMILLION, sealRotation, type Seal } from "./seal";
+
 export type ShareCardImageInput = {
   kamikaze: boolean;
   scoreText: string;
@@ -17,6 +19,10 @@ export type ShareCardImageInput = {
   rankName?: string;
   /** e.g. window.location.host — shown as the call-to-action footer. */
   footerHost?: string;
+  /** Hash-derived hanko seal (A3); null/absent = unsealed, no stamp drawn. */
+  seal?: Seal | null;
+  /** Verdict kanji stamped inside the seal ring (e.g. 神). */
+  verdictKanji?: string;
 };
 
 export const SHARE_CARD_WIDTH = 1200;
@@ -149,6 +155,40 @@ export function renderShareCardImage(input: ShareCardImageInput): HTMLCanvasElem
   ctx.font = "800 32px system-ui, -apple-system, sans-serif";
   const cta = input.kamikaze ? "Think you can drain it faster?" : "Think you can beat it?";
   ctx.fillText(input.footerHost ? `${cta} ${input.footerHost}` : cta, 600, 576);
+
+  // A3: hash-sealed hanko stamp in the corner — the cryptographic proof
+  // rendered as a vermillion seal binding the verdict kanji to the replay
+  // hash fragment. Only drawn for sealed (recorded) runs.
+  if (input.seal) {
+    const cx = 1074, cy = 468, r = 58;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate((sealRotation(input.seal.ring) * Math.PI) / 180);
+    ctx.strokeStyle = SEAL_VERMILLION;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(227,66,52,0.4)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, r - 8, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = SEAL_VERMILLION;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "400 40px 'Hiragino Mincho ProN', 'Yu Mincho', serif";
+    ctx.fillText(input.verdictKanji ?? "印", 0, -12);
+    ctx.font = "700 20px system-ui, -apple-system, sans-serif";
+    ctx.fillText(`· ${input.seal.fragment}`, 0, 26);
+    ctx.restore();
+    // Microcopy under the seal (unrotated): the proof reads as words too.
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = "rgba(227,66,52,0.9)";
+    ctx.font = "600 16px system-ui, -apple-system, sans-serif";
+    ctx.fillText(`provably sealed · replay ${input.seal.fragment}`, cx, cy + r + 26);
+  }
 
   return canvas;
 }

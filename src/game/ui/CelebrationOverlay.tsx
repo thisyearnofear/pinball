@@ -6,6 +6,7 @@ import { formatGameScore } from "@/utils/score-format";
 import { getRandomTaunt } from "@/model/kamikaze";
 import { getAppConfig } from "@/config/app-config";
 import { getRunVerdict, type RunVerdict, type VerdictDifficulty } from "@/config/run-verdict";
+import { sealFromReplayHash, sealRotation, SEAL_VERMILLION } from "@/utils/seal";
 import type { ProgressUpdate } from "@/config/progression";
 import type { ChallengeInvite } from "@/utils/challenge-link";
 
@@ -24,6 +25,8 @@ type Props = {
   /** Verdict of an accepted friend challenge, if this run was one. */
   challengeOutcome?: { invite: ChallengeInvite; beat: boolean } | null;
   playerName?: string;
+  /** keccak256 hash of the run's replay — the seal is derived from it (A3). */
+  replayHash?: string;
   onDismiss: () => void;
   onPlayAgain: () => void;
   onPlayTournament: () => void;
@@ -50,6 +53,10 @@ export function CelebrationOverlay(props: Props) {
     return getRunVerdict(kamikaze, props.score, difficulty);
   }, [kamikaze, props.score, props.aiDifficulty]);
 
+  // A3: the verdict seal is derived from the replay hash — the proof IS the
+  // aesthetic. Null for unsealed practice runs (no recording).
+  const seal = useMemo(() => sealFromReplayHash(props.replayHash), [props.replayHash]);
+
   if (showShare) {
     return (
       <ShareCard
@@ -62,6 +69,8 @@ export function CelebrationOverlay(props: Props) {
         playerName={props.playerName}
         rankKanji={props.progress?.rank.kanji}
         rankName={props.progress?.rank.name}
+        replayHash={props.replayHash}
+        verdictKanji={verdict.kanji}
         onDismiss={() => setShowShare(false)}
       />
     );
@@ -118,6 +127,67 @@ export function CelebrationOverlay(props: Props) {
                 {verdict.line}
               </div>
             </div>
+          </div>
+
+          {/* A3: the hash-sealed verdict stamp. A sealed run shows a vermillion
+              hanko ring (rotated by a hash-derived imperfection) binding the
+              verdict kanji to the replay-hash fragment. An unsealed practice
+              run shows an outline ring — the absence teaches what sealing is. */}
+          <div style={{ marginTop: spacing.sm, display: "flex", justifyContent: "center" }}>
+            {seal ? (
+              <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                <div
+                  aria-hidden
+                  style={{
+                    width: 76,
+                    height: 76,
+                    borderRadius: "50%",
+                    border: `3px solid ${SEAL_VERMILLION}`,
+                    boxShadow: "inset 0 0 0 1px rgba(227,66,52,0.35), 0 0 16px rgba(227,66,52,0.25)",
+                    background: "rgba(227,66,52,0.06)",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    transform: `rotate(${sealRotation(seal.ring)}deg)`,
+                    color: SEAL_VERMILLION,
+                  }}
+                >
+                  <span style={{ fontFamily: "'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif", fontSize: 26, lineHeight: 1 }}>
+                    {verdict.kanji}
+                  </span>
+                  <span style={{ fontSize: 11, letterSpacing: "0.1em", fontWeight: typography.weight.bold, marginTop: 3 }}>
+                    · {seal.fragment}
+                  </span>
+                </div>
+                <span style={{ fontSize: typography.size.xs, color: colors.text.muted, letterSpacing: "0.14em", textTransform: "uppercase" }}>
+                  sealed
+                </span>
+              </div>
+            ) : (
+              <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                <div
+                  aria-hidden
+                  style={{
+                    width: 76,
+                    height: 76,
+                    borderRadius: "50%",
+                    border: `2px dashed rgba(255,255,255,0.22)`,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: colors.text.muted,
+                    fontFamily: "'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif",
+                    fontSize: 24,
+                  }}
+                >
+                  印
+                </div>
+                <span style={{ fontSize: typography.size.xs, color: colors.text.muted, letterSpacing: "0.08em" }}>
+                  unsealed · practice
+                </span>
+              </div>
+            )}
           </div>
 
           {props.isNewBest && (
