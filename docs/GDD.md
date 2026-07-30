@@ -64,13 +64,17 @@ on the player's **first aim**: no lane, guard, or meter exists before intent.
 To find what's actually fun, the scheme ships as **two isolated variants**
 rather than one combined test (you can't debug six variables at once):
 
-**守 Feint duel** — *is outsmarting the machine fun?*
+**守 Feint duel** — *is baiting and beating MAMORU's recovery fun?*
 - Full launch accuracy; no timing meter.
-- Aim and change lanes; MAMORU reacts to your aim after a **human-scale** delay
-  (Easy 1200ms · Medium 800ms · Hard 500ms — not the old 80–250ms AI polling,
-  which was sub-human for a perceive-and-act duel).
-- Feint to draw the guard off, then release the open lane before it catches up.
-- MAMORU's guard is **embodied**: the flipper on the guarded lane physically rises.
+- Two-stage: **BAIT** (choose a lane; FIRE locked) → MAMORU commits after a
+  **human-scale** delay (Easy 1200ms · Medium 800ms · Hard 500ms — not the old
+  80–250ms AI polling) → **BREAK** (switch lanes and FIRE during the recovery
+  window, before it re-commits).
+- The feint is **mandatory**: FIRE stays locked until MAMORU commits, so there
+  is no quick-draw; firing into the guarded bait lane (never switching) is a
+  save. The gotcha is the experiment.
+- MAMORU's guard is **embodied**: the flipper on the guarded lane rises
+  (visual-only — the deterministic lane resolver is the single authority).
 
 **守 Precision** — *is calling and executing a shot fun?*
 - MAMORU visibly **pre-commits** a lane (fixed, shown from serve start); no live

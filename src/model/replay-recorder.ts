@@ -18,8 +18,9 @@ export type ReplayEventType =
     | "serve"       // shot-calling: ball held at plunger, intent moment begins
     | "aim"         // shot-calling: player signals a target lane (x = lane)
     | "release"     // shot-calling: player releases the shot (tick-stamped; meter derivable from tick)
+    | "save"        // shot-calling: ball reached the drain but MAMORU saved it (re-serve)
     | "spawn"       // ball spawned
-    | "drain";      // ball drained
+    | "drain";      // ball drained (successful in kamikaze/shot-call)
 
 export type ReplayEvent = {
     t: number; // engine tick

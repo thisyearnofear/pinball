@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
     createShotState, beginServe, signalAim, guardLaneAt, meterPosition, accuracyForPosition,
-    launchVector, resolveRelease, laneForX, resolveDrain, reactionMsToTicks, TICKS_PER_SECOND,
+    launchVector, resolveRelease, laneForX, resolveDrain, reactionMsToTicks, canRelease, feintStage,
+    TICKS_PER_SECOND,
 } from "@/model/shot-calling";
 import { IMMERSION } from "@/config/immersion-tuning";
 
@@ -181,6 +182,54 @@ describe("shot-calling core", () => {
             let s = precision(800, 0, 0);
             s = beginServe(s, 100, 1);
             expect(s.precommittedGuard).toEqual(1);
+        });
+    });
+
+    describe("feint gating (BAIT -> BREAK)", () => {
+        it("should lock FIRE until the bait commits (no quick-draw)", () => {
+            let s = feint(800); // 48 ticks
+            expect(canRelease(s, 0)).toBe(false);   // no lane yet
+            s = signalAim(s, 0, 0);                  // bait
+            expect(canRelease(s, 10)).toBe(false);   // not committed yet
+            expect(canRelease(s, 48)).toBe(true);    // committed
+        });
+
+        it("should report the feint stage progression", () => {
+            let s = feint(800);
+            expect(feintStage(s, 0)).toEqual("idle");
+            s = signalAim(s, 0, 0);
+            expect(feintStage(s, 10)).toEqual("baiting");
+            expect(feintStage(s, 48)).toEqual("break");
+        });
+
+        it("should save a player who fires into the guarded bait lane (never switches)", () => {
+            let s = feint(800);
+            s = signalAim(s, 0, 0); // bait lane 0, never switch
+            expect(resolveDrain(0, guardLaneAt(s, 100))).toEqual("save");
+        });
+
+        it("should drain a player who switches and fires during the recovery window", () => {
+            let s = feint(800); // 48 ticks
+            s = signalAim(s, 0, 0);    // bait lane 0
+            s = signalAim(s, 1, 100);  // break to lane 1 after commit
+            const covered = guardLaneAt(s, 110); // still on the bait (0)
+            expect(covered).toEqual(0);
+            expect(resolveDrain(1, covered)).toEqual("drain");
+        });
+
+        it("should close the break window once MAMORU re-commits", () => {
+            let s = feint(800); // 48 ticks
+            s = signalAim(s, 0, 0);
+            s = signalAim(s, 1, 100); // break
+            expect(guardLaneAt(s, 148)).toEqual(1); // re-committed to the new lane
+            expect(resolveDrain(1, guardLaneAt(s, 148))).toEqual("save"); // too slow
+        });
+
+        it("should allow precision release as soon as a lane is called", () => {
+            let s = precision();
+            expect(canRelease(s, 0)).toBe(false);
+            s = signalAim(s, 1, 0);
+            expect(canRelease(s, 1)).toBe(true);
         });
     });
 });

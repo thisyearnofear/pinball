@@ -18,7 +18,7 @@ import { GhostRace } from "./ui/GhostRace";
 import { StabilityMeter } from "./ui/StabilityMeter";
 import { KanjiWatermark } from "./ui/KanjiWatermark";
 import { type WorldReaction } from "@/presentation/world-reactor";
-import { isKamikazeMode, getLastTaunt, getTickCount, getTimeScale, consumeMomentumShift, getMachineMood, consumeKillCam, setKillCamEnabled, isShotCallMode, getShotVariant, getShotPhase, getShotAimedLane, getShotGuardLane, getShotMeterPosition, getShotLanes, getLastShotResult, shotRelease, type ShotResult } from "@/model/game";
+import { isKamikazeMode, getLastTaunt, getTickCount, getTimeScale, consumeMomentumShift, getMachineMood, consumeKillCam, setKillCamEnabled, isShotCallMode, getShotVariant, getShotPhase, getShotAimedLane, getShotGuardLane, getShotMeterPosition, getShotLanes, getLastShotResult, getShotCanRelease, getShotFeintStage, shotRelease, type ShotResult } from "@/model/game";
 import { createKamikazeState, POWERUP_NAMES, type AIDifficulty } from "@/model/kamikaze";
 import type { PowerUpSide } from "@/definitions/game";
 import { mulberry32, createRunSeed } from "@/utils/rng";
@@ -236,8 +236,8 @@ export default function GameMount(props: Props) {
   const [machineSaving, setMachineSaving] = useState(false);
   const [kamikazeMessage, setKamikazeMessage] = useState<string | null>(null);
   const [machineMood, setMachineMood] = useState<string>("calm");
-  const [shotHud, setShotHud] = useState<{ variant: "feint" | "precision"; phase: string; aimedLane: number | null; guardLane: number | null; meter: number; lanes: number; lastResult: ShotResult | null; active: boolean }>(
-    { variant: "feint", phase: "aiming", aimedLane: null, guardLane: null, meter: 0, lanes: 2, lastResult: null, active: false }
+  const [shotHud, setShotHud] = useState<{ variant: "feint" | "precision"; phase: string; aimedLane: number | null; guardLane: number | null; meter: number; lanes: number; lastResult: ShotResult | null; canRelease: boolean; feintStage: string; active: boolean }>(
+    { variant: "feint", phase: "aiming", aimedLane: null, guardLane: null, meter: 0, lanes: 2, lastResult: null, canRelease: false, feintStage: "idle", active: false }
   );
   const [activePowerUps, setActivePowerUps] = useState<{ name: string; side: PowerUpSide; remainingMs: number }[]>([]);
   const [slowMoActive, setSlowMoActive] = useState(false);
@@ -524,6 +524,8 @@ export default function GameMount(props: Props) {
           meter: getShotMeterPosition(),
           lanes: getShotLanes(),
           lastResult: getLastShotResult(),
+          canRelease: getShotCanRelease(),
+          feintStage: getShotFeintStage(),
         });
       } else {
         setShotHud((prev) => (prev.active ? { ...prev, active: false } : prev));
@@ -1301,6 +1303,8 @@ export default function GameMount(props: Props) {
             meter={shotHud.meter}
             sweetSpot={IMMERSION.shotCalling.meterSweetSpot}
             lastResult={shotHud.lastResult}
+            canRelease={shotHud.canRelease}
+            feintStage={shotHud.feintStage}
             onRelease={() => shotRelease()}
           />
         )}

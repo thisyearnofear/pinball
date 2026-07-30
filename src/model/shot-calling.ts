@@ -41,6 +41,10 @@ export type ShotState = {
     reactionTicks: number;
     /** Precision: the lane MAMORU pre-committed to at serve (fixed, visible). */
     precommittedGuard: number | null;
+    /** Feint: the first (bait) lane, and the tick it was signalled. The break
+     *  must come after MAMORU commits to the bait, or the feint is meaningless. */
+    baitLane: number | null;
+    baitSignalTick: number;
     releaseTick: number | null;
     accuracy: number;
     /** Signed meter offset at release (-0.5..0.5); drives the directional miss. */
@@ -66,6 +70,8 @@ export function createShotState(
         meterStartTick: null,
         reactionTicks: reactionMsToTicks(reactionMs),
         precommittedGuard: variant === "precision" ? precommittedGuard : null,
+        baitLane: null,
+        baitSignalTick: startTick,
         releaseTick: null,
         accuracy: 0,
         releaseOffset: 0,
@@ -85,6 +91,8 @@ export function beginServe(state: ShotState, tick: number, precommittedGuard: nu
         prevGuardLane: null,
         meterStartTick: null,
         precommittedGuard: state.variant === "precision" ? precommittedGuard : state.precommittedGuard,
+        baitLane: null,
+        baitSignalTick: tick,
         releaseTick: null,
         accuracy: 0,
         releaseOffset: 0,
@@ -122,7 +130,34 @@ export function signalAim(state: ShotState, lane: number, tick: number): ShotSta
         aimedLane: next,
         aimSignalTick: tick,
         meterStartTick: firstAim ? tick : state.meterStartTick,
+        // Feint: the first aim is the bait; later switches are the break.
+        baitLane: firstAim ? next : state.baitLane,
+        baitSignalTick: firstAim ? tick : state.baitSignalTick,
     };
+}
+
+/**
+ * Whether the player may release. Variant-specific so each tests its intended
+ * skill:
+ *  - feint: FIRE is locked until MAMORU commits to the bait (no quick-draw).
+ *    After commit the player may fire — but firing into the guarded bait lane
+ *    (never switching) is a save, so the feint (switch, then fire during the
+ *    recovery window) is required to win.
+ *  - precision: fire any time after a lane is called; the meter sets precision.
+ */
+export function canRelease(state: ShotState, tick: number): boolean {
+    if (state.phase !== "aiming" || state.aimedLane === null) return false;
+    if (state.variant === "precision") return true;
+    return state.baitLane !== null && tick >= state.baitSignalTick + state.reactionTicks;
+}
+
+export type FeintStage = "idle" | "baiting" | "break";
+
+/** Feint sub-phase for the HUD: idle (no lane) -> baiting (wait for commit) ->
+ *  break (committed; switch + fire). */
+export function feintStage(state: ShotState, tick: number): FeintStage {
+    if (state.variant !== "feint" || state.aimedLane === null || state.baitLane === null) return "idle";
+    return tick >= state.baitSignalTick + state.reactionTicks ? "break" : "baiting";
 }
 
 /** Timing-meter marker position (0..1 triangle wave). Precision only; 0 before

@@ -13,6 +13,10 @@ type Props = {
   sweetSpot: number;
   /** Outcome of the previous shot, for causal feedback. */
   lastResult: ShotResult | null;
+  /** Whether the engine currently allows a release (variant-gated). */
+  canRelease: boolean;
+  /** Feint sub-phase: idle | baiting | break. */
+  feintStage: string;
   onRelease: () => void;
 };
 
@@ -27,15 +31,21 @@ const laneName = (l: number | null, lanes: number) =>
  */
 export function ShotCallHud(props: Props) {
   const aiming = props.phase === "aiming";
-  const canRelease = aiming && props.aimedLane !== null;
+  const canFire = props.canRelease;
   const lanes = props.lanes;
   const sweetLeft = (0.5 - props.sweetSpot) * 100;
   const sweetWidth = props.sweetSpot * 2 * 100;
 
-  // Causal feedback for the previous shot (shown while the next serve is fresh).
+  // Causal feedback for the previous shot (shown on the terminal saved/drained beat).
   const r = props.lastResult;
   const drift = r ? (Math.abs(r.offset) < 0.05 ? "true line" : r.offset < 0 ? "drifted LEFT" : "drifted RIGHT") : "";
-  const showResult = r !== null && props.aimedLane === null;
+  const showResult = r !== null && (props.phase === "saved" || props.phase === "drained");
+
+  const banner = !aiming
+    ? props.phase === "saved" ? "守 SAVED IT" : props.phase === "drained" ? "神風 DRAINED" : "…RESOLVING"
+    : props.variant === "feint"
+      ? props.feintStage === "break" ? "守 COMMITTED — BREAK!" : props.feintStage === "baiting" ? "BAIT — WAIT FOR 守" : "守 · FEINT THE GUARD"
+      : "守 · CALL YOUR SHOT";
 
   return (
     <div
@@ -58,16 +68,14 @@ export function ShotCallHud(props: Props) {
             padding: "6px 16px",
             borderRadius: 999,
             background: "rgba(0,0,0,0.6)",
-            border: `1px solid ${aiming ? "rgba(74,222,128,0.6)" : "rgba(255,255,255,0.25)"}`,
-            color: aiming ? "#4ade80" : "rgba(255,255,255,0.7)",
+            border: `1px solid ${aiming ? "rgba(74,222,128,0.6)" : props.phase === "saved" ? "rgba(227,66,52,0.6)" : "rgba(74,222,128,0.6)"}`,
+            color: aiming ? "#4ade80" : props.phase === "saved" ? "#fca5a5" : "#86efac",
             fontSize: 13,
             fontWeight: 800,
             letterSpacing: "0.12em",
           }}
         >
-          {aiming
-            ? props.variant === "feint" ? "守 · FEINT THE GUARD" : "守 · CALL YOUR SHOT"
-            : "…RESOLVING"}
+          {banner}
         </span>
       </div>
 
@@ -153,25 +161,27 @@ export function ShotCallHud(props: Props) {
         {/* Release button */}
         <button
           onClick={props.onRelease}
-          disabled={!canRelease}
+          disabled={!canFire}
           style={{
-            pointerEvents: canRelease ? "auto" : "none",
+            pointerEvents: canFire ? "auto" : "none",
             padding: "14px 0",
             borderRadius: 12,
             border: "none",
             fontSize: 18,
             fontWeight: 900,
             letterSpacing: "0.14em",
-            color: canRelease ? "#0a0a0a" : "rgba(255,255,255,0.5)",
-            background: canRelease ? "linear-gradient(135deg, #4ade80, #22c55e)" : "rgba(255,255,255,0.15)",
-            cursor: canRelease ? "pointer" : "default",
+            color: canFire ? "#0a0a0a" : "rgba(255,255,255,0.5)",
+            background: canFire ? "linear-gradient(135deg, #4ade80, #22c55e)" : "rgba(255,255,255,0.15)",
+            cursor: canFire ? "pointer" : "default",
           }}
         >
-          {props.aimedLane === null ? "CALL A LANE FIRST" : props.variant === "feint" ? "FIRE 神風" : "RELEASE 神風"}
+          {props.variant === "feint"
+            ? props.feintStage === "break" ? "FIRE 神風" : props.feintStage === "baiting" ? "WAIT FOR 守…" : "CALL A LANE FIRST"
+            : props.aimedLane === null ? "CALL A LANE FIRST" : "RELEASE 神風"}
         </button>
         <div style={{ textAlign: "center", fontSize: 10, color: "rgba(255,255,255,0.45)", letterSpacing: "0.06em" }}>
           {props.variant === "feint"
-            ? "tap a side to aim · feint to draw 守 off · FIRE (or Space) before it covers you"
+            ? "tap a lane to BAIT · wait for 守 to commit · SWITCH lanes, then FIRE before it recovers"
             : "tap the OPEN lane · RELEASE (or Space) on the sweet spot"}
         </div>
       </div>

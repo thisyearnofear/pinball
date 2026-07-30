@@ -43,7 +43,7 @@ import { worldGravityX, worldGravityY } from "@/model/world-physics";
 import { IMMERSION } from "@/config/immersion-tuning";
 import {
     createShotState, beginServe, signalAim, guardLaneAt, resolveRelease, meterPosition,
-    laneForX, resolveDrain, type ShotState, type ShotVariant,
+    laneForX, resolveDrain, canRelease, feintStage, type ShotState, type ShotVariant, type FeintStage,
 } from "@/model/shot-calling";
 import { enqueueTrack, setFrequency, playSoundEffect, duckMusic, playTaikoHit, playFurinChime, momentarySilence } from "@/services/audio-service";
 import * as haptics from "@/utils/haptics";
@@ -653,15 +653,16 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
             updateAIFlippers(game.kamikaze, flippers, ballStates, now, game.rng ?? Math.random);
         } else if (shotState) {
             // Embody MAMORU's guard: raise the flipper on the guarded lane so the
-            // opponent is part of the machine, not a status panel. The flipper
-            // physically blocks that lane; the deterministic drain resolution
-            // (locked at the release tick) decides the save.
+            // opponent is part of the machine, not a status panel. Visual-only
+            // (sensor): the deterministic drain resolver is the single authority
+            // for saves, so the two never disagree.
             const guard = shotState.phase === "aiming"
                 ? guardLaneAt(shotState, tickCount)
                 : guardLaneAt(shotState, shotState.releaseTick ?? tickCount);
             for (const f of flippers) {
                 const isLeft = f.type === ActorTypes.LEFT_FLIPPER;
                 f.trigger(guard === (isLeft ? 0 : 1));
+                f.body.isSensor = true;
             }
         }
         updateRubberBand(game.kamikaze, now);
@@ -769,9 +770,13 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
                         haptics.aiSave();
                         lastTauntText = "守: I read that lane.";
                         messageHandler(GameMessages.AI_TAUNT, 1400);
-                        recordReplayEvent(tickCount, "drain");
+                        recordReplayEvent(tickCount, "save");
+                        shotState.phase = "saved"; // terminal phase surfaces the causal feedback
                         removeBall(ball);
-                        serveShotCallBall();
+                        // Hold the "SAVED" beat briefly so the feedback lands, then re-serve.
+                        window.setTimeout(() => {
+                            if (shotCallActive && gameRef?.active) serveShotCallBall();
+                        }, 1200);
                         continue;
                     }
                     playSoundEffect(GameSounds.DRAIN_VICTORY);
@@ -780,6 +785,7 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
                     messageHandler(GameMessages.DRAINED);
                     recordReplayEvent(tickCount, "drain");
                     removeBall(ball);
+                    shotState.phase = "drained"; // terminal phase surfaces the causal feedback
                     const shotScore = getKamikazeScore(game.kamikaze, now);
                     game.kamikaze.completedBallScores.push(shotScore);
                     game.kamikaze.scoreFrozen = true;
@@ -1179,8 +1185,8 @@ export const shotAim = (lane: number): void => {
 
 /** Player releases the shot: timing sets accuracy, physics takes over. */
 export const shotRelease = (): void => {
-    if (!shotCallActive || !shotState || shotState.phase !== "aiming" || balls.length === 0) return;
-    if (shotState.aimedLane === null) return; // the duel starts on the first aim
+    if (!shotCallActive || !shotState || balls.length === 0) return;
+    if (!canRelease(shotState, tickCount)) return; // feint: locked until the bait commits
     const ball = balls[0];
     const { accuracy, offset, launch } = resolveRelease(shotState, tickCount, LAUNCH_SPEED);
     shotState.releaseTick = tickCount;
@@ -1200,6 +1206,8 @@ export const getShotLanes = (): number => shotState?.lanes ?? IMMERSION.shotCall
 export const getShotAccuracy = (): number => shotState?.accuracy ?? 0;
 export const getShotMeterPosition = (): number => (shotState ? meterPosition(shotState, tickCount) : 0);
 export const getLastShotResult = (): ShotResult | null => lastShotResult;
+export const getShotCanRelease = (): boolean => (shotState ? canRelease(shotState, tickCount) : false);
+export const getShotFeintStage = (): FeintStage => (shotState ? feintStage(shotState, tickCount) : "idle");
 
 /** The lane MAMORU is guarding. While aiming it tracks live (so the player sees
  *  the machine react); during flight it is locked at the release tick. */
