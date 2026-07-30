@@ -119,6 +119,9 @@ let playerRankName: string | undefined;
 let shotState: ShotState | null = null;
 let shotCallActive = false;
 let shotVariant: ShotVariant = "feint";
+/** Tick at which a saved ball re-serves (tick-based, so pause/replay-safe and
+ *  unable to leak a stale callback into a new run). Null when none pending. */
+let shotServeAtTick: number | null = null;
 
 /** Causal feedback for the last resolved shot (so the HUD can explain WHY). */
 export type ShotResult = {
@@ -236,6 +239,7 @@ export const init = async (
         && (game.controlScheme === "feint" || game.controlScheme === "precision");
     shotVariant = game.controlScheme === "precision" ? "precision" : "feint";
     shotState = null;
+    shotServeAtTick = null;
     lastShotResult = null;
     ghostActive = false;
     frenzyActive = false;
@@ -716,6 +720,15 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
         }
     }
 
+    // Shot-calling: perform a pending tick-based re-serve. Runs here (not in a
+    // wall-clock timer) so it is pause-safe, replay-safe, and cannot leak a
+    // stale callback into a restarted run.
+    if (shotCallActive && shotServeAtTick !== null && tickCount >= shotServeAtTick) {
+        shotServeAtTick = null;
+        if (balls.length > 0) removeBall(balls[0]); // drop the frozen saved ball
+        serveShotCallBall();
+    }
+
     for (ball of balls) {
         engine.capSpeed(ball.body);
         const { left, top } = ball.bounds;
@@ -751,6 +764,9 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
                 // coin flip: guarded lane = save (re-serve), open lane = drain.
                 if (shotCallActive && shotState) {
                     if (ball.body.velocity.y <= 0) continue; // rising, not draining
+                    // Terminal phases (saved/drained) are handled elsewhere; the
+                    // frozen saved ball must not re-trigger drain processing.
+                    if (shotState.phase === "saved" || shotState.phase === "drained") continue;
                     const coveredLane = guardLaneAt(shotState, shotState.releaseTick ?? tickCount);
                     const landingLane = laneForX(ball.body.position.x, table.width, shotState.lanes);
                     const result = resolveDrain(landingLane, coveredLane);
@@ -772,11 +788,11 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
                         messageHandler(GameMessages.AI_TAUNT, 1400);
                         recordReplayEvent(tickCount, "save");
                         shotState.phase = "saved"; // terminal phase surfaces the causal feedback
-                        removeBall(ball);
-                        // Hold the "SAVED" beat briefly so the feedback lands, then re-serve.
-                        window.setTimeout(() => {
-                            if (shotCallActive && gameRef?.active) serveShotCallBall();
-                        }, 1200);
+                        // Freeze the ball at the gate and re-serve on a fixed tick
+                        // offset — pause-safe, replay-safe, and no callback that
+                        // could leak into a restarted run.
+                        Body.setStatic(ball.body, true);
+                        shotServeAtTick = tickCount + IMMERSION.shotCalling.savedHoldTicks;
                         continue;
                     }
                     playSoundEffect(GameSounds.DRAIN_VICTORY);
@@ -997,6 +1013,7 @@ function startRound(game: GameDef): void {
     // Shot-calling serve: hold the ball at the plunger and open the intent
     // moment. The player aims, MAMORU contests, a timed release launches it.
     if (shotCallActive) {
+        shotServeAtTick = null; // a fresh serve supersedes any pending re-serve
         Body.setStatic(newBall.body, true);
         const reactionMs = IMMERSION.shotCalling.reactionMs[game.aiDifficulty ?? "medium"];
         const rng = game.rng ?? Math.random;

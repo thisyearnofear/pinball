@@ -115,6 +115,9 @@ export const IMMERSION = {
         maxAngleError: 0.6,
         /** Power lost at zero accuracy (off-center releases hit weaker). */
         maxPowerLoss: 0.3,
+        /** Ticks to hold the 'SAVED' beat before re-serving (tick-based, so it is
+         *  pause-safe and replay-safe). 72 ticks = 1.2s at 60fps. */
+        savedHoldTicks: 72,
     },
 } as const;
 

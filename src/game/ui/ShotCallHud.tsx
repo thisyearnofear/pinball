@@ -40,6 +40,17 @@ export function ShotCallHud(props: Props) {
   const r = props.lastResult;
   const drift = r ? (Math.abs(r.offset) < 0.05 ? "true line" : r.offset < 0 ? "drifted LEFT" : "drifted RIGHT") : "";
   const showResult = r !== null && (props.phase === "saved" || props.phase === "drained");
+  // Teach the rule when a save was the player's own doing.
+  let hint = "";
+  if (r && r.result === "save") {
+    if (r.calledLane !== null && r.calledLane === r.guardLane) {
+      hint = props.variant === "feint"
+        ? "you fired where 守 was guarding — switch lanes to beat it"
+        : "you called the guarded lane — pick the open side";
+    } else {
+      hint = "your shot drifted into 守's guard";
+    }
+  }
 
   const banner = !aiming
     ? props.phase === "saved" ? "守 SAVED IT" : props.phase === "drained" ? "神風 DRAINED" : "…RESOLVING"
@@ -100,6 +111,11 @@ export function ShotCallHud(props: Props) {
             called {laneName(r.calledLane, lanes)} · landed {laneName(r.landingLane, lanes)} · 守 held {laneName(r.guardLane, lanes)}
             {" → "}
             <strong>{r.result === "save" ? "SAVED" : "DRAINED"}</strong>
+            {hint && (
+              <div style={{ marginTop: 4, fontSize: 11, fontWeight: 600, opacity: 0.9 }}>
+                {hint}
+              </div>
+            )}
           </div>
         )}
 
