@@ -43,6 +43,10 @@ import { worldGravityX, worldGravityY } from "@/model/world-physics";
 import { enqueueTrack, setFrequency, playSoundEffect, duckMusic, playTaikoHit, playFurinChime } from "@/services/audio-service";
 import * as haptics from "@/utils/haptics";
 import {
+    loadMemory, greetingLine, dominantHabit, habitTaunt, emptyHabits,
+    type MachineMemory, type MachineHabits, type HabitLabel,
+} from "@/utils/machine-memory";
+import {
     createKamikazeState, updateAIFlippers, getKamikazeScore, getBestKamikazeScore, applyPowerUpEffects,
     hasPowerUp, rollPowerUp, activatePowerUp, cleanupPowerUps, shouldSpawnCrate,
     recordCrateSpawn, getElementTaunt, nudgeBall, isDrainBlocked, rollEmergencySave,
@@ -90,6 +94,15 @@ let lastTauntText = "";
 let lastNudgeAt = -Infinity;
 // Phase 3 anthropomorphization: throttle per-element voices so they don't spam.
 let lastElementVoiceAt = -Infinity;
+
+// B1 machine memory: MAMORU remembers you across sessions. The persistent
+// memory drives greetings; runHabits accumulates THIS run's nudge directions
+// for habit call-outs + end-of-run persistence. Memory talks, never touches
+// physics (hard rule 2).
+let machineMemory: MachineMemory = loadMemory();
+let runHabits: MachineHabits = emptyHabits();
+let lastHabitTauntAt = -Infinity;
+let lastHabitCalled: HabitLabel | null = null;
 
 // Phase 3 anthropomorphization: each machine part speaks with its own voice,
 // throttled so the chatter never overwhelms the action.
@@ -171,6 +184,12 @@ export const init = async (
     accumulator = 0;
     tickCount = 0;
     lastNudgeAt = -Infinity;
+    // B1: reload persistent memory (a previous run may have updated it) and
+    // reset this run's habit accumulator + habit call-out throttle.
+    machineMemory = loadMemory();
+    runHabits = emptyHabits();
+    lastHabitTauntAt = -Infinity;
+    lastHabitCalled = null;
     gameRef = game; // store reference for external access (flipper control, nudge)
 
     // Initialize Kamikaze Ball state if the game has it enabled
@@ -863,6 +882,12 @@ function startRound(game: GameDef): void {
 
     if (game.balls === BALLS_PER_GAME) {
         roundStart = window.performance.now();
+        // B1: MAMORU greets you once per run, from persistent memory. Cosmetic
+        // only — never touches physics (hard rule 2).
+        if (game.kamikaze?.enabled) {
+            lastTauntText = greetingLine(machineMemory);
+            messageHandler(GameMessages.AI_TAUNT, 2600);
+        }
     }
 
     // Kamikaze Ball: track round start time for scoring
@@ -916,12 +941,31 @@ export function getBallCount(): number {
  * Called from the UI layer on touch/click events.
  * `power` (1-3) scales the impulse for charged hold-nudges.
  */
+// B1: when the player's nudges become readable (one direction ≥60% of ≥10
+// nudges), MAMORU calls it out — throttled, and only re-fires when the read
+// changes. Cosmetic; never affects physics (hard rule 2).
+function maybeHabitTaunt(now: number): void {
+    const label = dominantHabit(runHabits);
+    if (!label || label === lastHabitCalled) return;
+    if (now - lastHabitTauntAt < 8000) return;
+    lastHabitTauntAt = now;
+    lastHabitCalled = label;
+    lastTauntText = habitTaunt(label);
+    messageHandler(GameMessages.AI_TAUNT, 1500);
+}
+
 export const nudgeBallToward = (tapX: number, tapY: number, power = 1): void => {
     if (!gameRef?.kamikaze?.enabled || balls.length === 0) return;
     const ballBody = balls[0].body;
     lastNudgeAt = window.performance.now();
     recordReplayEvent(tickCount, "nudge", tapX, tapY);
     nudgeBall(engine, ballBody, tapX, tapY, power);
+    // B1: bucket the nudge direction so MAMORU can learn your habits.
+    const third = table.width / 3;
+    if (tapX < third) runHabits.left++;
+    else if (tapX < third * 2) runHabits.center++;
+    else runHabits.right++;
+    maybeHabitTaunt(lastNudgeAt);
 };
 
 /**
@@ -931,6 +975,7 @@ export const nudgeBallToward = (tapX: number, tapY: number, power = 1): void => 
 export const queueDive = (): boolean => {
     if (!gameRef?.kamikaze?.enabled) return false;
     gameRef.kamikaze.diveQueued = true;
+    runHabits.dives++;
     recordReplayEvent(tickCount, "dive");
     return true;
 };
@@ -962,6 +1007,7 @@ export const triggerTiltLock = (): boolean => {
     if (!gameRef?.kamikaze?.enabled) return false;
     const fired = triggerTiltLockKamikaze(gameRef.kamikaze, window.performance.now());
     if (fired) {
+        runHabits.tiltLocks++;
         recordReplayEvent(tickCount, "tiltlock");
     }
     return fired;
@@ -991,3 +1037,9 @@ export const isKamikazeMode = (): boolean => {
 export const getLastTaunt = (): string => {
     return lastTauntText;
 };
+
+/**
+ * B1: this run's accumulated habit counters, for folding into persistent
+ * machine memory at run end. Returns a copy so callers can't mutate state.
+ */
+export const getRunHabits = (): MachineHabits => ({ ...runHabits });

@@ -8,6 +8,8 @@ import { getTournamentMeta, getAllTournaments, type GameMode } from "@/config/to
 import { getFromStorage } from "@/utils/local-storage";
 import { getDailyChallenge, recordDailyRun } from "@/config/daily-challenge";
 import { getProgress, recordRunProgress, grantEarlyWin, XP_FIRST_ACTION, type PlayerProgress, type ProgressUpdate } from "@/config/progression";
+import { loadMemory, recordRunResult, saveMemory } from "@/utils/machine-memory";
+import { getRunHabits } from "@/model/game";
 import { parseChallengeUrl, didBeatChallenge, type ChallengeInvite } from "@/utils/challenge-link";
 import { STORED_WORLD_ID } from "@/definitions/settings";
 import { START_TABLE_INDEX } from "@/definitions/tables";
@@ -404,6 +406,11 @@ function GameScreenInner() {
     });
     setProgress(update.progress);
     setProgressUpdate(update);
+    // B1: persist machine memory so MAMORU remembers this run (kamikaze only —
+    // the adversary relationship lives there). drainMs = score for kamikaze.
+    if (effectiveGameMode === "kamikaze") {
+      saveMemory(recordRunResult(loadMemory(), score, getRunHabits()));
+    }
     setShowCelebration(true);
     activityFeed.log(
       effectiveGameMode === "kamikaze" ? "drain" : "score",

@@ -13,11 +13,11 @@
 | A2 · Kill cam | demo | ✅ shipped — ball capture + 900ms slow-mo + camera push + deep taiko |
 | A3 · Hash-sealed stamp | demo | ✅ shipped — `sealFromReplayHash` + verdict seal overlay + share-card stamp |
 | A4 · World-physics coupling | demo | ✅ shipped — `worldGravityX/Y` + per-world sway/drift + tournament ruleset line |
-| B1 · Machine memory | retention | ⬜ pending |
+| B1 · Machine memory | retention | ✅ shipped — persistent 守 memory, greeting/nemesis/habit taunts |
 | B2 · Relationship-skinned ranks | retention | ⬜ pending |
 | B3 · Adaptive audio (taiko pulse) | retention | ⬜ pending |
 
-**Verified:** 185 frontend unit tests + a real-engine sim guard proving the
+**Verified:** 198 frontend unit tests + a real-engine sim guard proving the
 kill cam never alters the scored time-alive (hard rule 3). The machine mood is
 derived purely from seeded/run state; its only physics touch is a bounded
 ±0.05 accuracy variance within the rubber-band precedent, so replays stay
