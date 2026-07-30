@@ -93,6 +93,9 @@ function GameScreenInner() {
   const [aiDifficulty, setAiDifficulty] = useState<AIDifficulty>(() => {
     try { return (localStorage.getItem("pinball_kamikaze_difficulty") as AIDifficulty) || "medium"; } catch { return "medium"; }
   });
+  const [controlScheme, setControlScheme] = useState<"steer" | "shotcall">(() => {
+    try { return (localStorage.getItem("pinball_control_scheme") as "steer" | "shotcall") || "steer"; } catch { return "steer"; }
+  });
   const [runKey, setRunKey] = useState(0);
   const [selectedWorldId, setSelectedWorldId] = useState<string>(() => getFromStorage(STORED_WORLD_ID) || "hobbiton");
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
@@ -192,6 +195,11 @@ function GameScreenInner() {
   function selectDifficulty(next: AIDifficulty) {
     setAiDifficulty(next);
     try { localStorage.setItem("pinball_kamikaze_difficulty", next); } catch {}
+  }
+
+  function selectControlScheme(next: "steer" | "shotcall") {
+    setControlScheme(next);
+    try { localStorage.setItem("pinball_control_scheme", next); } catch {}
   }
 
   function startPractice() {
@@ -467,6 +475,8 @@ function GameScreenInner() {
                 loading={isLoadingTournament}
                 gameMode={gameMode}
                 aiDifficulty={aiDifficulty}
+                controlScheme={controlScheme}
+                onSelectControlScheme={selectControlScheme}
                 playerAddress={address ?? null}
                 playerStats={stats}
                 onSelectGameMode={selectGameMode}
@@ -553,6 +563,7 @@ function GameScreenInner() {
                       mode={mode}
                       gameMode={effectiveGameMode}
                       aiDifficulty={aiDifficulty}
+                      controlScheme={effectiveGameMode === "kamikaze" ? controlScheme : "steer"}
                       tournamentId={tournament.tournamentId}
                       worldId={mode === "practice" ? selectedWorldId : tournament.worldId}
                       playerAddress={address ?? null}

@@ -41,6 +41,10 @@ import type { IPhysicsEngine, CollisionEvent } from "@/model/physics/engine";
 import { Body } from "matter-js";
 import { worldGravityX, worldGravityY } from "@/model/world-physics";
 import { IMMERSION } from "@/config/immersion-tuning";
+import {
+    createShotState, beginServe, signalAim, guardLaneAt, resolveRelease, meterPosition,
+    laneForX, resolveDrain, type ShotState,
+} from "@/model/shot-calling";
 import { enqueueTrack, setFrequency, playSoundEffect, duckMusic, playTaikoHit, playFurinChime, momentarySilence } from "@/services/audio-service";
 import * as haptics from "@/utils/haptics";
 import {
@@ -108,6 +112,12 @@ let lastHabitCalled: HabitLabel | null = null;
 // B2: the player's rank name, read at mount. Drives the machine's address and,
 // at max rank (Kamikaze), its silence. Cosmetic only (hard rule 2).
 let playerRankName: string | undefined;
+
+// Shot-calling control (serve-based duel). Active when controlScheme === "shotcall".
+// The ball is held at the plunger; the player aims a lane, MAMORU races to guard
+// it, and a timed release launches the shot. Replaces continuous nudging.
+let shotState: ShotState | null = null;
+let shotCallActive = false;
 
 // Phase 3 anthropomorphization: each machine part speaks with its own voice,
 // throttled so the chatter never overwhelms the action.
@@ -207,6 +217,10 @@ export const init = async (
         setBumperKamikazeMode(false);
         setFlipperKamikazeMode(false);
     }
+    // Shot-calling is a kamikaze variant: drain-to-win with the serve-based
+    // aim/contest/release loop instead of continuous nudging.
+    shotCallActive = Boolean(game.kamikaze?.enabled) && game.controlScheme === "shotcall";
+    shotState = null;
     ghostActive = false;
     frenzyActive = false;
     setBumperGhostMode(false);
@@ -619,7 +633,9 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
             vel: { x: b.body.velocity.x, y: b.body.velocity.y },
         }));
 
-        updateAIFlippers(game.kamikaze, flippers, ballStates, now, game.rng ?? Math.random);
+        if (!shotCallActive) {
+            updateAIFlippers(game.kamikaze, flippers, ballStates, now, game.rng ?? Math.random);
+        }
         updateRubberBand(game.kamikaze, now);
 
         // Ghost Ball / Sakura Storm: ball phases through bumpers (bodies become sensors)
@@ -700,6 +716,38 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
         if (top > tableBottom) {
             // Kamikaze Ball: drain is the GOAL. Force Field blocks it.
             if (game.kamikaze?.enabled) {
+                // Shot-calling: deterministic, telegraphed drain resolution. The
+                // machine's defense is locked at the release tick — beat it by
+                // feinting and releasing before its reaction elapses. No hidden
+                // coin flip: guarded lane = save (re-serve), open lane = drain.
+                if (shotCallActive && shotState) {
+                    if (ball.body.velocity.y <= 0) continue; // rising, not draining
+                    const coveredLane = guardLaneAt(shotState, shotState.releaseTick ?? tickCount);
+                    const landingLane = laneForX(ball.body.position.x, table.width, shotState.lanes);
+                    if (resolveDrain(landingLane, coveredLane, true) === "save") {
+                        playSoundEffect(GameSounds.AI_SAVE);
+                        duckMusic(600, 0.35);
+                        haptics.aiSave();
+                        lastTauntText = "守: I read that lane.";
+                        messageHandler(GameMessages.AI_TAUNT, 1400);
+                        recordReplayEvent(tickCount, "drain");
+                        removeBall(ball);
+                        serveShotCallBall();
+                        continue;
+                    }
+                    playSoundEffect(GameSounds.DRAIN_VICTORY);
+                    playFurinChime();
+                    haptics.drainVictory();
+                    messageHandler(GameMessages.DRAINED);
+                    recordReplayEvent(tickCount, "drain");
+                    removeBall(ball);
+                    const shotScore = getKamikazeScore(game.kamikaze, now);
+                    game.kamikaze.completedBallScores.push(shotScore);
+                    game.kamikaze.scoreFrozen = true;
+                    game.score = getBestKamikazeScore(game.kamikaze);
+                    endRound(game, 2000);
+                    continue;
+                }
                 const rng = game.rng ?? Math.random;
                 const aiSaveFeedback = () => {
                     playSoundEffect(GameSounds.AI_SAVE);
@@ -823,6 +871,17 @@ function createMultiball(amount: number, left: number, top: number): void {
 }
 
 /**
+ * Shot-calling: return the ball to the plunger for a fresh serve after a save.
+ * The held ball is static until the player releases the next shot.
+ */
+function serveShotCallBall(): void {
+    const newBall = createBall(table.poppers[0].left, table.poppers[0].top - BALL_HEIGHT);
+    Body.setStatic(newBall.body, true);
+    if (shotState) shotState = beginServe(shotState, tickCount);
+    recordReplayEvent(tickCount, "serve");
+}
+
+/**
  * A2 KILL CAM — the signature moment of every run. The score is already
  * frozen by the caller (hard rule 3); this directs the 900ms drama:
  * capture the ball in the drain's gravity well (static, so it hangs while
@@ -884,8 +943,19 @@ function endRound(game: GameDef, timeout = 3500): void {
 }
 
 function startRound(game: GameDef): void {
-    createBall(table.poppers[0].left, table.poppers[0].top - BALL_HEIGHT);
+    const newBall = createBall(table.poppers[0].left, table.poppers[0].top - BALL_HEIGHT);
     setFrequency();
+    // Shot-calling serve: hold the ball at the plunger and open the intent
+    // moment. The player aims, MAMORU contests, a timed release launches it.
+    if (shotCallActive) {
+        Body.setStatic(newBall.body, true);
+        shotState = createShotState(
+            IMMERSION.shotCalling.lanes,
+            game.kamikaze?.aiReactionMs ?? 150,
+            tickCount,
+        );
+        recordReplayEvent(tickCount, "serve");
+    }
     timeScale = 1;
     targetTimeScale = 1;
     prevRubberBandBias = 0.5;
@@ -1053,3 +1123,42 @@ export const getLastTaunt = (): string => {
  * machine memory at run end. Returns a copy so callers can't mutate state.
  */
 export const getRunHabits = (): MachineHabits => ({ ...runHabits });
+
+// ── Shot-calling control (serve-based duel) ─────────────────────
+// Input is deliberately sparse: aim a lane, release on timing. No continuous
+// steering. Everything is tick-stamped + seeded so replays re-simulate.
+
+/** Player signals (or feints to) a target lane during the intent moment. */
+export const shotAim = (lane: number): void => {
+    if (!shotCallActive || !shotState || shotState.phase !== "aiming") return;
+    shotState = signalAim(shotState, lane, tickCount);
+    recordReplayEvent(tickCount, "aim", lane);
+};
+
+/** Player releases the shot: timing sets accuracy, physics takes over. */
+export const shotRelease = (): void => {
+    if (!shotCallActive || !shotState || shotState.phase !== "aiming" || balls.length === 0) return;
+    const ball = balls[0];
+    const { accuracy, launch } = resolveRelease(shotState, tickCount, LAUNCH_SPEED, gameRef?.rng ?? Math.random);
+    shotState.releaseTick = tickCount;
+    shotState.accuracy = accuracy;
+    shotState.phase = "resolving";
+    recordReplayEvent(tickCount, "release");
+    Body.setStatic(ball.body, false);
+    engine.launchBall(ball.body, launch);
+};
+
+export const isShotCallMode = (): boolean => shotCallActive;
+export const getShotPhase = (): string => shotState?.phase ?? "aiming";
+export const getShotAimedLane = (): number => shotState?.aimedLane ?? 0;
+export const getShotLanes = (): number => shotState?.lanes ?? IMMERSION.shotCalling.lanes;
+export const getShotAccuracy = (): number => shotState?.accuracy ?? 0;
+export const getShotMeterPosition = (): number => (shotState ? meterPosition(shotState, tickCount) : 0);
+
+/** The lane MAMORU is guarding. While aiming it tracks live (so the player sees
+ *  the machine react); during flight it is locked at the release tick. */
+export const getShotGuardLane = (): number | null => {
+    if (!shotState) return null;
+    const at = shotState.phase === "aiming" ? tickCount : (shotState.releaseTick ?? tickCount);
+    return guardLaneAt(shotState, at);
+};

@@ -5,7 +5,7 @@ import type { Size } from "zcanvas";
 import type { GameDef, GameMessages } from "@/definitions/game";
 import { ActorTypes, FRAME_RATE, GameSounds } from "@/definitions/game";
 
-import { init, scaleCanvas, setFlipperState, bumpTable, update, panViewport, setPaused, getBallPosition, getBallCount, nudgeBallToward, isKamikazeMode, queueDive, deployStoredMunition, triggerTiltLock, hasStoredMunition } from "@/model/game";
+import { init, scaleCanvas, setFlipperState, bumpTable, update, panViewport, setPaused, getBallPosition, getBallCount, nudgeBallToward, isKamikazeMode, queueDive, deployStoredMunition, triggerTiltLock, hasStoredMunition, isShotCallMode, shotAim, shotRelease, getShotLanes } from "@/model/game";
 import SpriteCache from "@/utils/sprite-cache";
 import { createInputController, attachKamikazeGestures } from "@/utils/input-controller";
 import * as haptics from "@/utils/haptics";
@@ -208,6 +208,11 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     opts.onFirstAction?.();
   }
   function nudgeAt(clientX: number, clientY: number, power = 1) {
+    // Shot-calling: a tap calls your shot — bucket the tap into a target lane.
+    if (isShotCallMode()) {
+      shotAimAtClient(clientX);
+      return;
+    }
     const world = clientToWorld(clientX, clientY);
     if (!world) return;
     nudgeBallToward(world.x, world.y, power);
@@ -215,6 +220,17 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     playVerbNudge(power);
     markFirstAction();
     if (power > 1.3) opts.onNudge?.(power);
+  }
+  /** Shot-calling: map a tap's screen x to a target lane and signal intent. */
+  function shotAimAtClient(clientX: number) {
+    const rect = root.getBoundingClientRect();
+    if (!rect.width) return;
+    const lanes = getShotLanes();
+    const frac = (clientX - rect.left) / rect.width;
+    const lane = Math.max(0, Math.min(lanes - 1, Math.floor(frac * lanes)));
+    shotAim(lane);
+    haptics.nudge();
+    markFirstAction();
   }
   function dive() {
     if (!isKamikazeMode()) return;
@@ -252,6 +268,14 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
   function handleKamikazeKey(e: KeyboardEvent) {
     if (!isKamikazeMode() || opts.attract) return;
     if (e.type !== "keydown" || e.repeat) return;
+    // Shot-calling: Space / ArrowUp releases the shot (timing = accuracy).
+    if (isShotCallMode() && (e.code === "Space" || e.code === "ArrowUp" || e.code === "Enter")) {
+      shotRelease();
+      haptics.flip();
+      markFirstAction();
+      e.preventDefault();
+      return;
+    }
     if (e.code === "ArrowDown") {
       dive();
       e.preventDefault();

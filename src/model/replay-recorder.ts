@@ -15,6 +15,9 @@ export type ReplayEventType =
     | "dive"        // kamikaze deliberate dive (bypass machine save)
     | "deploy"      // kamikaze deploy banked munition
     | "tiltlock"    // kamikaze tilt-lock (freeze AI flippers)
+    | "serve"       // shot-calling: ball held at plunger, intent moment begins
+    | "aim"         // shot-calling: player signals a target lane (x = lane)
+    | "release"     // shot-calling: player releases the shot (x = meter pos ×1000)
     | "spawn"       // ball spawned
     | "drain";      // ball drained
 

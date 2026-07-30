@@ -24,6 +24,8 @@ type Props = {
   loading?: boolean;
   gameMode: GameMode;
   aiDifficulty: AIDifficulty;
+  controlScheme: "steer" | "shotcall";
+  onSelectControlScheme: (s: "steer" | "shotcall") => void;
   playerAddress?: string | null;
   playerStats?: {
     gamesPlayed: number;
@@ -125,6 +127,28 @@ export function ArcadeLobby(props: Props) {
                   {d.charAt(0).toUpperCase() + d.slice(1)}
                 </button>
               ))}
+            </div>
+          </div>
+        )}
+
+        {props.gameMode === "kamikaze" && (
+          <div className={styles.difficultyRow}>
+            <span className={styles.difficultyLabel}>Control</span>
+            <div className={styles.difficultyPills}>
+              <button
+                type="button"
+                className={`${styles.difficultyPill} ${props.controlScheme === "steer" ? styles.difficultyPillActive : ""}`}
+                onClick={() => props.onSelectControlScheme("steer")}
+              >
+                Steer (nudge)
+              </button>
+              <button
+                type="button"
+                className={`${styles.difficultyPill} ${props.controlScheme === "shotcall" ? styles.difficultyPillActive : ""}`}
+                onClick={() => props.onSelectControlScheme("shotcall")}
+              >
+                守 Shot-call (new)
+              </button>
             </div>
           </div>
         )}

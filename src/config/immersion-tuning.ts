@@ -92,6 +92,27 @@ export const IMMERSION = {
         pirateShip: { swayAmplitude: 0.05, swayPeriodTicks: 240 },
         spaceship: { gravityScale: 0.92, swayAmplitude: 0.02, swayPeriodTicks: 600 },
     },
+
+    /** Shot-calling control scheme — the serve-based duel (replaces continuous
+     *  nudging). Aim a lane, MAMORU races to guard it, release through a timing
+     *  window; accuracy sets the launch error envelope, physics resolves it.
+     *  The core tension: aim duration trades precision against contest. */
+    shotCalling: {
+        /** v0 aim lanes (left/right), each visibly guarded by a flipper. */
+        lanes: 2,
+        /** Timing meter: marker oscillation in cycles per second. */
+        meterSpeed: 1.1,
+        /** Sweet-spot half-width (0-1 of the bar's half-range); accuracy hits 0
+         *  at this distance from center. Wider = easier. */
+        meterSweetSpot: 0.24,
+        /** Lateral launch bias at full intent (fraction of base speed). */
+        lateralStrength: 0.55,
+        /** Launch error envelope at zero accuracy (scaled by 1-accuracy). */
+        maxAngleError: 0.5,
+        maxPowerError: 0.28,
+        /** Save charge: ms of rally time to fully arm the machine's save. */
+        saveChargeMs: 5000,
+    },
 } as const;
 
 export type ImmersionTuning = typeof IMMERSION;

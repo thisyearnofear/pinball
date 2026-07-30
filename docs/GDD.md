@@ -46,6 +46,40 @@ A single run lasts 30–90 seconds. Three balls per game. Instant play, no walle
 | Charge | Hold | Aim guide + charged launch |
 | Power-ups | Automatic | Crates on table; roulette picks munition or countermeasure |
 
+### Control scheme: Shot-calling (守) — the serve-based duel
+
+The six verbs above are the **Steer** scheme. Playtesting showed continuous
+nudging feels random: a tap retains 85% of the ball's momentum, so input barely
+bends a fast ball, and five stacked uncertainties (chaotic physics, AI accuracy,
+hidden emergency saves, random power-ups, rubber-banding) mean a good input can
+still be secretly revoked. The fix is a reframe:
+
+> **Don't control the moving ball. Control the next shot.**
+
+Shot-calling replaces steering with a discrete, legible contest. The ball is
+held at the plunger; the player calls a shot, MAMORU races to defend it, and a
+timed release launches it. Physics resolves the rest — no mid-flight steering.
+
+| Phase | What happens |
+|---|---|
+| **Aim** | Ball held. Tap a side of the table to pick a target lane (left/right). |
+| **Contest** | MAMORU visibly commits a guard to your lane after its reaction time (Easy 250ms · Medium 150ms · Hard 80ms). Feint to draw it off, then switch. |
+| **Release** | A timing meter sweeps; release (RELEASE button / Space) on the sweet spot. Accuracy sets the launch error envelope — perfect = faithful shot, poor = scatter. |
+| **Resolve** | Physics plays out. At the drain, the contest is **telegraphed and deterministic**: if the ball lands in the lane MAMORU guards, it saves (re-serve); an open lane drains (scores). No hidden coin flip. |
+
+**Core tension:** aim duration trades precision against contest — hold to refine,
+but the machine closes your lane; release early to beat it. Difficulty is now a
+*visible reaction race*, not an invisible accuracy throttle.
+
+- **Input:** tap a side to aim/feint · RELEASE (or Space/↑/Enter) to fire.
+- **Replay-verifiable by construction:** each serve records tick-stamped `aim`,
+  `release`, `serve` events; the guard commit and launch scatter derive from
+  `(tickCount, seed)` only.
+- **Status:** prototype behind a lobby toggle (Control → 守 Shot-call),
+  serves-only. Deterministic core in `src/model/shot-calling.ts`; tuning in
+  `src/config/immersion-tuning.ts` (`shotCalling`). If it tests fun, add
+  mid-table possession points (flipper cradles, catch zones).
+
 ### AI machine (the antagonist)
 
 - AI flippers activate when the ball approaches (accuracy + reaction speed scale with difficulty)

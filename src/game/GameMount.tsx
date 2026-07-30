@@ -12,11 +12,13 @@ import { mountWorld, isSplatSupported, prefersReducedMotion, type WorldHandle } 
 import { MARBLE_WORLDS, getWorldById } from "@/config/worlds";
 import { WorldLoadingOverlay, WorldLoadingIndicator } from "./ui/WorldLoadingOverlay";
 import { CelebrationParticles } from "./ui/CelebrationParticles";
+import { ShotCallHud } from "./ui/ShotCallHud";
+import { IMMERSION } from "@/config/immersion-tuning";
 import { GhostRace } from "./ui/GhostRace";
 import { StabilityMeter } from "./ui/StabilityMeter";
 import { KanjiWatermark } from "./ui/KanjiWatermark";
 import { type WorldReaction } from "@/presentation/world-reactor";
-import { isKamikazeMode, getLastTaunt, getTickCount, getTimeScale, consumeMomentumShift, getMachineMood, consumeKillCam, setKillCamEnabled } from "@/model/game";
+import { isKamikazeMode, getLastTaunt, getTickCount, getTimeScale, consumeMomentumShift, getMachineMood, consumeKillCam, setKillCamEnabled, isShotCallMode, getShotPhase, getShotAimedLane, getShotGuardLane, getShotMeterPosition, getShotLanes, shotRelease } from "@/model/game";
 import { createKamikazeState, POWERUP_NAMES, type AIDifficulty } from "@/model/kamikaze";
 import type { PowerUpSide } from "@/definitions/game";
 import { mulberry32, createRunSeed } from "@/utils/rng";
@@ -36,6 +38,7 @@ function createRunGame(opts: {
   gameMode: GameMode;
   aiDifficulty?: AIDifficulty;
   worldId?: string;
+  controlScheme?: "steer" | "shotcall";
 }): GameDef {
   const rngSeed = createRunSeed();
   return {
@@ -51,6 +54,7 @@ function createRunGame(opts: {
     rngSeed,
     rng: mulberry32(rngSeed),
     worldPhysics: getWorldById(opts.worldId ?? "")?.physics,
+    controlScheme: opts.controlScheme,
   };
 }
 
@@ -191,6 +195,7 @@ type Props = {
   playerName: string;
   tableIndex: number;
   worldId?: string; // Optional world override (for themed tournaments)
+  controlScheme?: "steer" | "shotcall"; // Kamikaze control: continuous nudge vs serve-based duel
   paused: boolean;
   /** Tournament leader's replay for live ghost racing. */
   ghost?: { digest: ReplayDigest; score: number; address: string } | null;
@@ -229,6 +234,9 @@ export default function GameMount(props: Props) {
   const [machineSaving, setMachineSaving] = useState(false);
   const [kamikazeMessage, setKamikazeMessage] = useState<string | null>(null);
   const [machineMood, setMachineMood] = useState<string>("calm");
+  const [shotHud, setShotHud] = useState<{ phase: string; aimedLane: number; guardLane: number | null; meter: number; lanes: number; active: boolean }>(
+    { phase: "aiming", aimedLane: 0, guardLane: null, meter: 0, lanes: 2, active: false }
+  );
   const [activePowerUps, setActivePowerUps] = useState<{ name: string; side: PowerUpSide; remainingMs: number }[]>([]);
   const [slowMoActive, setSlowMoActive] = useState(false);
   const [momentum, setMomentum] = useState(0.5);
@@ -311,7 +319,7 @@ export default function GameMount(props: Props) {
   const worldContainerStyleRef = useRef<HTMLDivElement | null>(null);
 
   const initialGame = useMemo<GameDef>(
-    () => createRunGame({ id: "practice", table: START_TABLE_INDEX, paused: false, gameMode: props.gameMode, aiDifficulty: props.aiDifficulty, worldId: props.worldId }),
+    () => createRunGame({ id: "practice", table: START_TABLE_INDEX, paused: false, gameMode: props.gameMode, aiDifficulty: props.aiDifficulty, worldId: props.worldId, controlScheme: props.controlScheme }),
     [props.gameMode, props.aiDifficulty],
   );
 
@@ -449,6 +457,7 @@ export default function GameMount(props: Props) {
       gameMode: props.gameMode,
       aiDifficulty: props.aiDifficulty,
       worldId: props.worldId,
+      controlScheme: props.controlScheme,
     });
 
     beginRunRecording(g, props.gameMode, props.aiDifficulty, props.worldId);
@@ -502,6 +511,19 @@ export default function GameMount(props: Props) {
       // A1: surface the machine's mood so the taunt overlay can color-shift.
       const mood = getMachineMood();
       setMachineMood((prev) => (prev === mood ? prev : mood));
+      // Shot-calling HUD: poll the live duel state (the meter animates per frame).
+      if (isShotCallMode()) {
+        setShotHud({
+          active: true,
+          phase: getShotPhase(),
+          aimedLane: getShotAimedLane(),
+          guardLane: getShotGuardLane(),
+          meter: getShotMeterPosition(),
+          lanes: getShotLanes(),
+        });
+      } else {
+        setShotHud((prev) => (prev.active ? { ...prev, active: false } : prev));
+      }
 
       // Slow-mo + momentum (Phase 1 immersion)
       const ts = getTimeScale();
@@ -1108,7 +1130,7 @@ export default function GameMount(props: Props) {
                 </div>
               ) : (
                 <div style={{ fontSize: 9, opacity: 0.6, marginTop: 6, lineHeight: 1.5 }}>
-                  HOLD charge · SWIPE↓ dive · SWIPE↑ tilt-lock · tap×2 deploy
+                  {shotHud.active ? "tap a side to aim · RELEASE (or Space) to fire" : "HOLD charge · SWIPE↓ dive · SWIPE↑ tilt-lock · tap×2 deploy"}
                 </div>
               )}
             </>
@@ -1207,7 +1229,7 @@ export default function GameMount(props: Props) {
           </div>
         )}
         {/* Charge ring: grows while holding to build a power nudge */}
-        {kamikazeActive && chargePower !== null && chargePower > 1.05 && (
+        {kamikazeActive && !shotHud.active && chargePower !== null && chargePower > 1.05 && (
           <div
             aria-hidden
             style={{
@@ -1237,7 +1259,7 @@ export default function GameMount(props: Props) {
         )}
         {/* Aim guide: while charging, a faint line from ball → pointer shows the
             nudge direction so the input feels deliberate, not random. */}
-        <AimGuide aimPoint={aimPoint} charging={chargePower !== null && chargePower > 1.05} containerRef={shakeRef} getBallClientPos={() => mountedRef.current?.getBallClientPosition() ?? null} />
+        <AimGuide aimPoint={aimPoint} charging={chargePower !== null && chargePower > 1.05 && !shotHud.active} containerRef={shakeRef} getBallClientPos={() => mountedRef.current?.getBallClientPosition() ?? null} />
         {/* Agency banner: dive / deploy feedback */}
         {agencyBanner && (
           <div
@@ -1262,6 +1284,19 @@ export default function GameMount(props: Props) {
           >
             {agencyBanner}
           </div>
+        )}
+        {/* Shot-calling duel surface: aim a lane, read MAMORU's guard, release
+            on the sweet spot. Replaces continuous nudging. */}
+        {shotHud.active && (
+          <ShotCallHud
+            phase={shotHud.phase}
+            lanes={shotHud.lanes}
+            aimedLane={shotHud.aimedLane}
+            guardLane={shotHud.guardLane}
+            meter={shotHud.meter}
+            sweetSpot={IMMERSION.shotCalling.meterSweetSpot}
+            onRelease={() => shotRelease()}
+          />
         )}
       </div>
     </div>
