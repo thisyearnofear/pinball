@@ -31,6 +31,8 @@ export type ReplayDigest = {
     table: number;
     mode: "classic" | "kamikaze";
     aiDifficulty?: string;
+    /** A4: the world whose physics modifier shaped this run (re-simulation context). */
+    world?: string;
     tickCount: number;
     finalScore: number;
     truncated: boolean;
@@ -54,6 +56,7 @@ let seed = 0;
 let table = 0;
 let mode: "classic" | "kamikaze" = "classic";
 let aiDifficulty: string | undefined;
+let world: string | undefined;
 let events: ReplayEvent[] = [];
 let trace: number[] = [];
 let lastTraceTick = -Infinity;
@@ -63,6 +66,7 @@ export function startReplayRecording(opts: {
     table: number;
     mode: "classic" | "kamikaze";
     aiDifficulty?: string;
+    world?: string;
 }): void {
     recording = true;
     truncated = false;
@@ -70,6 +74,7 @@ export function startReplayRecording(opts: {
     table = opts.table;
     mode = opts.mode;
     aiDifficulty = opts.aiDifficulty;
+    world = opts.world;
     events = [];
     trace = [];
     lastTraceTick = -Infinity;
@@ -116,6 +121,7 @@ export function finishReplayRecording(finalScore: number, tickCount: number): Re
         table,
         mode,
         ...(aiDifficulty ? { aiDifficulty } : {}),
+        ...(world ? { world } : {}),
         tickCount,
         finalScore,
         truncated,

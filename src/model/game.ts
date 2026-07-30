@@ -39,6 +39,7 @@ import TriggerGroup from "@/model/trigger-group";
 import { createEngine } from "@/model/physics/engine";
 import type { IPhysicsEngine, CollisionEvent } from "@/model/physics/engine";
 import { Body } from "matter-js";
+import { worldGravityX, worldGravityY } from "@/model/world-physics";
 import { enqueueTrack, setFrequency, playSoundEffect, duckMusic, playTaikoHit, playFurinChime } from "@/services/audio-service";
 import * as haptics from "@/utils/haptics";
 import {
@@ -577,6 +578,14 @@ function awardPoints(game: GameDef, points: number): void {
 function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
     const singleBall = balls.length === 1;
     const now = window.performance.now();
+
+    // A4: world-physics coupling — the world bends the table. Derived purely
+    // from tickCount (hard rule 1) so a replay re-simulates identically.
+    // Setting gravity every tick is self-resetting: a still world holds
+    // gravity.x at 0 and gravity.y at GRAVITY, so no stale state leaks
+    // between runs with different worlds.
+    engine.engine.gravity.x = worldGravityX(game.worldPhysics, tickCount);
+    engine.engine.gravity.y = worldGravityY(game.worldPhysics);
 
     // Kamikaze Ball: update AI flippers, power-ups, and score
     if (game.kamikaze?.enabled) {

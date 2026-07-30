@@ -285,6 +285,11 @@ function ArcadeCard(props: CardProps) {
             {props.tournament.mode === "kamikaze" ? "神風 KAMIKAZE" : "CLASSIC"}
           </span>
         </div>
+        {/* A4: the world IS the ruleset — surface its physics modifier so
+            tournament choice reads as physics choice. */}
+        <div style={{ fontSize: 11, letterSpacing: "0.04em", marginTop: 2, color: world?.physicsLabel ? "#67e8f9" : "rgba(255,255,255,0.4)" }}>
+          ⚖ {world?.physicsLabel ?? "still table"}
+        </div>
         <div className={styles.meta}>
           {props.tournament.entryFee ? `Entry: ${props.tournament.entryFee}` : "Free entry"}
           {props.tournament.prizePool ? ` · ${props.tournament.prizePool}` : ""}

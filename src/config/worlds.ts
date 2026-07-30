@@ -1,3 +1,5 @@
+import type { TablePhysics } from "@/definitions/game";
+
 export interface WorldPalette {
   primary: string;
   hover: string;
@@ -21,6 +23,15 @@ export interface MarbleWorld {
   ambienceUrl?: string;
   gradient: string;
   palette: WorldPalette;
+  /**
+   * A4 world-physics coupling: the world bends the table, so tournament
+   * choice becomes ruleset choice. Applied deterministically from tickCount
+   * (never wall clock) in the engine tick, so replays stay verifiable.
+   * Omit for a still table. See docs/IMMERSION_SPEC.md (A4).
+   */
+  physics?: TablePhysics;
+  /** One-line ruleset blurb surfaced on tournament cards (e.g. "rolling seas"). */
+  physicsLabel?: string;
 }
 
 export interface CameraPresets {
@@ -76,6 +87,8 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
       overview: { position: [0, 25, 20], target: [0, 6.5, 0] },
       drain: { position: [0, 6, 8], target: [0, 4, 0] },
     },
+    physics: { gravityScale: 0.92, sway: { amplitude: 0.02, periodTicks: 600 } },
+    physicsLabel: 'low-g drift (floaty, slow roll)',
   },
   COTTAGE: {
     id: 'cottage',
@@ -123,6 +136,8 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
       drain: { position: [0, 1, 6], target: [0, -3, 0] },
       side: { position: [12, 4, 0], target: [0, 0, 0] },
     },
+    physics: { sway: { amplitude: 0.06, periodTicks: 240 } },
+    physicsLabel: 'rolling seas (table sways ±2°)',
   },
   SAKURA_SHRINE: {
     id: 'sakura-shrine',

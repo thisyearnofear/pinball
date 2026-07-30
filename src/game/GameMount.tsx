@@ -34,6 +34,7 @@ function createRunGame(opts: {
   paused: boolean;
   gameMode: GameMode;
   aiDifficulty?: AIDifficulty;
+  worldId?: string;
 }): GameDef {
   const rngSeed = createRunSeed();
   return {
@@ -48,14 +49,16 @@ function createRunGame(opts: {
     kamikaze: opts.gameMode === "kamikaze" ? createKamikazeState(opts.aiDifficulty) : undefined,
     rngSeed,
     rng: mulberry32(rngSeed),
+    worldPhysics: getWorldById(opts.worldId ?? "")?.physics,
   };
 }
 
-function beginRunRecording(g: GameDef, gameMode: GameMode, aiDifficulty?: AIDifficulty): void {
+function beginRunRecording(g: GameDef, gameMode: GameMode, aiDifficulty?: AIDifficulty, worldId?: string): void {
   startReplayRecording({
     seed: g.rngSeed!,
     table: g.table,
     mode: gameMode,
+    world: worldId,
     aiDifficulty: gameMode === "kamikaze" ? aiDifficulty ?? "medium" : undefined,
   });
 }
@@ -307,7 +310,7 @@ export default function GameMount(props: Props) {
   const worldContainerStyleRef = useRef<HTMLDivElement | null>(null);
 
   const initialGame = useMemo<GameDef>(
-    () => createRunGame({ id: "practice", table: START_TABLE_INDEX, paused: false, gameMode: props.gameMode, aiDifficulty: props.aiDifficulty }),
+    () => createRunGame({ id: "practice", table: START_TABLE_INDEX, paused: false, gameMode: props.gameMode, aiDifficulty: props.aiDifficulty, worldId: props.worldId }),
     [props.gameMode, props.aiDifficulty],
   );
 
@@ -407,7 +410,7 @@ export default function GameMount(props: Props) {
 
       // The runKey effect can't record the first run (it bails while the mount
       // is still in flight), so start recording for the initial game here.
-      beginRunRecording(initialGame, props.gameMode, props.aiDifficulty);
+      beginRunRecording(initialGame, props.gameMode, props.aiDifficulty, props.worldId);
       runStartRef.current = performance.now();
 
       // Enable ball-following camera when world is loaded
@@ -439,9 +442,10 @@ export default function GameMount(props: Props) {
       paused: props.paused,
       gameMode: props.gameMode,
       aiDifficulty: props.aiDifficulty,
+      worldId: props.worldId,
     });
 
-    beginRunRecording(g, props.gameMode, props.aiDifficulty);
+    beginRunRecording(g, props.gameMode, props.aiDifficulty, props.worldId);
     runStartRef.current = performance.now();
 
     multiballRef.current = false;

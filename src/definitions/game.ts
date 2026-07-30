@@ -208,6 +208,7 @@ export type GameDef = {
     kamikaze?: KamikazeState; // optional Kamikaze Ball mode state
     rngSeed?: number;    // seed for deterministic gameplay rolls (recorded in replays)
     rng?: () => number;  // seeded PRNG; falls back to Math.random when absent
+    worldPhysics?: TablePhysics; // A4: per-world gravity modifier (deterministic, seeded)
 };
 
 export type FlipperType = ActorTypes.LEFT_FLIPPER | ActorTypes.RIGHT_FLIPPER;

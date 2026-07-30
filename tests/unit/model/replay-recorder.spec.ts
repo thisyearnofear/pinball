@@ -107,4 +107,16 @@ describe("replay recorder", () => {
         expect(digest.trace!.length).toBeLessThanOrEqual(4500 * 3);
         expect(digest.trace!.length % 3).toBe(0);
     });
+
+    it("should include the world in the digest when provided (A4)", () => {
+        startReplayRecording({ seed: 7, table: 0, mode: "kamikaze", world: "pirate-ship" });
+        const digest = finishReplayRecording(1000, 60)!;
+        expect(digest.world).toEqual("pirate-ship");
+    });
+
+    it("should omit the world field when no world is set", () => {
+        startReplayRecording({ seed: 7, table: 0, mode: "classic" });
+        const digest = finishReplayRecording(1000, 60)!;
+        expect(digest.world).toBeUndefined();
+    });
 });
