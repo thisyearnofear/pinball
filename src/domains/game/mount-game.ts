@@ -233,7 +233,7 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     markFirstAction();
   }
   function dive() {
-    if (!isKamikazeMode()) return;
+    if (!isKamikazeMode() || isShotCallMode()) return;
     queueDive();
     haptics.bump();
     playVerbDive();
@@ -241,7 +241,7 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     opts.onDive?.();
   }
   function deploy() {
-    if (!isKamikazeMode()) return;
+    if (!isKamikazeMode() || isShotCallMode()) return;
     const type = deployStoredMunition();
     if (type !== null) {
       haptics.flip();
@@ -251,7 +251,7 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     }
   }
   function tiltLock() {
-    if (!isKamikazeMode()) return;
+    if (!isKamikazeMode() || isShotCallMode()) return;
     const fired = triggerTiltLock();
     if (fired) {
       haptics.nudge();

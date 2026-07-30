@@ -94,24 +94,27 @@ export const IMMERSION = {
     },
 
     /** Shot-calling control scheme — the serve-based duel (replaces continuous
-     *  nudging). Aim a lane, MAMORU races to guard it, release through a timing
-     *  window; accuracy sets the launch error envelope, physics resolves it.
-     *  The core tension: aim duration trades precision against contest. */
+     *  nudging). Two isolated variants so each skill can be tested alone:
+     *  - feint: outsmart MAMORU's reaction (full accuracy, no meter).
+     *  - precision: call a lane + nail the timing meter (pre-committed guard).
+     *  Core tension (feint): aim duration trades safety against the reaction race. */
     shotCalling: {
-        /** v0 aim lanes (left/right), each visibly guarded by a flipper. */
+        /** Aim lanes (left/right), each embodied by a flipper. */
         lanes: 2,
-        /** Timing meter: marker oscillation in cycles per second. */
-        meterSpeed: 1.1,
-        /** Sweet-spot half-width (0-1 of the bar's half-range); accuracy hits 0
-         *  at this distance from center. Wider = easier. */
-        meterSweetSpot: 0.24,
+        /** Human-scale reaction windows per difficulty (the time a player gets
+         *  to perceive the guard, switch lane, and release). NOT the old AI
+         *  polling intervals — those were sub-human for a player-facing duel. */
+        reactionMs: { easy: 1200, medium: 800, hard: 500 },
+        /** Precision variant: timing meter (marker oscillation, cycles/second). */
+        meterSpeed: 0.9,
+        /** Precision variant: sweet-spot half-width (0-1 of the half-range). */
+        meterSweetSpot: 0.28,
         /** Lateral launch bias at full intent (fraction of base speed). */
         lateralStrength: 0.55,
-        /** Launch error envelope at zero accuracy (scaled by 1-accuracy). */
-        maxAngleError: 0.5,
-        maxPowerError: 0.28,
-        /** Save charge: ms of rally time to fully arm the machine's save. */
-        saveChargeMs: 5000,
+        /** Max directional launch error at the meter's extreme (signed, deterministic). */
+        maxAngleError: 0.6,
+        /** Power lost at zero accuracy (off-center releases hit weaker). */
+        maxPowerLoss: 0.3,
     },
 } as const;
 

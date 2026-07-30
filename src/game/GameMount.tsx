@@ -18,7 +18,7 @@ import { GhostRace } from "./ui/GhostRace";
 import { StabilityMeter } from "./ui/StabilityMeter";
 import { KanjiWatermark } from "./ui/KanjiWatermark";
 import { type WorldReaction } from "@/presentation/world-reactor";
-import { isKamikazeMode, getLastTaunt, getTickCount, getTimeScale, consumeMomentumShift, getMachineMood, consumeKillCam, setKillCamEnabled, isShotCallMode, getShotPhase, getShotAimedLane, getShotGuardLane, getShotMeterPosition, getShotLanes, shotRelease } from "@/model/game";
+import { isKamikazeMode, getLastTaunt, getTickCount, getTimeScale, consumeMomentumShift, getMachineMood, consumeKillCam, setKillCamEnabled, isShotCallMode, getShotVariant, getShotPhase, getShotAimedLane, getShotGuardLane, getShotMeterPosition, getShotLanes, getLastShotResult, shotRelease, type ShotResult } from "@/model/game";
 import { createKamikazeState, POWERUP_NAMES, type AIDifficulty } from "@/model/kamikaze";
 import type { PowerUpSide } from "@/definitions/game";
 import { mulberry32, createRunSeed } from "@/utils/rng";
@@ -38,7 +38,7 @@ function createRunGame(opts: {
   gameMode: GameMode;
   aiDifficulty?: AIDifficulty;
   worldId?: string;
-  controlScheme?: "steer" | "shotcall";
+  controlScheme?: "steer" | "feint" | "precision";
 }): GameDef {
   const rngSeed = createRunSeed();
   return {
@@ -55,6 +55,7 @@ function createRunGame(opts: {
     rng: mulberry32(rngSeed),
     worldPhysics: getWorldById(opts.worldId ?? "")?.physics,
     controlScheme: opts.controlScheme,
+    aiDifficulty: opts.aiDifficulty,
   };
 }
 
@@ -64,6 +65,7 @@ function beginRunRecording(g: GameDef, gameMode: GameMode, aiDifficulty?: AIDiff
     table: g.table,
     mode: gameMode,
     world: worldId,
+    controlScheme: g.controlScheme,
     aiDifficulty: gameMode === "kamikaze" ? aiDifficulty ?? "medium" : undefined,
   });
 }
@@ -195,7 +197,7 @@ type Props = {
   playerName: string;
   tableIndex: number;
   worldId?: string; // Optional world override (for themed tournaments)
-  controlScheme?: "steer" | "shotcall"; // Kamikaze control: continuous nudge vs serve-based duel
+  controlScheme?: "steer" | "feint" | "precision"; // Kamikaze control: nudge vs the two shot-calling variants
   paused: boolean;
   /** Tournament leader's replay for live ghost racing. */
   ghost?: { digest: ReplayDigest; score: number; address: string } | null;
@@ -234,8 +236,8 @@ export default function GameMount(props: Props) {
   const [machineSaving, setMachineSaving] = useState(false);
   const [kamikazeMessage, setKamikazeMessage] = useState<string | null>(null);
   const [machineMood, setMachineMood] = useState<string>("calm");
-  const [shotHud, setShotHud] = useState<{ phase: string; aimedLane: number; guardLane: number | null; meter: number; lanes: number; active: boolean }>(
-    { phase: "aiming", aimedLane: 0, guardLane: null, meter: 0, lanes: 2, active: false }
+  const [shotHud, setShotHud] = useState<{ variant: "feint" | "precision"; phase: string; aimedLane: number | null; guardLane: number | null; meter: number; lanes: number; lastResult: ShotResult | null; active: boolean }>(
+    { variant: "feint", phase: "aiming", aimedLane: null, guardLane: null, meter: 0, lanes: 2, lastResult: null, active: false }
   );
   const [activePowerUps, setActivePowerUps] = useState<{ name: string; side: PowerUpSide; remainingMs: number }[]>([]);
   const [slowMoActive, setSlowMoActive] = useState(false);
@@ -515,11 +517,13 @@ export default function GameMount(props: Props) {
       if (isShotCallMode()) {
         setShotHud({
           active: true,
+          variant: getShotVariant(),
           phase: getShotPhase(),
           aimedLane: getShotAimedLane(),
           guardLane: getShotGuardLane(),
           meter: getShotMeterPosition(),
           lanes: getShotLanes(),
+          lastResult: getLastShotResult(),
         });
       } else {
         setShotHud((prev) => (prev.active ? { ...prev, active: false } : prev));
@@ -1289,12 +1293,14 @@ export default function GameMount(props: Props) {
             on the sweet spot. Replaces continuous nudging. */}
         {shotHud.active && (
           <ShotCallHud
+            variant={shotHud.variant}
             phase={shotHud.phase}
             lanes={shotHud.lanes}
             aimedLane={shotHud.aimedLane}
             guardLane={shotHud.guardLane}
             meter={shotHud.meter}
             sweetSpot={IMMERSION.shotCalling.meterSweetSpot}
+            lastResult={shotHud.lastResult}
             onRelease={() => shotRelease()}
           />
         )}

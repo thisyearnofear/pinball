@@ -57,28 +57,45 @@ still be secretly revoked. The fix is a reframe:
 > **Don't control the moving ball. Control the next shot.**
 
 Shot-calling replaces steering with a discrete, legible contest. The ball is
-held at the plunger; the player calls a shot, MAMORU races to defend it, and a
-timed release launches it. Physics resolves the rest — no mid-flight steering.
+held at the plunger; the player calls a shot, MAMORU contests it, a release
+launches it; physics resolves the rest — no mid-flight steering. The duel starts
+on the player's **first aim**: no lane, guard, or meter exists before intent.
 
-| Phase | What happens |
-|---|---|
-| **Aim** | Ball held. Tap a side of the table to pick a target lane (left/right). |
-| **Contest** | MAMORU visibly commits a guard to your lane after its reaction time (Easy 250ms · Medium 150ms · Hard 80ms). Feint to draw it off, then switch. |
-| **Release** | A timing meter sweeps; release (RELEASE button / Space) on the sweet spot. Accuracy sets the launch error envelope — perfect = faithful shot, poor = scatter. |
-| **Resolve** | Physics plays out. At the drain, the contest is **telegraphed and deterministic**: if the ball lands in the lane MAMORU guards, it saves (re-serve); an open lane drains (scores). No hidden coin flip. |
+To find what's actually fun, the scheme ships as **two isolated variants**
+rather than one combined test (you can't debug six variables at once):
 
-**Core tension:** aim duration trades precision against contest — hold to refine,
-but the machine closes your lane; release early to beat it. Difficulty is now a
-*visible reaction race*, not an invisible accuracy throttle.
+**守 Feint duel** — *is outsmarting the machine fun?*
+- Full launch accuracy; no timing meter.
+- Aim and change lanes; MAMORU reacts to your aim after a **human-scale** delay
+  (Easy 1200ms · Medium 800ms · Hard 500ms — not the old 80–250ms AI polling,
+  which was sub-human for a perceive-and-act duel).
+- Feint to draw the guard off, then release the open lane before it catches up.
+- MAMORU's guard is **embodied**: the flipper on the guarded lane physically rises.
+
+**守 Precision** — *is calling and executing a shot fun?*
+- MAMORU visibly **pre-commits** a lane (fixed, shown from serve start); no live
+  reaction race.
+- Pick the open lane, then a timing meter sets launch precision.
+- Misses are **signed and deterministic**: release left of center drifts left,
+  right of center drifts right, distance sets the magnitude — so the player
+  learns "I released late, so I pushed it right." No random scatter.
+
+**Both:** at the drain the contest is telegraphed and deterministic — land in
+MAMORU's guarded lane and it saves (re-serve); an open lane drains (scores). No
+hidden coin flip. After each shot the HUD shows the causal chain (called lane ·
+accuracy · drift · landing lane · guard · SAVED/DRAINED) so only the player, not
+just the code, understands why.
 
 - **Input:** tap a side to aim/feint · RELEASE (or Space/↑/Enter) to fire.
+  Legacy nudge/dive/tilt-lock/deploy gestures are disabled in shot-call mode.
 - **Replay-verifiable by construction:** each serve records tick-stamped `aim`,
-  `release`, `serve` events; the guard commit and launch scatter derive from
-  `(tickCount, seed)` only.
-- **Status:** prototype behind a lobby toggle (Control → 守 Shot-call),
-  serves-only. Deterministic core in `src/model/shot-calling.ts`; tuning in
-  `src/config/immersion-tuning.ts` (`shotCalling`). If it tests fun, add
-  mid-table possession points (flipper cradles, catch zones).
+  `release`, `serve` events and the run's `controlScheme`; the guard commit and
+  launch error derive from `(tickCount, seed)` only.
+- **Status:** prototype behind a lobby toggle (Control → Steer | 守 Feint duel |
+  守 Precision), serves-only. Core in `src/model/shot-calling.ts`; tuning in
+  `src/config/immersion-tuning.ts` (`shotCalling`). Test each variant alone;
+  combine only after one proves fun; then add mid-table possession (flipper
+  cradles, catch zones).
 
 ### AI machine (the antagonist)
 

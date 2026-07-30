@@ -24,8 +24,8 @@ type Props = {
   loading?: boolean;
   gameMode: GameMode;
   aiDifficulty: AIDifficulty;
-  controlScheme: "steer" | "shotcall";
-  onSelectControlScheme: (s: "steer" | "shotcall") => void;
+  controlScheme: "steer" | "feint" | "precision";
+  onSelectControlScheme: (s: "steer" | "feint" | "precision") => void;
   playerAddress?: string | null;
   playerStats?: {
     gamesPlayed: number;
@@ -140,14 +140,21 @@ export function ArcadeLobby(props: Props) {
                 className={`${styles.difficultyPill} ${props.controlScheme === "steer" ? styles.difficultyPillActive : ""}`}
                 onClick={() => props.onSelectControlScheme("steer")}
               >
-                Steer (nudge)
+                Steer
               </button>
               <button
                 type="button"
-                className={`${styles.difficultyPill} ${props.controlScheme === "shotcall" ? styles.difficultyPillActive : ""}`}
-                onClick={() => props.onSelectControlScheme("shotcall")}
+                className={`${styles.difficultyPill} ${props.controlScheme === "feint" ? styles.difficultyPillActive : ""}`}
+                onClick={() => props.onSelectControlScheme("feint")}
               >
-                守 Shot-call (new)
+                守 Feint duel
+              </button>
+              <button
+                type="button"
+                className={`${styles.difficultyPill} ${props.controlScheme === "precision" ? styles.difficultyPillActive : ""}`}
+                onClick={() => props.onSelectControlScheme("precision")}
+              >
+                守 Precision
               </button>
             </div>
           </div>

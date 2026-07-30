@@ -17,7 +17,7 @@ export type ReplayEventType =
     | "tiltlock"    // kamikaze tilt-lock (freeze AI flippers)
     | "serve"       // shot-calling: ball held at plunger, intent moment begins
     | "aim"         // shot-calling: player signals a target lane (x = lane)
-    | "release"     // shot-calling: player releases the shot (x = meter pos ×1000)
+    | "release"     // shot-calling: player releases the shot (tick-stamped; meter derivable from tick)
     | "spawn"       // ball spawned
     | "drain";      // ball drained
 
@@ -36,6 +36,8 @@ export type ReplayDigest = {
     aiDifficulty?: string;
     /** A4: the world whose physics modifier shaped this run (re-simulation context). */
     world?: string;
+    /** Shot-calling: which control scheme produced this run (steer/feint/precision). */
+    controlScheme?: string;
     tickCount: number;
     finalScore: number;
     truncated: boolean;
@@ -60,6 +62,7 @@ let table = 0;
 let mode: "classic" | "kamikaze" = "classic";
 let aiDifficulty: string | undefined;
 let world: string | undefined;
+let controlScheme: string | undefined;
 let events: ReplayEvent[] = [];
 let trace: number[] = [];
 let lastTraceTick = -Infinity;
@@ -70,6 +73,7 @@ export function startReplayRecording(opts: {
     mode: "classic" | "kamikaze";
     aiDifficulty?: string;
     world?: string;
+    controlScheme?: string;
 }): void {
     recording = true;
     truncated = false;
@@ -78,6 +82,7 @@ export function startReplayRecording(opts: {
     mode = opts.mode;
     aiDifficulty = opts.aiDifficulty;
     world = opts.world;
+    controlScheme = opts.controlScheme;
     events = [];
     trace = [];
     lastTraceTick = -Infinity;
@@ -125,6 +130,7 @@ export function finishReplayRecording(finalScore: number, tickCount: number): Re
         mode,
         ...(aiDifficulty ? { aiDifficulty } : {}),
         ...(world ? { world } : {}),
+        ...(controlScheme ? { controlScheme } : {}),
         tickCount,
         finalScore,
         truncated,

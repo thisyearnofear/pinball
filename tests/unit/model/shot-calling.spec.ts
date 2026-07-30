@@ -1,143 +1,145 @@
 import { describe, it, expect } from "vitest";
 import {
     createShotState, beginServe, signalAim, guardLaneAt, meterPosition, accuracyForPosition,
-    launchVector, resolveRelease, saveChargeFraction, laneForX, resolveDrain,
-    reactionMsToTicks, TICKS_PER_SECOND,
+    launchVector, resolveRelease, laneForX, resolveDrain, reactionMsToTicks, TICKS_PER_SECOND,
 } from "@/model/shot-calling";
 import { IMMERSION } from "@/config/immersion-tuning";
-import { mulberry32 } from "@/utils/rng";
 
 const LANES = IMMERSION.shotCalling.lanes;
 
-function state(reactionMs = 150, startTick = 0) {
-    return createShotState(LANES, reactionMs, startTick);
+function feint(reactionMs = 800, startTick = 0) {
+    return createShotState("feint", LANES, reactionMs, startTick);
+}
+function precision(reactionMs = 800, startTick = 0, guard = 0) {
+    return createShotState("precision", LANES, reactionMs, startTick, guard);
 }
 
 describe("shot-calling core", () => {
 
-    describe("reactionMsToTicks()", () => {
-        it("should convert ms to 60Hz ticks", () => {
-            expect(reactionMsToTicks(150)).toBeCloseTo(9, 5);
-            expect(reactionMsToTicks(1000)).toEqual(TICKS_PER_SECOND);
+    describe("neutral start (intent begins the duel)", () => {
+        it("should have no aimed lane, guard, or meter before the first aim", () => {
+            const f = feint();
+            expect(f.aimedLane).toBeNull();
+            expect(guardLaneAt(f, 100)).toBeNull();
+            const p = precision();
+            expect(p.aimedLane).toBeNull();
+            expect(meterPosition(p, 100)).toEqual(0); // meter not running yet
+        });
+
+        it("should not react to a release before any aim", () => {
+            const f = feint();
+            const r = resolveRelease(f, 10, 20);
+            expect(r.accuracy).toEqual(1); // falls back to a neutral full-accuracy launch
         });
     });
 
-    describe("guardLaneAt() — the visible reaction contest", () => {
-        it("should be uncommitted before any aim settles", () => {
-            const s = state(150); // reactionTicks = 9
-            expect(guardLaneAt(s, 0)).toBeNull();
-            expect(guardLaneAt(s, 5)).toBeNull();
-        });
-
-        it("should commit to the aimed lane after the reaction delay", () => {
-            const s = state(150); // aims lane 0 at tick 0
-            expect(guardLaneAt(s, 9)).toEqual(0);
-            expect(guardLaneAt(s, 100)).toEqual(0);
-        });
-
-        it("should make a slow machine exploitable (easy 250ms)", () => {
-            const s = state(250); // reactionTicks = 15
-            expect(guardLaneAt(s, 10)).toBeNull(); // still not committed at tick 10
-            expect(guardLaneAt(s, 15)).toEqual(0);
-        });
-    });
-
-    describe("signalAim() + feints", () => {
-        it("should be a no-op when the lane is unchanged", () => {
-            const s = state();
-            expect(signalAim(s, 0, 5)).toBe(s);
+    describe("feint variant — the reaction race", () => {
+        it("should start the reaction on the first aim", () => {
+            let s = feint(800); // reactionTicks = 48
+            s = signalAim(s, 0, 0);
+            expect(guardLaneAt(s, 10)).toBeNull();      // not yet committed
+            expect(guardLaneAt(s, 48)).toEqual(0);       // caught up
         });
 
         it("should leave a committed machine guarding the old lane after a feint", () => {
-            let s = state(150);            // aim lane 0 at tick 0
-            s = signalAim(s, 1, 20);       // machine committed to 0 by tick 20; feint to 1
-            // guard stays on 0 until the reaction elapses from the feint (20 + 9 = 29)
-            expect(guardLaneAt(s, 20)).toEqual(0);
-            expect(guardLaneAt(s, 28)).toEqual(0);
-            expect(guardLaneAt(s, 29)).toEqual(1);
+            let s = feint(800); // 48 ticks
+            s = signalAim(s, 0, 0);
+            s = signalAim(s, 1, 100); // machine committed to 0 by tick 100; feint to 1
+            expect(guardLaneAt(s, 100)).toEqual(0);      // still guarding 0
+            expect(guardLaneAt(s, 147)).toEqual(0);      // 100 + 48 - 1
+            expect(guardLaneAt(s, 148)).toEqual(1);      // caught up to the feint
         });
 
-        it("should not commit a machine that had not yet reacted to a feint", () => {
-            let s = state(150);            // aim lane 0 at tick 0
-            s = signalAim(s, 1, 3);        // feint before the machine committed (tick 3 < 9)
-            expect(guardLaneAt(s, 3)).toBeNull();
-            expect(guardLaneAt(s, 12)).toEqual(1); // catches up to the new aim
+        it("should launch at full accuracy with no directional error", () => {
+            let s = feint(800);
+            s = signalAim(s, 1, 0);
+            const r = resolveRelease(s, 5, 20);
+            expect(r.accuracy).toEqual(1);
+            expect(r.offset).toEqual(0);
+            expect(r.launch.x).toBeGreaterThan(0); // aimed right
+            expect(r.launch.y).toBeLessThan(0);
+        });
+
+        it("should use human-scale reaction windows (not the old AI polling)", () => {
+            expect(IMMERSION.shotCalling.reactionMs.easy).toBeGreaterThanOrEqual(500);
+            expect(reactionMsToTicks(IMMERSION.shotCalling.reactionMs.easy)).toBeGreaterThan(20);
+        });
+    });
+
+    describe("precision variant — call + execute", () => {
+        it("should show the pre-committed guard from serve start", () => {
+            const s = precision(800, 0, 1);
+            expect(guardLaneAt(s, 0)).toEqual(1);
+            expect(guardLaneAt(s, 1000)).toEqual(1); // fixed, never chases the aim
+        });
+
+        it("should start the meter on the first aim", () => {
+            let s = precision(800, 0, 0);
+            expect(meterPosition(s, 50)).toEqual(0);   // not started
+            s = signalAim(s, 1, 100);
+            expect(meterPosition(s, 100)).toBeCloseTo(0, 5); // starts at 0
+            expect(meterPosition(s, 130)).toBeGreaterThan(0); // advancing
+        });
+
+        it("should resolve accuracy + signed offset from the meter", () => {
+            let s = precision(800, 0, 0);
+            s = signalAim(s, 1, 0);
+            const ticksPerCycle = TICKS_PER_SECOND / IMMERSION.shotCalling.meterSpeed;
+            // Marker sweeps 0->1->0; it crosses the center sweet spot (position
+            // 0.5) on the rise at the quarter-cycle.
+            const sweetTick = Math.round(ticksPerCycle * 0.25);
+            const r = resolveRelease(s, sweetTick, 20);
+            expect(r.accuracy).toBeGreaterThan(0.9);
+            expect(Math.abs(r.offset)).toBeLessThan(0.1);
         });
     });
 
     describe("meterPosition()", () => {
-        it("should start at 0 and peak at the sweet spot mid-cycle", () => {
-            const s = state();
-            expect(meterPosition(s, 0)).toBeCloseTo(0, 5);
-            const ticksPerCycle = TICKS_PER_SECOND / IMMERSION.shotCalling.meterSpeed;
-            expect(meterPosition(s, Math.round(ticksPerCycle / 2))).toBeCloseTo(1, 1);
-        });
-
         it("should be periodic", () => {
-            const s = state();
+            let s = precision();
+            s = signalAim(s, 0, 0);
             const ticksPerCycle = TICKS_PER_SECOND / IMMERSION.shotCalling.meterSpeed;
             expect(meterPosition(s, 7)).toBeCloseTo(meterPosition(s, 7 + ticksPerCycle), 5);
         });
     });
 
     describe("accuracyForPosition()", () => {
-        it("should be perfect at center", () => {
+        it("should be perfect at center and floor at the sweet-spot edge", () => {
             expect(accuracyForPosition(0.5)).toEqual(1);
-        });
-
-        it("should fall off away from center and floor at 0", () => {
+            expect(accuracyForPosition(0)).toEqual(0);
+            expect(accuracyForPosition(1)).toEqual(0);
             const near = accuracyForPosition(0.5 + IMMERSION.shotCalling.meterSweetSpot / 2);
             expect(near).toBeGreaterThan(0);
             expect(near).toBeLessThan(1);
-            expect(accuracyForPosition(0)).toEqual(0);
-            expect(accuracyForPosition(1)).toEqual(0);
         });
     });
 
-    describe("launchVector()", () => {
-        it("should bias left/right by lane at full accuracy", () => {
-            const rng = mulberry32(1);
-            const left = launchVector(0, LANES, 1, 20, rng);
-            const right = launchVector(LANES - 1, LANES, 1, 20, mulberry32(1));
+    describe("launchVector() — deterministic directional miss", () => {
+        it("should aim at the called lane at full accuracy", () => {
+            const left = launchVector(0, LANES, 1, 0, 20);
+            const right = launchVector(LANES - 1, LANES, 1, 0, 20);
             expect(left.x).toBeLessThan(0);
             expect(right.x).toBeGreaterThan(0);
-            expect(left.y).toBeLessThan(0); // up the table
         });
 
-        it("should be deterministic for the same seed", () => {
-            const a = launchVector(1, LANES, 0.4, 20, mulberry32(99));
-            const b = launchVector(1, LANES, 0.4, 20, mulberry32(99));
+        it("should push the miss left for a left-of-center release, right for right-of-center", () => {
+            const center = launchVector(0, LANES, 1, 0, 20).x;
+            const early = launchVector(0, LANES, 0.5, -0.4, 20).x;  // offset < 0
+            const late = launchVector(0, LANES, 0.5, 0.4, 20).x;    // offset > 0
+            expect(early).toBeLessThan(center);
+            expect(late).toBeGreaterThan(center);
+        });
+
+        it("should be fully deterministic (no randomness)", () => {
+            const a = launchVector(1, LANES, 0.4, 0.2, 20);
+            const b = launchVector(1, LANES, 0.4, 0.2, 20);
             expect(a).toEqual(b);
         });
 
-        it("should scatter more as accuracy drops", () => {
-            // sample spread of launch angles at low vs high accuracy
-            const spread = (acc: number) => {
-                const xs: number[] = [];
-                for (let i = 0; i < 200; i++) xs.push(launchVector(0, LANES, acc, 20, mulberry32(i)).x);
-                return Math.max(...xs) - Math.min(...xs);
-            };
-            expect(spread(0)).toBeGreaterThan(spread(1));
-        });
-    });
-
-    describe("resolveRelease()", () => {
-        it("should return accuracy and a launch vector", () => {
-            const s = state();
-            const r = resolveRelease(s, 0, 20, mulberry32(1));
-            expect(r.accuracy).toBeGreaterThanOrEqual(0);
-            expect(r.accuracy).toBeLessThanOrEqual(1);
-            expect(r.launch.y).toBeLessThan(0);
-        });
-    });
-
-    describe("saveChargeFraction()", () => {
-        it("should charge from 0 to 1 over the rally", () => {
-            const s = state(150, 0);
-            expect(saveChargeFraction(s, 0)).toEqual(0);
-            const fullTicks = (IMMERSION.shotCalling.saveChargeMs / 1000) * TICKS_PER_SECOND;
-            expect(saveChargeFraction(s, Math.ceil(fullTicks))).toEqual(1);
-            expect(saveChargeFraction(s, Math.ceil(fullTicks) + 1000)).toEqual(1);
+        it("should weaken power as accuracy drops", () => {
+            const full = launchVector(0, LANES, 1, 0, 20).y;
+            const weak = launchVector(0, LANES, 0, 0, 20).y;
+            expect(Math.abs(weak)).toBeLessThan(Math.abs(full));
         });
     });
 
@@ -151,32 +153,34 @@ describe("shot-calling core", () => {
     });
 
     describe("resolveDrain() — the telegraphed decisive contest", () => {
-        it("should save when armed, covering, and the ball lands there", () => {
-            expect(resolveDrain(1, 1, true)).toEqual("save");
+        it("should save when the ball lands in the guarded lane", () => {
+            expect(resolveDrain(1, 1)).toEqual("save");
         });
 
         it("should drain when the ball lands in an unguarded lane", () => {
-            expect(resolveDrain(0, 1, true)).toEqual("drain");
-        });
-
-        it("should drain when the save is not armed", () => {
-            expect(resolveDrain(1, 1, false)).toEqual("drain");
+            expect(resolveDrain(0, 1)).toEqual("drain");
         });
 
         it("should drain when nothing is covered", () => {
-            expect(resolveDrain(0, null, true)).toEqual("drain");
+            expect(resolveDrain(0, null)).toEqual("drain");
         });
     });
 
     describe("beginServe()", () => {
-        it("should reset the aim/meter and bump the serve count", () => {
-            let s = state();
+        it("should reset to neutral and bump the serve count", () => {
+            let s = feint();
             s = signalAim(s, 1, 30);
             s = beginServe(s, 100);
             expect(s.serveCount).toEqual(1);
-            expect(s.aimedLane).toEqual(0);
+            expect(s.aimedLane).toBeNull();
             expect(s.phase).toEqual("aiming");
-            expect(s.meterStartTick).toEqual(100);
+            expect(s.meterStartTick).toBeNull();
+        });
+
+        it("should re-roll the precision guard on re-serve", () => {
+            let s = precision(800, 0, 0);
+            s = beginServe(s, 100, 1);
+            expect(s.precommittedGuard).toEqual(1);
         });
     });
 });

@@ -93,8 +93,8 @@ function GameScreenInner() {
   const [aiDifficulty, setAiDifficulty] = useState<AIDifficulty>(() => {
     try { return (localStorage.getItem("pinball_kamikaze_difficulty") as AIDifficulty) || "medium"; } catch { return "medium"; }
   });
-  const [controlScheme, setControlScheme] = useState<"steer" | "shotcall">(() => {
-    try { return (localStorage.getItem("pinball_control_scheme") as "steer" | "shotcall") || "steer"; } catch { return "steer"; }
+  const [controlScheme, setControlScheme] = useState<"steer" | "feint" | "precision">(() => {
+    try { return (localStorage.getItem("pinball_control_scheme") as "steer" | "feint" | "precision") || "steer"; } catch { return "steer"; }
   });
   const [runKey, setRunKey] = useState(0);
   const [selectedWorldId, setSelectedWorldId] = useState<string>(() => getFromStorage(STORED_WORLD_ID) || "hobbiton");
@@ -197,7 +197,7 @@ function GameScreenInner() {
     try { localStorage.setItem("pinball_kamikaze_difficulty", next); } catch {}
   }
 
-  function selectControlScheme(next: "steer" | "shotcall") {
+  function selectControlScheme(next: "steer" | "feint" | "precision") {
     setControlScheme(next);
     try { localStorage.setItem("pinball_control_scheme", next); } catch {}
   }

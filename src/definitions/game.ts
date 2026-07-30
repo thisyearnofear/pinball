@@ -209,9 +209,11 @@ export type GameDef = {
     rngSeed?: number;    // seed for deterministic gameplay rolls (recorded in replays)
     rng?: () => number;  // seeded PRNG; falls back to Math.random when absent
     worldPhysics?: TablePhysics; // A4: per-world gravity modifier (deterministic, seeded)
-    /** Control scheme: "steer" = classic tap-to-nudge; "shotcall" = serve-based
-     *  aim/contest/release duel (see docs/GDD.md). Defaults to "steer". */
-    controlScheme?: "steer" | "shotcall";
+    /** Control scheme: "steer" = classic tap-to-nudge; "feint"/"precision" = the
+     *  two shot-calling variants (see docs/GDD.md). Defaults to "steer". */
+    controlScheme?: "steer" | "feint" | "precision";
+    /** AI difficulty name (drives shot-calling's human-scale reaction windows). */
+    aiDifficulty?: "easy" | "medium" | "hard";
 };
 
 export type FlipperType = ActorTypes.LEFT_FLIPPER | ActorTypes.RIGHT_FLIPPER;
