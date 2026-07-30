@@ -1,20 +1,18 @@
-# Pinball Arcade
+# Kamikaze Ball (神風)
 
-> **North star:** the world's first *verifiable arcade* — a pinball cabinet
-> where every score is provably honest, every prize is Bitcoin-backed, and the
-> on-chain mechanics are inseparable from the fun. See
-> [docs/VISION.md](docs/VISION.md) for the full strategic framing.
+> Drain-to-win pinball where the machine fights back. Built for the
+> **Nimiq Pay Mini Apps Competition**.
 
-Pinball Arcade is a Web3 pinball game built for the Mezo ecosystem, featuring
-on-chain tournaments where players compete for **MUSD** (Bitcoin-backed
-stablecoin) prizes. It combines retro pinball gameplay with blockchain
-tournament rails and generative 3D world presentation — no other Web3 pinball
-ships inside a Marble Gaussian splat scene with O(topN) signed settlement and
-event-native MUSD rewards.
+Kamikaze Ball is a skill-based pinball game running inside the Nimiq Pay app.
+You steer the ball INTO the drain while AI flippers try to save it. Fastest
+drain wins. Onchain tournaments settle in **USDT** (Polygon) or **NIM** (Nimiq
+native), with cryptographically signed scores, replay verification, and ghost
+racing.
 
-Built with **Next.js 16.2** (Turbopack, static export), Matter.js for physics,
-and Wagmi/RainbowKit for wallet connectivity. All tournament entry fees and
-prizes are denominated in **MUSD** (Bitcoin-backed stablecoin on Mezo).
+Built with **Next.js 16** (Turbopack, static export), Matter.js for physics,
+**@nimiq/mini-app-sdk** for the Nimiq Pay integration, and ethers v6 for EVM
+contract interaction. Practice is free and instant; tournaments require a
+wallet and a 0.1 USDT or 1 NIM entry fee.
 
 ## What makes this different
 
@@ -50,15 +48,13 @@ flowchart LR
     V[Replay verifier<br/>physics plausibility] --> S[EIP-191 score signer<br/>nonce + rate limits]
     B[(Replay store<br/>best-per-tournament)]
   end
-  subgraph Chain [Active profile chain: Mezo or Polygon Amoy]
-    TM[TournamentManager v2<br/>inverted win condition] --> P[Token prizes: MUSD / USDT<br/>O topN signed finalize]
-    MP[MissionPool bounties]
+  subgraph Chain [Polygon mainnet · chain 137]
+    TM[TournamentManager<br/>USDT entry · inverted win] --> P[Prizes: USDT / NIM<br/>O topN signed finalize]
   end
   R -- "upload replay (hash-bound)" --> B
   B --> V
   S -- signature --> Client
   Client -- submitScore + sig --> TM
-  S -. award .-> MP
   B -- "leader replay" --> GH
 ```
 
@@ -88,34 +84,24 @@ The app supports multiple blockchain ecosystems via env-based profiles. Set
 
 | Profile | Chain | Payment token | Wallet adapter |
 |---|---|---|---|
-| `mezo` (default) | Mezo Testnet/Mainnet | MUSD (ERC-20) | Wagmi + RainbowKit |
-| `nimiq` | Polygon (or Nimiq native) | NIM (native) or USDT (ERC-20) | @nimiq/mini-app-sdk |
+| `nimiq` (production) | Polygon mainnet (137) | USDT (ERC-20) + NIM (native) | @nimiq/mini-app-sdk |
+| `mezo` (legacy) | Mezo Testnet/Mainnet | MUSD (ERC-20) | Wagmi + RainbowKit |
 
-See [.env.example](.env.example) for all profile env vars, or
-[.env.nimiq](.env.nimiq) for the complete Nimiq profile.
+See [.env.nimiq](.env.nimiq) for the complete Nimiq/Polygon mainnet profile.
 
 ## Live contracts
 
-### Mezo Testnet
+### Polygon Mainnet (production — Nimiq competition)
 
 | Contract | Address |
 |---|---|
-| TournamentManager | `0x39067C81a3ccc3184000b88b7466A4A77B59cfa0` |
-| MissionPool | `0xC3fbd6315F00aB3fcc2d1855A75d6B0c3af235B3` |
-| MUSD | `0x118917a40FAF1CD7a13dB0Ef56C86De7973Ac503` |
+| TournamentManager (USDT) | `0x39067C81a3ccc3184000b88b7466A4A77B59cfa0` |
+| USDT (Tether) | `0xc2132D05D31c914a87C6611C10748AEb04B58e8F` |
+| Entry fee | 0.1 USDT |
+| NIM treasury | `NQ88 8AG0 1CXT 9Y11 77FU L706 M1TA R1FC DNKU` |
 
-See [docs/MEZO_SETUP.md](docs/MEZO_SETUP.md) for full deployment guide.
-
-### Polygon Amoy (Nimiq profile)
-
-| Contract | Address |
-|---|---|
-| MockERC20 (test USDT) | `0xD391D6131F92E0A9717a98aD69BAeCfcA4c23A66` |
-| TournamentManager | `0xF6A372cB188636691cC6f0eF952210285100B5C9` |
-| MissionPool | `0x1F7f7fBd49957d8175e7c9DC44643deF7f89405C` |
-
-See [docs/NIMIQ_SETUP.md](docs/NIMIQ_SETUP.md) for the Nimiq/Polygon
-deployment guide and Nimiq Pay Mini App testing instructions.
+See [docs/NIMIQ_SETUP.md](docs/NIMIQ_SETUP.md) for the full deployment guide
+and Nimiq Pay Mini App testing instructions.
 
 ## Architecture
 

@@ -1,63 +1,50 @@
-# Nimiq / Polygon Setup (Amoy Testnet)
+# Nimiq / Polygon Setup (Production — Polygon Mainnet)
 
 Deployment guide for the **Nimiq Pay Mini App Competition** profile of
-Pinball Arcade. Uses Polygon Amoy testnet for EVM contract deployment with
-a test USDT (ERC-20, 6 decimals) as the payment token.
+Kamikaze Ball. Production runs on Polygon mainnet (chain 137) with real
+USDT (ERC-20, 6 decimals) entry fees, plus a native NIM payment path for the
+competition bonus.
 
-## ⚠️ Competition readiness — PENDING ACTIVATION
+## ✅ Competition readiness — LIVE
 
-The payment code (USDT via EVM + NIM via the Nimiq provider) is **built and
-merged**, but production is still pointed at Polygon **Amoy with native
-MATIC**. Two manual steps remain before the submission clears the rules. Do
-NOT flip prod until the mainnet deploy succeeds and is verified on Polygonscan.
+All payment paths are built, deployed, and verified end-to-end.
 
-### Step 1 — Deploy USDT TournamentManager to Polygon mainnet (you run this)
+- **USDT (eligibility gate):** TournamentManager deployed to Polygon mainnet,
+  prod config flipped, backend on chain 137. Verified on-chain.
+- **NIM (bonus points):** Nimiq Pay SDK integration live; NIM treasury set;
+  backend verifies NIM transactions on the Nimiq chain before registering entry.
+- **Framework compliance:** built on `@nimiq/mini-app-sdk`, MIT licensed,
+  public repo, no secrets, skill-based game.
 
-```bash
-cd contracts
-USDT_ADDRESS=<USDT_ADDRESS> ENTRY_FEE=1000000 \
-  npx hardhat run scripts/deploy-polygon-mainnet-usdt.ts --network polygon
-```
+### Completed steps
 
-- `<USDT_ADDRESS>` = canonical Tether on Polygon (6 decimals).
-- `contracts/.env` needs `PRIVATE_KEY` + `SCORE_SIGNER_ADDR`; the wallet must hold POL for gas.
-- The script prints the exact env lines to paste and the new `<TM_ADDRESS>`.
-
-### Step 2 — Flip prod config (you apply after Step 1)
-
-Copy `netlify.mainnet-usdt.toml.example` over the `[build.environment]` block
-in `netlify.toml`, filling:
-- `<TM_ADDRESS>` from the deploy output
-- `<USDT_ADDRESS>` (the Tether contract)
-- `<YOUR_REAL_NQ_ADDRESS>` (your Nimiq treasury, see Step 3)
-
-Then update backend env: `CHAIN_ID=137`, `TOURNAMENT_MANAGER_ADDRESS`,
-`NIM_TREASURY_ADDRESS`, `NIM_ENTRY_FEE_LUNA=100000`, `NIMIQ_RPC_URL`.
-
-### Step 3 — Provide a real NIM treasury address (BLOCKING for the bonus)
-
-NIM payments are **dormant** until `NEXT_PUBLIC_NIM_TREASURY_ADDRESS`
-(frontend) and `NIM_TREASURY_ADDRESS` (backend) are set to a **real Nimiq
-address you control**. The placeholder was intentionally removed so no funds
-can route to an uncontrolled address. Provide the NQ address to enable the
-NIM bonus path.
+1. **Deployed USDT TournamentManager to Polygon mainnet** via
+   `contracts/scripts/deploy-polygon-mainnet-usdt.ts` (EIP-1559 dynamic fees,
+   `USDT_ADDRESS` passed via env). 4 tournaments created (2 kamikaze inverted
+   + 2 classic), 30-day window, 0.1 USDT entry, 50/30/20 prize split.
+2. **Flipped prod config** (`netlify.toml` → chain 137, USDT, TM address) and
+   backend env (`CHAIN_ID=137`, `TOURNAMENT_MANAGER_ADDRESS`,
+   `MEZO_RPC_URL=https://polygon.drpc.org`). Restarted service.
+3. **Set NIM treasury** to `NQ88 8AG0 1CXT 9Y11 77FU L706 M1TA R1FC DNKU`
+   in both frontend (`netlify.toml`) and backend env.
 
 ### Status snapshot
 
 | Item | State |
 |---|---|
-| NIM payment path (code) | ✅ built, dormant until real treasury set |
-| USDT payment path (code) | ✅ built, ERC-20 flow ready |
-| Mainnet USDT contract | ⏳ pending Step 1 deploy |
-| Prod config flip (USDT) | ⏳ pending Step 2 |
-| NIM treasury address | ❗ pending user input (Step 3) |
+| NIM payment path (code) | ✅ live, treasury configured |
+| USDT payment path (code) | ✅ live, ERC-20 flow active |
+| Mainnet USDT contract | ✅ deployed (0x3906…cfa0) |
+| Prod config flip (USDT) | ✅ applied |
+| NIM treasury address | ✅ set |
+| Backend chain/RPC | ✅ chain 137, drpc.org |
 
-## Live deployment (Polygon Amoy)
+## Live deployment (Polygon mainnet)
 
 | Contract | Address |
 |---|---|
-| MockERC20 (test USDT) | `0xD391D6131F92E0A9717a98aD69BAeCfcA4c23A66` |
-| TournamentManager | `0xF6A372cB188636691cC6f0eF952210285100B5C9` |
+| TournamentManager (USDT) | `0x39067C81a3ccc3184000b88b7466A4A77B59cfa0` |
+| USDT (Tether, 6 decimals) | `0xc2132D05D31c914a87C6611C10748AEb04B58e8F` |
 | MissionPool | `0x1F7f7fBd49957d8175e7c9DC44643deF7f89405C` |
 
 - Chain ID: `80002`
