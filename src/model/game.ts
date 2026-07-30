@@ -43,9 +43,10 @@ import { worldGravityX, worldGravityY } from "@/model/world-physics";
 import { enqueueTrack, setFrequency, playSoundEffect, duckMusic, playTaikoHit, playFurinChime, momentarySilence } from "@/services/audio-service";
 import * as haptics from "@/utils/haptics";
 import {
-    loadMemory, greetingLine, dominantHabit, habitTaunt, emptyHabits,
+    loadMemory, greetingLine, dominantHabit, habitTaunt, emptyHabits, isSilentRank, subduedSaveTaunt,
     type MachineMemory, type MachineHabits, type HabitLabel,
 } from "@/utils/machine-memory";
+import { getProgress, levelForXp, rankForLevel } from "@/config/progression";
 import {
     createKamikazeState, updateAIFlippers, getKamikazeScore, getBestKamikazeScore, applyPowerUpEffects,
     hasPowerUp, rollPowerUp, activatePowerUp, cleanupPowerUps, shouldSpawnCrate,
@@ -103,6 +104,9 @@ let machineMemory: MachineMemory = loadMemory();
 let runHabits: MachineHabits = emptyHabits();
 let lastHabitTauntAt = -Infinity;
 let lastHabitCalled: HabitLabel | null = null;
+// B2: the player's rank name, read at mount. Drives the machine's address and,
+// at max rank (Kamikaze), its silence. Cosmetic only (hard rule 2).
+let playerRankName: string | undefined;
 
 // Phase 3 anthropomorphization: each machine part speaks with its own voice,
 // throttled so the chatter never overwhelms the action.
@@ -190,6 +194,7 @@ export const init = async (
     runHabits = emptyHabits();
     lastHabitTauntAt = -Infinity;
     lastHabitCalled = null;
+    playerRankName = rankForLevel(levelForXp(getProgress().xp)).name;
     gameRef = game; // store reference for external access (flipper control, nudge)
 
     // Initialize Kamikaze Ball state if the game has it enabled
@@ -700,7 +705,10 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
                     duckMusic(600, 0.35);
                     haptics.aiSave();
                     game.kamikaze.recentSaveAt = now; // A1: smug spike window
-                    lastTauntText = getMoodTaunt(game.kamikaze.mood, false, rng);
+                    // B2: at max rank the machine is subdued, not smug.
+                    lastTauntText = isSilentRank(playerRankName)
+                        ? subduedSaveTaunt()
+                        : getMoodTaunt(game.kamikaze.mood, false, rng);
                     messageHandler(GameMessages.AI_TAUNT, 1500);
                 };
                 if (ball.body.velocity.y <= 0) {
@@ -886,7 +894,7 @@ function startRound(game: GameDef): void {
         // B1: MAMORU greets you once per run, from persistent memory. Cosmetic
         // only — never touches physics (hard rule 2).
         if (game.kamikaze?.enabled) {
-            lastTauntText = greetingLine(machineMemory);
+            lastTauntText = greetingLine(machineMemory, playerRankName);
             messageHandler(GameMessages.AI_TAUNT, 2600);
         }
     }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
     emptyMemory, emptyHabits, recordRunResult, greetingLine, dominantHabit, habitTaunt,
+    rankTier, isSilentRank, rankAddress, subduedSaveTaunt,
     NEMESIS_DRAIN_MS, HABIT_MIN_NUDGES,
 } from "@/utils/machine-memory";
 
@@ -92,6 +93,63 @@ describe("machine memory (B1)", () => {
         it("should give each readable habit a distinct call-out", () => {
             const lines = new Set(["left", "center", "right"].map((l) => habitTaunt(l as any)));
             expect(lines.size).toEqual(3);
+        });
+    });
+
+    describe("rank tiers (B2)", () => {
+        it("should map ranks to their perception tier", () => {
+            expect(rankTier("Breeze")).toEqual("dismissive");
+            expect(rankTier("Tailwind")).toEqual("dismissive");
+            expect(rankTier("Gale")).toEqual("wary");
+            expect(rankTier("Storm")).toEqual("wary");
+            expect(rankTier("Tempest")).toEqual("respect");
+            expect(rankTier("Kamikaze")).toEqual("silence");
+        });
+
+        it("should default an unknown rank to dismissive", () => {
+            expect(rankTier(undefined)).toEqual("dismissive");
+            expect(rankTier("???")).toEqual("dismissive");
+        });
+
+        it("should treat only the max rank as silent", () => {
+            expect(isSilentRank("Kamikaze")).toBe(true);
+            expect(isSilentRank("Tempest")).toBe(false);
+            expect(isSilentRank(undefined)).toBe(false);
+        });
+
+        it("should give each tier a distinct address", () => {
+            expect(rankAddress("Breeze")).toContain("breeze");
+            expect(rankAddress("Gale")).toContain("Storm-class");
+            expect(rankAddress("Tempest")).toContain("replays");
+            expect(rankAddress("Kamikaze")).toEqual("…");
+        });
+
+        it("should offer a subdued save line", () => {
+            expect(subduedSaveTaunt().length).toBeGreaterThan(0);
+        });
+    });
+
+    describe("greetingLine() rank awareness (B2)", () => {
+        it("should greet a max-rank player with silence", () => {
+            const mem = recordRunResult(emptyMemory(), 4000, emptyHabits());
+            expect(greetingLine(mem, "Kamikaze")).toEqual("…");
+        });
+
+        it("should address a returning low-rank player dismissively", () => {
+            const mem = recordRunResult(emptyMemory(), 12000, emptyHabits());
+            const line = greetingLine(mem, "Breeze");
+            expect(line).toContain("breeze");
+            expect(line).toContain("12.0s");
+        });
+
+        it("should show strained respect at high rank", () => {
+            const mem = recordRunResult(emptyMemory(), 7000, emptyHabits());
+            expect(greetingLine(mem, "Tempest")).toContain("replays");
+        });
+
+        it("should still dread a nemesis regardless of rank", () => {
+            const mem = recordRunResult(emptyMemory(), NEMESIS_DRAIN_MS - 1000, emptyHabits());
+            expect(greetingLine(mem, "Breeze")).toContain("dream");
         });
     });
 });

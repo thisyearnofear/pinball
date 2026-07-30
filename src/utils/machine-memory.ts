@@ -109,21 +109,65 @@ export function recordRunResult(
 }
 
 /**
- * The greeting line for the start of a run (pure). First meeting → wary
- * introduction; nemesis (best drain < 6s) → dread; otherwise → a rival's
- * recognition of your last run.
+ * The greeting line for the start of a run (pure). Re-skinned by rank (B2):
+ * the machine's perception of you scales with your station — dismissive at
+ * low ranks, wary mid, strained respect high, and silence at max rank (the
+ * punchline: it no longer needs to speak). First meeting and nemesis dread
+ * still cut through. `rankName` is the player's current rank (e.g. "Gale").
  */
-export function greetingLine(memory: MachineMemory): string {
+export function greetingLine(memory: MachineMemory, rankName?: string): string {
+    if (isSilentRank(rankName)) {
+        return "…"; // silence-as-respect: the machine no longer greets its equal
+    }
     if (memory.encounters === 0) {
         return "A new killer. I am 守. I will not let you.";
     }
     if (memory.bestPlayerDrainMs !== null && memory.bestPlayerDrainMs < NEMESIS_DRAIN_MS) {
         return `${(memory.bestPlayerDrainMs / 1000).toFixed(1)}s. I dream about that number.`;
     }
-    if (memory.lastRunMs !== null) {
-        return `You again. Last time: ${(memory.lastRunMs / 1000).toFixed(1)}s. I have practiced.`;
-    }
-    return "You again. I remember you.";
+    const address = rankAddress(rankName);
+    return memory.lastRunMs !== null
+        ? `${address} Last time: ${(memory.lastRunMs / 1000).toFixed(1)}s.`
+        : address;
+}
+
+// ── B2: relationship-skinned ranks ───────────────────────────────
+// The machine's address scales with your rank tier. Same XP math; the
+// delivery is what changes. Max rank (Kamikaze) earns silence.
+
+export type RankTier = "dismissive" | "wary" | "respect" | "silence";
+
+const RANK_TIERS: Record<string, RankTier> = {
+    Breeze: "dismissive",
+    Tailwind: "dismissive",
+    Gale: "wary",
+    Storm: "wary",
+    Tempest: "respect",
+    Kamikaze: "silence",
+};
+
+export function rankTier(rankName: string | undefined): RankTier {
+    return (rankName && RANK_TIERS[rankName]) || "dismissive";
+}
+
+export function isSilentRank(rankName: string | undefined): boolean {
+    return rankTier(rankName) === "silence";
+}
+
+const RANK_ADDRESSES: Record<RankTier, string> = {
+    dismissive: "A breeze. Barely worth saving against.",
+    wary: "Storm-class. Noted.",
+    respect: "I studied your replays. All of them.",
+    silence: "…",
+};
+
+export function rankAddress(rankName: string | undefined): string {
+    return RANK_ADDRESSES[rankTier(rankName)];
+}
+
+/** Short, subdued save line for when the machine respects you (max rank). */
+export function subduedSaveTaunt(): string {
+    return "…not yet.";
 }
 
 export type HabitLabel = "left" | "center" | "right";
