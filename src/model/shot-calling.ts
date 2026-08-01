@@ -25,6 +25,18 @@ export const TICKS_PER_SECOND = 60;
 export type ShotVariant = "feint" | "precision";
 export type ShotPhase = "aiming" | "released" | "resolving" | "drained" | "saved";
 
+/** Feint variant: MAMORU's guard policy for this serve. Deterministic per
+ *  serve (derived from the run seed) so replays re-simulate identically.
+ *  - "chase": classic behavior — commit to the aimed lane after reaction delay.
+ *    The rote script (bait → wait → switch → fire) works because MAMORU
+ *    always chases the bait, leaving the switched lane open.
+ *  - "hold": MAMORU reads the feint and picks a lane to hold from serve start
+ *    (stored in precommittedGuard like precision). It never chases the player's
+ *    aim — the feint is meaningless. The player must read the guard (via the
+ *    flipper embodiment) and fire the OTHER lane. This breaks the rote script
+ *    because the player can't predict which lane is guarded by baiting. */
+export type GuardPolicy = "chase" | "hold";
+
 export type ShotState = {
     variant: ShotVariant;
     phase: ShotPhase;
@@ -51,6 +63,8 @@ export type ShotState = {
     releaseOffset: number;
     serveCount: number;
     rallyStartTick: number;
+    /** Feint: MAMORU's guard policy for this serve. */
+    guardPolicy: GuardPolicy;
 };
 
 export function reactionMsToTicks(ms: number): number {
@@ -58,7 +72,8 @@ export function reactionMsToTicks(ms: number): number {
 }
 
 export function createShotState(
-    variant: ShotVariant, lanes: number, reactionMs: number, startTick: number, precommittedGuard: number | null = null
+    variant: ShotVariant, lanes: number, reactionMs: number, startTick: number, precommittedGuard: number | null = null,
+    guardPolicy: GuardPolicy = "chase",
 ): ShotState {
     return {
         variant,
@@ -69,7 +84,7 @@ export function createShotState(
         prevGuardLane: null,
         meterStartTick: null,
         reactionTicks: reactionMsToTicks(reactionMs),
-        precommittedGuard: variant === "precision" ? precommittedGuard : null,
+        precommittedGuard: (variant === "precision" || guardPolicy === "hold") ? precommittedGuard : null,
         baitLane: null,
         baitSignalTick: startTick,
         releaseTick: null,
@@ -77,12 +92,14 @@ export function createShotState(
         releaseOffset: 0,
         serveCount: 0,
         rallyStartTick: startTick,
+        guardPolicy,
     };
 }
 
 /** Begin a fresh serve (ball returned to the plunger). Neutral start: no aim,
- *  no meter, until the player acts. Precision gets a new pre-committed guard. */
-export function beginServe(state: ShotState, tick: number, precommittedGuard: number | null = null): ShotState {
+ *  no meter, until the player acts. Precision gets a new pre-committed guard;
+ *  feint gets a new guard policy (chase or hold, derived from the run seed). */
+export function beginServe(state: ShotState, tick: number, precommittedGuard: number | null = null, guardPolicy: GuardPolicy = state.guardPolicy): ShotState {
     return {
         ...state,
         phase: "aiming",
@@ -90,13 +107,14 @@ export function beginServe(state: ShotState, tick: number, precommittedGuard: nu
         aimSignalTick: tick,
         prevGuardLane: null,
         meterStartTick: null,
-        precommittedGuard: state.variant === "precision" ? precommittedGuard : state.precommittedGuard,
+        precommittedGuard: (state.variant === "precision" || guardPolicy === "hold") ? precommittedGuard : state.precommittedGuard,
         baitLane: null,
         baitSignalTick: tick,
         releaseTick: null,
         accuracy: 0,
         releaseOffset: 0,
         serveCount: state.serveCount + 1,
+        guardPolicy,
     };
 }
 
@@ -107,12 +125,18 @@ function clampLane(lane: number, lanes: number): number {
 /**
  * The lane MAMORU is guarding at a tick.
  *  - precision: the pre-committed lane, fixed and visible from serve start.
- *  - feint: the machine catches up to the player's aim after its reaction
- *    delay; until then it stays on the previous lane. Null before the first
- *    aim (the duel hasn't started). THIS is the feint mechanic.
+ *  - feint (chase): the machine catches up to the player's aim after its
+ *    reaction delay; until then it stays on the previous lane. Null before the
+ *    first aim (the duel hasn't started). THIS is the feint mechanic.
+ *  - feint (hold): MAMORU reads the feint and holds a fixed lane (stored in
+ *    precommittedGuard) from serve start — it never chases the player's aim.
+ *    The feint is meaningless; the player must read the guard via the flipper
+ *    embodiment and fire the other lane. The rote script (bait → switch → fire)
+ *    can't predict which lane is guarded because there's no reaction race.
  */
 export function guardLaneAt(state: ShotState, tick: number): number | null {
     if (state.variant === "precision") return state.precommittedGuard;
+    if (state.guardPolicy === "hold") return state.precommittedGuard;
     if (state.aimedLane === null) return null;
     if (tick >= state.aimSignalTick + state.reactionTicks) return state.aimedLane;
     return state.prevGuardLane;
@@ -139,24 +163,32 @@ export function signalAim(state: ShotState, lane: number, tick: number): ShotSta
 /**
  * Whether the player may release. Variant-specific so each tests its intended
  * skill:
- *  - feint: FIRE is locked until MAMORU commits to the bait (no quick-draw).
- *    After commit the player may fire — but firing into the guarded bait lane
- *    (never switching) is a save, so the feint (switch, then fire during the
- *    recovery window) is required to win.
+ *  - feint (chase): FIRE is locked until MAMORU commits to the bait (no
+ *    quick-draw). After commit the player may fire — but firing into the
+ *    guarded bait lane (never switching) is a save, so the feint (switch, then
+ *    fire during the recovery window) is required to win.
+ *  - feint (hold): the guard is pre-committed and visible from serve start —
+ *    there's no reaction race, so the player can fire immediately. The skill
+ *    is reading the guard and picking the open lane, not timing a window.
  *  - precision: fire any time after a lane is called; the meter sets precision.
  */
 export function canRelease(state: ShotState, tick: number): boolean {
     if (state.phase !== "aiming" || state.aimedLane === null) return false;
     if (state.variant === "precision") return true;
+    // Hold: guard is pre-committed and visible — no reaction race to wait through.
+    if (state.guardPolicy === "hold") return true;
     return state.baitLane !== null && tick >= state.baitSignalTick + state.reactionTicks;
 }
 
 export type FeintStage = "idle" | "baiting" | "break";
 
 /** Feint sub-phase for the HUD: idle (no lane) -> baiting (wait for commit) ->
- *  break (committed; switch + fire). */
+ *  break (committed; switch + fire). On hold serves the guard is pre-committed,
+ *  so the break stage is immediate (no reaction race to wait through). */
 export function feintStage(state: ShotState, tick: number): FeintStage {
     if (state.variant !== "feint" || state.aimedLane === null || state.baitLane === null) return "idle";
+    // Hold: the guard is already committed from serve start.
+    if (state.guardPolicy === "hold") return "break";
     return tick >= state.baitSignalTick + state.reactionTicks ? "break" : "baiting";
 }
 

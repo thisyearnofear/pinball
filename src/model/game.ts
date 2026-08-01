@@ -44,6 +44,7 @@ import { IMMERSION } from "@/config/immersion-tuning";
 import {
     createShotState, beginServe, signalAim, guardLaneAt, resolveRelease, meterPosition,
     laneForX, resolveDrain, canRelease, feintStage, type ShotState, type ShotVariant, type FeintStage,
+    type GuardPolicy,
 } from "@/model/shot-calling";
 import { enqueueTrack, setFrequency, playSoundEffect, duckMusic, playTaikoHit, playFurinChime, momentarySilence } from "@/services/audio-service";
 import * as haptics from "@/utils/haptics";
@@ -940,8 +941,10 @@ function serveShotCallBall(): void {
     Body.setStatic(newBall.body, true);
     if (shotState) {
         const rng = gameRef?.rng ?? Math.random;
-        const guard = shotVariant === "precision" ? Math.floor(rng() * shotState.lanes) : null;
-        shotState = beginServe(shotState, tickCount, guard);
+        const isHold = shotVariant === "feint" && rng() < IMMERSION.shotCalling.holdChance;
+        const policy = isHold ? "hold" : "chase";
+        const guard = (shotVariant === "precision" || isHold) ? Math.floor(rng() * shotState.lanes) : null;
+        shotState = beginServe(shotState, tickCount, guard, policy);
     }
     recordReplayEvent(tickCount, "serve");
 }
@@ -1017,8 +1020,13 @@ function startRound(game: GameDef): void {
         Body.setStatic(newBall.body, true);
         const reactionMs = IMMERSION.shotCalling.reactionMs[game.aiDifficulty ?? "medium"];
         const rng = game.rng ?? Math.random;
-        const guard = shotVariant === "precision" ? Math.floor(rng() * IMMERSION.shotCalling.lanes) : null;
-        shotState = createShotState(shotVariant, IMMERSION.shotCalling.lanes, reactionMs, tickCount, guard);
+        // Feint hold: MAMORU picks a fixed lane to guard (like precision but
+            // hidden — the flipper embodiment reveals it once the player aims).
+        // Chase: no pre-committed guard (MAMORU reacts to the aim).
+        const isHold = shotVariant === "feint" && rng() < IMMERSION.shotCalling.holdChance;
+        const policy = isHold ? "hold" : "chase";
+        const guard = (shotVariant === "precision" || isHold) ? Math.floor(rng() * IMMERSION.shotCalling.lanes) : null;
+        shotState = createShotState(shotVariant, IMMERSION.shotCalling.lanes, reactionMs, tickCount, guard, policy);
         recordReplayEvent(tickCount, "serve");
     }
     timeScale = 1;

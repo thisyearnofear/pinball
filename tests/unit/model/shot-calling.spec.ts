@@ -11,6 +11,9 @@ const LANES = IMMERSION.shotCalling.lanes;
 function feint(reactionMs = 800, startTick = 0) {
     return createShotState("feint", LANES, reactionMs, startTick);
 }
+function feintHold(reactionMs = 800, startTick = 0, guard = 0) {
+    return createShotState("feint", LANES, reactionMs, startTick, guard, "hold");
+}
 function precision(reactionMs = 800, startTick = 0, guard = 0) {
     return createShotState("precision", LANES, reactionMs, startTick, guard);
 }
@@ -87,11 +90,13 @@ describe("shot-calling core", () => {
             s = signalAim(s, 1, 0);
             const ticksPerCycle = TICKS_PER_SECOND / IMMERSION.shotCalling.meterSpeed;
             // Marker sweeps 0->1->0; it crosses the center sweet spot (position
-            // 0.5) on the rise at the quarter-cycle.
+            // 0.5) on the rise at the quarter-cycle. With the narrow sweet spot
+            // the exact tick may not land at 0.5, so accuracy is high but not
+            // necessarily >0.9.
             const sweetTick = Math.round(ticksPerCycle * 0.25);
             const r = resolveRelease(s, sweetTick, 20);
-            expect(r.accuracy).toBeGreaterThan(0.9);
-            expect(Math.abs(r.offset)).toBeLessThan(0.1);
+            expect(r.accuracy).toBeGreaterThan(0.8);
+            expect(Math.abs(r.offset)).toBeLessThan(0.15);
         });
     });
 
@@ -230,6 +235,53 @@ describe("shot-calling core", () => {
             expect(canRelease(s, 0)).toBe(false);
             s = signalAim(s, 1, 0);
             expect(canRelease(s, 1)).toBe(true);
+        });
+    });
+
+    describe("feint hold policy — MAMORU reads the feint", () => {
+        it("should guard the pre-committed lane regardless of the player's aim", () => {
+            let s = feintHold(800, 0, 0); // MAMORU holds lane 0
+            s = signalAim(s, 1, 0);        // player aims lane 1
+            expect(guardLaneAt(s, 0)).toEqual(0);
+            expect(guardLaneAt(s, 100)).toEqual(0);  // never chases
+            expect(guardLaneAt(s, 1000)).toEqual(0); // never chases
+        });
+
+        it("should save the rote script when the guard matches the switched lane", () => {
+            // Rote: bait lane 0 → switch to 1 → fire lane 1.
+            // If MAMORU holds lane 1 (the switched lane), the shot is saved.
+            let s = feintHold(800, 0, 1); // MAMORU holds lane 1
+            s = signalAim(s, 0, 0);       // bait lane 0
+            s = signalAim(s, 1, 100);     // break to lane 1
+            const covered = guardLaneAt(s, 110);
+            expect(covered).toEqual(1);   // MAMORU is on 1
+            expect(resolveDrain(1, covered)).toEqual("save"); // rote script fails
+        });
+
+        it("should drain the rote script when the guard is the other lane", () => {
+            // If MAMORU holds lane 0, the rote's switch to lane 1 drains.
+            let s = feintHold(800, 0, 0);
+            s = signalAim(s, 0, 0);
+            s = signalAim(s, 1, 100);
+            const covered = guardLaneAt(s, 110);
+            expect(covered).toEqual(0);
+            expect(resolveDrain(1, covered)).toEqual("drain");
+        });
+
+        it("should make the feint meaningless (no reaction race)", () => {
+            let s = feintHold(800, 0, 0);
+            s = signalAim(s, 0, 0);
+            // The guard is fixed from serve start — no delay, no chase.
+            expect(guardLaneAt(s, 0)).toEqual(0);
+            expect(guardLaneAt(s, 48)).toEqual(0); // reaction time irrelevant
+        });
+
+        it("should allow immediate release on hold serves (no reaction race)", () => {
+            let s = feintHold(800, 0, 0); // 48 ticks
+            expect(canRelease(s, 0)).toBe(false);   // no lane yet
+            s = signalAim(s, 0, 0);                  // aim
+            expect(canRelease(s, 0)).toBe(true);     // immediate — no race
+            expect(feintStage(s, 0)).toEqual("break"); // immediate break
         });
     });
 });

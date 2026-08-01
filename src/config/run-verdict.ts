@@ -8,9 +8,9 @@
  *
  * Grade is derived from a normalized performance ratio against a per-difficulty
  * "great" target (par). Kamikaze rewards a faster drain (lower is better);
- * classic rewards a higher score. Par values are tuning flavor, documented
- * below, and intentionally generous so a solid run lands B/A and an exceptional
- * one reaches S.
+ * classic rewards a higher score. Pars and tier thresholds are calibrated
+ * against the bot harness (tests/sim/shot-calling-skill.sim.ts): a null
+ * (do-nothing) player must not reach S/A, and only skilled play does.
  */
 
 export type VerdictDifficulty = "easy" | "medium" | "hard";
@@ -27,11 +27,14 @@ export type RunVerdict = {
 
 // "Great" target drain time (ms) per difficulty. Lower drain = better, and a
 // tougher machine keeps the ball alive longer, so a great time is higher on
-// hard. perf = par / drain.
+// hard. Calibrated against the bot harness: a null (do-nothing) player drains
+// in ~7s on easy and ~16s on medium. Pars are set so that passive play lands
+// C/B and only skilled play reaches A/S. The S tier requires beating par by
+// 40%+ — fast enough that the machine's defenses were genuinely outplayed.
 const KAMIKAZE_PAR_MS: Record<VerdictDifficulty, number> = {
-  easy: 14000,
-  medium: 20000,
-  hard: 28000,
+  easy: 2500,
+  medium: 5000,
+  hard: 9000,
 };
 
 // "Great" target score for classic pinball. perf = score / par.
@@ -43,12 +46,13 @@ const CLASSIC_PAR_SCORE: Record<VerdictDifficulty, number> = {
 
 type VerdictText = { grade: RunVerdict["grade"]; kanji: string };
 
-// Shared grade tiers + kanji stamp by performance ratio.
+// Shared grade tiers + kanji stamp by performance ratio. S requires beating
+// par by 80%+ (ratio ≥ 1.8) so only genuinely skillful drains reach divine.
 const TIERS: { min: number; grade: RunVerdict["grade"]; kanji: string }[] = [
-  { min: 1.4, grade: "S", kanji: "神" }, // kami — transcendent
-  { min: 1.0, grade: "A", kanji: "風" }, // kaze — the wind itself
-  { min: 0.7, grade: "B", kanji: "波" }, // nami — a strong wave
-  { min: 0.45, grade: "C", kanji: "芽" }, // me — a promising sprout
+  { min: 1.8, grade: "S", kanji: "神" }, // kami — transcendent
+  { min: 1.2, grade: "A", kanji: "風" }, // kaze — the wind itself
+  { min: 0.8, grade: "B", kanji: "波" }, // nami — a strong wave
+  { min: 0.5, grade: "C", kanji: "芽" }, // me — a promising sprout
   { min: 0, grade: "D", kanji: "石" }, // ishi — stone, still learning
 ];
 

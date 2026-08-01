@@ -3,11 +3,12 @@ import { getRunVerdict } from "@/config/run-verdict";
 
 describe("getRunVerdict", () => {
   it("rewards a fast kamikaze drain with a higher grade", () => {
-    const fast = getRunVerdict(true, 12000, "medium"); // par 20000 -> ratio ~1.67 → S
-    const slow = getRunVerdict(true, 40000, "medium"); // ratio ~0.5 → D/C
-    expect(["S", "A"]).toContain(fast.grade);
-    expect(fast.kanji).toBe("神");
-    expect(slow.ratio).toBeLessThan(fast.ratio);
+    // Pars: medium par 5000ms. A 2500ms drain → ratio 2.0 → S.
+    // A 12000ms drain → ratio 0.42 → D.
+    const fast = getRunVerdict(true, 2500, "medium");
+    const slow = getRunVerdict(true, 12000, "medium");
+    expect(fast.ratio).toBeGreaterThan(slow.ratio);
+    expect(["A", "S"]).toContain(fast.grade);
     expect(["C", "D"]).toContain(slow.grade);
   });
 

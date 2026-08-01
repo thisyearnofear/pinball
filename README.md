@@ -69,6 +69,8 @@ flowchart LR
 | Inverted-win tournaments on-chain (lower drain time wins) | ✅ deployed | `contracts/contracts/TournamentManager.sol` |
 | O(topN) signed settlement (`finalizeWithSignedWinners`) | ✅ deployed | `backend/src/scripts/finalize-tournament.ts` |
 | Lobby attract mode (machine plays itself) | ✅ live | `src/game/ui/ArcadeLobby.tsx` |
+| Adaptive MAMORU guard policy (feint hold vs chase) | ✅ live | `src/model/shot-calling.ts` |
+| Skill-discrimination bot harness (null/random/rote/optimal) | ✅ live | `tests/sim/shot-calling-skill.sim.ts` |
 
 **Verification story:** every run records its RNG seed, all inputs, and a ball
 position trace. The replay ships to the backend, its keccak hash is bound into

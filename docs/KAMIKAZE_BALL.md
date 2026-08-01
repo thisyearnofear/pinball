@@ -31,6 +31,10 @@ The machine is the protagonist. You are the antagonist.
 `TournamentManager` gains an `invertedWinCondition` flag. When true,
 `finalizeWithSignedWinners` sorts ascending. One boolean, one branch.
 
+**Run verdicts:** grades (S/A/B/C/D with kanji stamps) are calibrated against a
+bot harness (`tests/sim/shot-calling-skill.sim.ts`) so passive play earns B/D,
+not S/A. Pars: easy 2.5s · medium 5s · hard 9s. S requires beating par by 80%+.
+
 ## Control scheme
 
 **Primary: Tap to nudge.** Player taps anywhere on screen. Ball gets a small

@@ -73,6 +73,16 @@ rather than one combined test (you can't debug six variables at once):
 - The feint is **mandatory**: FIRE stays locked until MAMORU commits, so there
   is no quick-draw; firing into the guarded bait lane (never switching) is a
   save. The gotcha is the experiment.
+- **Adaptive guard policy:** each serve, MAMORU rolls a per-serve policy (40%
+  hold, 60% chase, seeded from the run RNG so replays re-simulate identically):
+  - *Chase* — classic: commits to the bait lane after its reaction delay.
+  - *Hold* — reads the feint and pre-commits a fixed lane from serve start
+    (revealed by the flipper embodiment). There is no reaction race; the
+    player can fire immediately. The rote script (bait→switch→fire) is a
+    coin flip, not a guaranteed win.
+  This breaks the rote script so feinting requires reading the guard, not
+  memorizing a pattern. See `tests/sim/shot-calling-skill.sim.ts` for the
+  skill-discrimination harness that validates this.
 - MAMORU's guard is **embodied**: the flipper on the guarded lane rises
   (visual-only — the deterministic lane resolver is the single authority).
 
@@ -83,6 +93,14 @@ rather than one combined test (you can't debug six variables at once):
 - Misses are **signed and deterministic**: release left of center drifts left,
   right of center drifts right, distance sets the magnitude — so the player
   learns "I released late, so I pushed it right." No random scatter.
+- **Tight meter:** the sweet spot is narrow (10% of the half-range) and the
+  max angle error (1.0) exceeds the lateral bias (0.55), so an off-center
+  release can override the intended lane. A bad release costs time (weaker
+  launch + wrong direction); a good release threads the open lane.
+- **Known limitation:** physics bouncing after launch can wash out the meter's
+  directional effect, so a well-timed release doesn't yet reliably outperform
+  a careless one. See the precision critique in
+  `tests/sim/shot-calling-skill.sim.ts`.
 
 **Both:** at the drain the contest is telegraphed and deterministic — land in
 MAMORU's guarded lane and it saves (re-serve); an open lane drains (scores). No
@@ -139,7 +157,7 @@ Max 1 active per side. Crates respawn every 8–12s. Durations 3–6s.
 | **Early win** | First deliberate action grants bonus XP instantly | Hook before the first run ends |
 | **Skill** | Player gets better at nudging, timing tilt-locks | Flow state via difficulty ladder |
 | **Rank** | XP → ranks (recruit → shogun), streaks, daily PB | RankStrip in lobby; NEW DAILY BEST badge |
-| **Run verdict** | S/A/B/C/D grade with kanji stamp per run | Instant dopamine; par scales with difficulty |
+| **Run verdict** | S/A/B/C/D grade with kanji stamp per run | Instant dopamine; par calibrated so passive play gets B/D, not S/A |
 | **Kami Trials** | Pause-time mini-games grant temporary boons | Variable reward schedule; seeded daily |
 | **Tournament** | Enter → play → leaderboard → prize payout | Killer motivation; ghost racing |
 | **Social** | Friend challenge links, share cards, community dojo | Socializer motivation; challenge a rival's last run |
@@ -175,7 +193,7 @@ Pacing: early wins (bonus XP on the very first touch, first grade after first ru
 - Matter.js physics + zCanvas rendering, client-only (`dynamic({ ssr: false })`)
 - Backend: Fastify (score signing, replay storage, NIM entry verification)
 - Contracts: Solidity 0.8.28 (TournamentManager ERC-20 + Native variants, MissionPool)
-- Tests: 149 frontend + backend + contract suites, all passing
+- Tests: 251 frontend + backend + contract suites, all passing; plus a sim harness (`tests/sim/`) that runs headless bot matchups to validate skill discrimination
 - MIT license, public GitHub repo
 
 ---
@@ -199,3 +217,4 @@ Pacing: early wins (bonus XP on the very first touch, first grade after first ru
 | Polish before fun | Core drain-to-win loop fun before any polish |
 | Force one way to play | 6 control verbs, 2 modes, 3 difficulties, 2 payment methods |
 | Punish excessively | Rubber-banding, boons, instant retry, free practice |
+| Reward passivity | Verdict pars calibrated against a bot harness so doing nothing gets B/D, not S/A; adaptive guard policy breaks the rote feint script |

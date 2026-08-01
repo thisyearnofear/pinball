@@ -105,19 +105,37 @@ export const IMMERSION = {
          *  to perceive the guard, switch lane, and release). NOT the old AI
          *  polling intervals — those were sub-human for a player-facing duel. */
         reactionMs: { easy: 1200, medium: 800, hard: 500 },
-        /** Precision variant: timing meter (marker oscillation, cycles/second). */
-        meterSpeed: 0.9,
-        /** Precision variant: sweet-spot half-width (0-1 of the half-range). */
-        meterSweetSpot: 0.28,
-        /** Lateral launch bias at full intent (fraction of base speed). */
+        /** Precision variant: timing meter (marker oscillation, cycles/second).
+         *  Faster meter = shorter wait for the sweet spot, so the optimal bot's
+         *  patience costs less time and the meter's advantage shows. */
+        meterSpeed: 1.4,
+        /** Precision variant: sweet-spot half-width (0-1 of the half-range).
+         *  Narrow so only a well-timed release hits the open lane — a careless
+         *  release drifts into the guarded lane and gets saved. Calibrated
+         *  against the bot harness: at 0.10 the rote bot (fire immediately)
+         *  misses the sweet spot ~80% of the time. */
+        meterSweetSpot: 0.10,
+        /** Lateral launch bias at full intent (fraction of base speed). At
+         *  0.55 the ball reliably reaches the aimed lane in feint; for
+         *  precision the meter's maxAngleError (1.0) still dominates a bad
+         *  release so the timing gate matters. */
         lateralStrength: 0.55,
-        /** Max directional launch error at the meter's extreme (signed, deterministic). */
-        maxAngleError: 0.6,
-        /** Power lost at zero accuracy (off-center releases hit weaker). */
-        maxPowerLoss: 0.3,
+        /** Max directional launch error at the meter's extreme (signed, deterministic).
+         *  Larger than lateralStrength so an off-center release overrides the
+         *  intended lane and the ball misses. */
+        maxAngleError: 1.0,
+        /** Power lost at zero accuracy (off-center releases hit weaker, so
+         *  they don't reach the drain and bounce around longer — the meter
+         *  costs time, not just direction). */
+        maxPowerLoss: 0.5,
         /** Ticks to hold the 'SAVED' beat before re-serving (tick-based, so it is
          *  pause-safe and replay-safe). 72 ticks = 1.2s at 60fps. */
         savedHoldTicks: 72,
+        /** Feint variant: probability MAMORU uses the "hold" policy on a serve
+         *  (reads the feint and stays on the bait lane). 0.4 means 40% of serves
+         *  the rote script (bait→switch→fire) doesn't work — the player must
+         *  read the guard and adapt. Per-serve, derived from the run seed. */
+        holdChance: 0.4,
     },
 } as const;
 
