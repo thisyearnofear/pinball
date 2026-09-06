@@ -1,16 +1,86 @@
-# Marble × Pinball Integration
+# Marble × Pinball Integration (now Mint)
 
 > **Vision:** Pinball Arcade is no longer "another web pinball game." Each
-> table lives **inside a generative photoreal 3D world** authored by World Labs'
-> Marble. Tournaments are themed worlds. Players will eventually be able to
-> generate their own table-worlds from a text prompt and stake them on-chain —
-> the monopoly lever that turns a cabinet into a platform. See
+> table lives **inside a generative photoreal 3D world** authored in Mint.
+> Tournaments are themed worlds. Players will eventually be able to generate
+> their own table-worlds from a text prompt and stake them on-chain — the
+> monopoly lever that turns a cabinet into a platform. See
 > [VISION.md](./VISION.md) for the full strategic framing.
 
 This document defines the **vision, UX, architecture, and rollout plan** for
-integrating [Marble](https://marble.worldlabs.ai) (generative world model) and
-[Spark](https://sparkjs.dev/2.0.0-preview) (Gaussian Splat web renderer) into
-the existing engine, in line with our Core Principles.
+integrating [Mint](https://mint.gg) (AI 3D creation platform, formerly
+Marble/World Labs) and [Spark](https://sparkjs.dev/2.0.0-preview) (Gaussian
+Splat web renderer) into the existing engine, in line with our Core Principles.
+
+---
+
+## Current Status
+
+### ✅ Completed
+
+- **Mint Three.js Skills installed** (`~/.claude/skills/mint-threejs-skills`)
+  - Teaches the agent how to integrate Mint-generated assets into browser-based Three.js apps
+  - Covers `.spz`/`.rad` loading, camera rigs, LOD handling, quality-tier degradation
+- **Mint API Skill installed** (`~/.claude/skills/mint-api`)
+  - Handles generation, polling, preview review, asset retrieval workflows
+  - Protects against credential leaks, respects account ownership, bounds retries
+
+### ⏳ Pending — Requires API Key
+
+- **Mint API Key** not yet configured (not in `.env`, not in environment)
+- **Next step**: Generate first tournament world via API, wire into `src/config/worlds.ts`
+
+To get started when you're back:
+1. Visit https://platform.mint.gg → Developer settings → Create API key
+2. Add to `.env.local`: `MINT_API_KEY="..."` (this file is gitignored)
+3. Run the integration flow below
+
+---
+
+## Mint ecosystem mapping
+
+- **Mint** is the platform. It subsumed the former Marble and World Labs products.
+  The API endpoint is `api.mint.gg`; docs live at `docs.mint.gg`.
+- **Spark** (`sparkjs.dev`) is the web renderer — unchanged. It renders Gaussian
+  splats (`.spz` / `.rad`) via Three.js. This is the runtime your app already uses.
+- **Mint MCP** (`mcp.mint.gg`) lets a coding agent (you, me, Codex, Cursor)
+  generate, review, and retrieve 3D worlds, models, asset packs, materials,
+  audio, and video through a standardized JSON-RPC interface.
+- **Mint Three.js Skills** (`github.com/mintdotgg/mint-threejs-skills`) teach
+  an agent the exact patterns for integrating Mint-generated assets into
+  browser-based Three.js apps — including `.spz`/`.rad` loading, camera rigs,
+  LOD handling, and quality-tier degradation. Installing these skills means
+  the agent can reason correctly about `src/presentation/` without guessing.
+- **Mint API** (`platform.mint.gg` → Developer settings → API key) is the
+  server-side production pipeline: generate worlds on demand, poll for
+  completion via long-running operations, fetch the artifact manifest, and
+  slot the `runtime.runtimeUrl` directly into `src/config/worlds.ts`.
+
+### Why the MCP + skills matter right now
+
+Right now every tournament world is **hand-authored**: you or someone on the
+team goes to `docs.mint.gg` or the Mint web app, generates a world, downloads
+the `.spz` / `.rad`, and hardcodes the URL into `src/config/worlds.ts`. This
+works for 5 hackathon-era worlds. It does not scale to one new world per
+tournament, per player, per season.
+
+The MCP + skills install gives the dev agent the ability to:
+
+1. **Generate a new tournament world on demand** via the API (prompt → wait →
+   fetch manifest → write the URL into config).
+2. **Integrate the generated world correctly** using the same `mountWorld()`
+   pattern already in `src/presentation/index.ts` — the skills know the
+   `WorldHandle` API, the camera preset contract, and the quality-tier
+   degradation logic.
+3. **Review before shipping** — the `review` mode in Mint stops at
+   `preview_ready` so you approve the output before it hits main.
+
+The `mint-threejs-skills` package also teaches the agent about the specific
+Mint output format (`.spz` for web, `.rad` for LOD streaming) so it never
+confuses it with Tripo's `.glb` / `.obj` pipeline (which is a different
+paradigm — mesh vs. splat, and not useful for this project).
+
+See the [integration plan](#integration-plan) below for the concrete steps.
 
 ---
 
@@ -429,13 +499,153 @@ If/when we move to Rapier 3D:
 
 ---
 
+## 9. Mint MCP + Three.js Skills integration plan
+
+### Status: Skills Installed, Awaiting API Key
+
+This section documents how we move from hand-authored worlds (5 hardcoded
+`.spz`/`.rad` URLs) to an agent-driven generation pipeline. The goal is **Tier 3
+UGC** — where each tournament (and eventually each player) can have a unique
+world without manual asset creation.
+
+**What's done:**
+- ✅ `mint-threejs-skills` installed — agent knows the `WorldHandle` API, camera presets, quality tiers
+- ✅ `mint-api` skill installed — handles generation, polling, asset retrieval
+- ⏳ `MINT_API_KEY` — pending (add to `.env.local` when available)
+
+**What's next when you're back:**
+1. Generate a test world via the API (prompt → poll → fetch manifest)
+2. Wire it into `src/config/worlds.ts` with proper camera presets
+3. Test in the running game
+4. Iterate on the world theme until it matches the Kamikaze vision
+
+### Why now
+
+The current pipeline is: someone generates a world in the Mint web app,
+downloads the files, uploads them to GCS, and hardcodes the URL into
+`src/config/worlds.ts`. This works for 5 worlds. It does not scale.
+
+Mint MCP (`mcp.mint.gg`) + Mint Three.js Skills (`mintdotgg/mint-threejs-skills`)
+give the dev agent everything it needs to generate, review, and integrate a new
+world in a single flow — without ever leaving the codebase.
+
+### Step 0 — Install the skills
+
+Run this once in the project root:
+
+```bash
+npx skills add mintdotgg/mint-threejs-skills -a claude-code -g -y
+npx skills add mintdotgg/mint-api-skill -a claude-code -g -y
+```
+
+Set the API key in the environment (never paste it into chat):
+
+```bash
+export MINT_API_KEY="..."  # from https://platform.mint.gg → Developer settings
+```
+
+### Step 1 — Generate a world on demand
+
+From the agent, a single prompt triggers the full workflow:
+
+```
+Use the mint-api skill to generate a "sunken pirate ship with bioluminescent coral" world.
+Use auto mode, poll with bounded backoff, then retrieve the artifact manifest.
+Slot the runtime.runtimeUrl into src/config/worlds.ts as a new PIRATE_V2 entry.
+```
+
+The skill handles:
+- `POST /v1/worlds:generate` with the prompt
+- Polling `GET /v1/operations/{opId}` with exponential backoff (2s → 3.2s → … → cap 15s)
+- `GET /v1/assets/world/{worldId}/artifact-manifest` to get `runtime.runtimeUrl` (the `.rad` file) and `runtime.collider.runtimeUrl` (the collision mesh)
+- Writing the new world entry into `src/config/worlds.ts` following the existing pattern
+
+### Step 2 — Review before shipping (optional but recommended)
+
+For tournament-quality worlds, use review mode instead of auto:
+
+```
+Use the mint-api skill with generationMode: "review".
+Stop at preview_ready, show me the preview image, and wait for my approve or revise decision.
+```
+
+This pauses generation so you can see the preview before it commits credits.
+Revise with feedback (e.g., "make the lighting darker, add more coral") and
+resume until satisfied, then approve.
+
+### Step 3 — Wire the generated world into the game
+
+The Mint Three.js Skills teach the agent how to integrate the generated asset
+into the existing `src/presentation/` pipeline. The agent should:
+
+1. Use the same `mountWorld()` pattern already in `src/presentation/index.ts`
+2. Respect the existing `WorldHandle` API (camera presets, quality tiers,
+   ball tracking, reactor events)
+3. Pull the `.rad` URL from the artifact manifest's `runtime.runtimeUrl`
+4. Optionally pull the collider from `runtime.collider.runtimeUrl` for
+   future physics integration (see Tier 4)
+
+### Step 4 — Add to the tournament config
+
+Once the world is in `src/config/worlds.ts`, bind it to a tournament:
+
+```ts
+// src/config/tournaments.ts
+export const TOURNAMENTS = {
+  // ...existing...
+  "pirate-v2": {
+    id: "pirate-v2",
+    name: "Sunken Treasury",
+    worldId: "pirate-v2",  // matches the new entry in worlds.ts
+    tableId: "table1",
+    // ...
+  },
+};
+```
+
+### What the agent already knows (from the skills)
+
+- **`.spz` vs `.rad`**: `.spz` is the base splat (30-350 MB); `.rad` is the LOD
+  streaming version for high quality. The existing `splat-loader.ts` already
+  prefers `.rad` for high tier — the agent should follow this pattern.
+- **Camera presets**: The `MarbleWorld` type already has `camera` with
+  `plunger`, `overview`, `drain`, and optional `side` presets. New worlds
+  should define these to match the table layout.
+- **Quality degradation**: The existing `quality.ts` monitors FPS and
+  auto-degrades from high → medium → low. New worlds should not break this.
+- **Fallback**: If SparkJS fails to load or the splat fails to download, the
+  game falls back to the world's `gradient` background (already handled in
+  `GameMount.tsx`).
+
+### What's NOT useful (and why)
+
+- **Tripo Studio**: Generates polygon meshes (.glb, .obj) with clean topology.
+  Your pipeline uses Gaussian splats (point clouds), not meshes. Different
+  representation, different renderer, no conversion path worth taking.
+- **Mint 3D models**: Standalone .glb assets are useful for table decorations
+  (bumpers, targets) but not for the world stage itself. Save this for Tier 3
+  when we add agent-authored pinball components.
+- **Mint MCP for browser code**: The MCP endpoint (`https://mcp.mint.gg/mcp`)
+  is for the dev agent only. Never call it from the browser — all generation
+  happens server-side via the API key.
+
+### Next milestones this unlocks
+
+- **M4 (Player-Generated Tables)**: Replace hand-authored worlds with an API
+  call that generates a world from the tournament prompt, waits for completion,
+  and registers the result on-chain.
+- **Tier 4 (True 3D Pinball)**: The collider URL from the artifact manifest
+  (`runtime.collider.runtimeUrl`) becomes the basis for 3D physics in Rapier.
+  The agent already knows how to fetch and store this URL.
+
+---
+
 ## 8. References
 
-- Marble: <https://marble.worldlabs.ai>
-- Marble API docs: <https://docs.worldlabs.ai/api>
+- Mint: <https://mint.gg>
+- Mint API docs: <https://docs.mint.gg/developers/quickstart>
 - Spark 2.0 web renderer: <https://sparkjs.dev/2.0.0-preview>
 - Spark examples (incl. LOD): <https://sparkjs.dev/examples>
 - Splat Collider Builder: <https://splat-collider-builder.netlify.app>
 - Spark + Rapier physics demo: <https://github.com/bmild/spark-physics>
 - Rapier physics: <https://rapier.rs>
-- World Labs API examples (web): <https://github.com/worldlabsai/worldlabs-api-examples>

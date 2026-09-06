@@ -12,16 +12,16 @@ inversions that convert the crypto wrapper into the substance of the game.
 
 ## The moat: four layers no one else composes
 
-### 1. Generative world stage (Marble + Spark)
+### 1. Generative world stage (Mint + Spark)
 
 No other Web3 pinball ships inside a generative photoreal 3D world. The 2D
-Matter.js playfield is composited *inside* a Marble Gaussian splat scene,
-rendered in real time by Spark on Three.js. This requires the full Marble +
+Matter.js playfield is composited *inside* a Mint Gaussian splat scene,
+rendered in real time by Spark on Three.js. This requires the full Mint +
 Spark + Three.js toolchain and custom compositing glue — not a standard
 integration anyone can copy in a weekend.
 
 - Each tournament binds to a `worldId` (Pirate Ship, Spaceship, Cozy Cottage,
-  …) authored in Marble and exported as a Gaussian splat (`.spz`/`.rad`).
+  …) authored in Mint and exported as a Gaussian splat (`.spz`/`.rad`).
 - A new isolated `src/presentation/` domain owns the Three.js + Spark
   lifecycle and exposes a tiny imperative `mountWorld()` API that mirrors the
   existing `mountGame()`. Game internals stay zero-dependency.
@@ -36,7 +36,7 @@ integration anyone can copy in a weekend.
   background.
 
 See [MARBLE_INTEGRATION.md](./MARBLE_INTEGRATION.md) for the full architecture
-and rollout plan.
+and rollout plan, including the Mint MCP + Three.js skills integration path.
 
 ### 2. Chain-portable arcade economy (ecosystem profile system)
 

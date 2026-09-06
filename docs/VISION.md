@@ -56,7 +56,7 @@ No one else composes these four layers:
 
 | Layer | What it is | Why it's hard to copy |
 |---|---|---|
-| **Generative world stage** | 2D Matter.js playfield composited *inside* a Marble Gaussian splat scene via Spark/Three.js | Requires the Marble + Spark + Three.js toolchain and the compositing glue; not a standard integration |
+| **Generative world stage** | 2D Matter.js playfield composited *inside* a Mint Gaussian splat scene via Spark/Three.js | Requires the Mint + Spark + Three.js toolchain and the compositing glue; not a standard integration |
 | **Chain-portable arcade economy** | Prizes, entry fees, and micro-rewards in any token (MUSD on Mezo, NIM on Nimiq, USDT on Polygon) via the ecosystem profile system | One codebase serves N ecosystems; each new chain is a config file + wallet adapter, not a fork |
 | **O(topN) signed settlement** | `finalizeWithSignedWinners()` replaces O(n²) on-chain sorting with an EIP-191 signed winner list | Gas-efficient, generalizes beyond pinball, and is the bridge to trustless settlement |
 | **Event-native rewards** | Real pinball events (multiball, bumper streaks) trigger on-chain token payouts via MissionPool, with no extra UX step | Ties the *feel* of pinball to the *flow* of money; not a generic quest system |
@@ -74,7 +74,7 @@ ecosystem brings its own user base with zero codebase divergence).
 
 ### Paul Graham: make something people want, and do the schlep
 
-- **Schlep is good.** Matter.js tuning, Marble splat pipelines, EIP-191
+- **Schlep is good.** Matter.js tuning, Mint splat pipelines, EIP-191
   signing, RainbowKit wiring, CRT shader aesthetics, 129 tests across three
   suites — this is unglamorous work that deters copiers. We did it properly,
   not as a throwaway demo.
@@ -178,7 +178,7 @@ into a protocol.
 NOW (hackathon ship)
   ✓ Matter.js pinball + CRT cabinet aesthetic
   ✓ MUSD tournaments with EIP-191 signed settlement
-  ✓ Marble splat world compositing (Tier 1)
+  ✓ Mint splat world compositing (Tier 1)
   ✓ Jackpot Multiball -> MissionPool payout
   ✓ Ecosystem profile system (Mezo + Nimiq, one codebase)
   ✓ Polygon Amoy deployment (USDT, TournamentManager + MissionPool)
