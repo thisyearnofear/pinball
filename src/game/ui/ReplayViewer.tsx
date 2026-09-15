@@ -5,6 +5,8 @@ import type { ReplayDigest, ReplayEvent } from "@/model/replay-recorder";
 import { TICK_MS, parseTrace, positionAt, traceViewHeight } from "@/model/replay-trace";
 import tables from "@/definitions/tables";
 import { formatGameScore } from "@/utils/score-format";
+import { SeedAudit } from "./SeedAudit";
+import { ReplayVerification } from "./ReplayVerification";
 import { colors, spacing, typography } from "@/theme/tokens";
 
 const TRAIL_MS = 550;
@@ -12,10 +14,14 @@ const EVENT_FX_MS = 450;
 
 type Props = {
   replay: ReplayDigest;
+  /** keccak256 of the encoded replay — the handle bound into the signed score. */
+  replayHash?: string;
+  /** Signed score metadata submitted with this run; enables the binding check. */
+  signedMetadata?: string;
   onClose: () => void;
 };
 
-export function ReplayViewer({ replay, onClose }: Props) {
+export function ReplayViewer({ replay, replayHash, signedMetadata, onClose }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(1);
@@ -243,6 +249,11 @@ export function ReplayViewer({ replay, onClose }: Props) {
             {kamikaze ? `Kamikaze · ${replay.aiDifficulty ?? "medium"} AI` : "Classic"}
           </span>
         </div>
+
+        {/* Audit trail: recomputable from the digest, so a viewer can check the
+            run they are watching against what was actually recorded. */}
+        <SeedAudit seed={replay.seed} seedSource={replay.seedSource} replayHash={replayHash} />
+        <ReplayVerification replay={replay} metadata={signedMetadata} recordedHash={replayHash} />
 
         {samples.length === 0 ? (
           <div style={{ color: colors.text.secondary, padding: spacing.lg, textAlign: "center" }}>

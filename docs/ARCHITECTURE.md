@@ -48,6 +48,13 @@ Build produces static `out/index.html` for Netlify/any CDN. Game runs entirely c
 - `finalizeWithSignedWinners()` replaces O(n^2) on-chain sort with O(topN) via EIP-191 signed winner list from the trusted backend signer.
 - **Protocol path:** the signed-settlement design is the bridge to trustless verification. Once deterministic input streams are stored and replayable (see [VISION.md](./VISION.md) Inversion 3), the signer can be retired and the contract becomes the referee.
 
+### Verification & audit surfaces
+
+- **Server (authoritative):** `backend/src/lib/replay-verifier.ts` re-simulates plausibility and re-derives `keccak256(utf8Bytes(replayJson))`, rejecting with `HASH_MISMATCH` before any score is signed.
+- **Client (inspectable):** `src/utils/seed-audit.ts` derives seed provenance + seed/replay fingerprints; `src/utils/replay-verify.ts` recomputes a replay's hash and compares it with the `replayHash` committed by the signed score metadata.
+- The client check is deliberately narrower than the server one: it proves the replay payload matches what was submitted. It is not a signature check and does not re-simulate the run. See [QUANTUM_SEEDS.md](./QUANTUM_SEEDS.md).
+- `GET /api/replays/best/:tournamentId` returns the leader's replay **and** its signed metadata, so a ghost viewer runs the same check (`backend/src/routes/replays.ts`).
+
 ## Domain-driven boundaries (DDD)
 
 We treat the codebase as a set of domains with strict dependency rules.

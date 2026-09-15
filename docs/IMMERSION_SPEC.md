@@ -190,6 +190,10 @@ export function sealFromReplayHash(hash: string): { fragment: string; ring: stri
   cryptographic proof — differentiator and aesthetic in one object.
 - Practice runs: if recording is active the seal appears (honest); if not, an outline-only
   ring with `"unsealed · practice"` — the absence is itself a tutorial on what sealing means.
+- The sealed hash is legible beyond the stamp: the replay viewer's audit panel shows seed
+  provenance, seed/replay fingerprints and verifies the replay hash against the signed score
+  metadata (`src/game/ui/SeedAudit.tsx`, `src/game/ui/ReplayVerification.tsx`), and the ghost
+  race carries the same check as a one-line status. See [QUANTUM_SEEDS.md](./QUANTUM_SEEDS.md).
 
 ### A4. World-physics coupling (MVP)
 

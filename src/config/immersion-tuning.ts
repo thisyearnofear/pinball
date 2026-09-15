@@ -101,6 +101,20 @@ export const IMMERSION = {
     shotCalling: {
         /** Aim lanes (left/right), each embodied by a flipper. */
         lanes: 2,
+        /** Precision: accuracy at or above which a release HOLDS the called lane.
+         *  Below it the shot loses the call and lands the guarded lane. The
+         *  descent is chaotic (the bottom funnel herds every shot to the central
+         *  drain), so the landing lane is resolved from the shot instead; this is
+         *  the skill gate. 0.4 ≈ release within 0.06 of meter centre. */
+        holdAccuracy: 0.4,
+        /** Px above the drain where the shot "commits": the ball is given a
+         *  lateral velocity that carries it into the resolved lane by the gate.
+         *  Must sit BELOW the bottom funnel (y≈1218) so the guided path is clear. */
+        commitGateDistance: 150,
+        /** How far each lane's guide target is pulled from its own centre toward
+         *  the table centreline (0 = lane centre, 1 = the boundary). 0.4 keeps a
+         *  safe margin inside the lane so the guided landing is decisive. */
+        commitTargetPull: 0.4,
         /** Human-scale reaction windows per difficulty (the time a player gets
          *  to perceive the guard, switch lane, and release). NOT the old AI
          *  polling intervals — those were sub-human for a player-facing duel. */

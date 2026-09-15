@@ -153,11 +153,13 @@ export async function scoresRoutes(app: FastifyInstance) {
         app.log.warn({ event: 'COMMUNITY_FEED_RECORD_FAILED', error: e?.message });
       }
 
-      // Keep the leader's verified replay for ghost racing (non-fatal)
+      // Keep the leader's verified replay for ghost racing (non-fatal). The
+      // original signed metadata travels with it so ghost viewers can check the
+      // replay hash binding themselves.
       if (replayVerified && verifiedReplayJson) {
         try {
           const stored = await maybeStoreBestReplay(
-            tid, addr, s, m.mode === 'kamikaze' ? 'kamikaze' : 'classic', verifiedReplayJson
+            tid, addr, s, m.mode === 'kamikaze' ? 'kamikaze' : 'classic', verifiedReplayJson, metadata
           );
           if (stored) app.log.info({ event: 'BEST_REPLAY_UPDATED', tournamentId: tid, address: addr, score: s });
         } catch (e: any) {

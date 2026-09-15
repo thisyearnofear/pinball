@@ -4,6 +4,7 @@ import { formatGameScore } from '@/utils/score-format';
 import { buildShareText } from '@/utils/share-text';
 import { buildChallengeUrl, type ChallengeInvite } from '@/utils/challenge-link';
 import { sealFromReplayHash } from '@/utils/seal';
+import { copyToClipboard } from '@/utils/clipboard';
 import {
   renderShareCardImage,
   shareCardToBlob,
@@ -27,6 +28,8 @@ interface ShareCardProps {
   replayHash?: string;
   /** Verdict kanji stamped inside the seal ring (e.g. 神). */
   verdictKanji?: string;
+  /** Recorded RNG seed provenance (qrng/csprng/local) — the proof badge. */
+  seedSource?: string;
   onDismiss: () => void;
   onShare?: () => void;
 }
@@ -50,8 +53,9 @@ export function ShareCard(props: ShareCardProps) {
         aiDifficulty: props.aiDifficulty,
         taunt: props.taunt,
         worldName: world?.name,
+        seedSource: props.seedSource,
       }),
-    [kamikaze, scoreText, props.tournamentName, props.aiDifficulty, props.taunt, world?.name],
+    [kamikaze, scoreText, props.tournamentName, props.aiDifficulty, props.taunt, world?.name, props.seedSource],
   );
 
   const invite = useMemo<ChallengeInvite>(
@@ -82,6 +86,7 @@ export function ShareCard(props: ShareCardProps) {
         rankName: props.rankName,
         seal: sealFromReplayHash(props.replayHash),
         verdictKanji: props.verdictKanji,
+        seedSource: props.seedSource,
         footerHost: window.location.host,
       });
       if (cancelled) return;
@@ -94,20 +99,11 @@ export function ShareCard(props: ShareCardProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kamikaze, scoreText, props.worldId, props.taunt, props.rankName, props.replayHash]);
+  }, [kamikaze, scoreText, props.worldId, props.taunt, props.rankName, props.replayHash, props.seedSource]);
 
   function flash(next: ShareState) {
     setState(next);
     window.setTimeout(() => setState('idle'), 2000);
-  }
-
-  async function copyText(text: string): Promise<boolean> {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch {
-      return false;
-    }
   }
 
   async function handleShare() {
@@ -141,7 +137,7 @@ export function ShareCard(props: ShareCardProps) {
     }
 
     // Fallback: clipboard.
-    if (await copyText(`${shareText}\n${url}`)) flash('copied');
+    if (await copyToClipboard(`${shareText}\n${url}`)) flash('copied');
     else flash('error');
   }
 
@@ -159,7 +155,7 @@ export function ShareCard(props: ShareCardProps) {
   }
 
   async function handleCopyLink() {
-    if (await copyText(buildChallengeUrl(invite))) flash('linkCopied');
+    if (await copyToClipboard(buildChallengeUrl(invite))) flash('linkCopied');
     else flash('error');
   }
 

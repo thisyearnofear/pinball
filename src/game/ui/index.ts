@@ -39,5 +39,8 @@ export { StabilityMeter } from './StabilityMeter';
 // global and breaks Next.js SSR prerendering of the layout barrel. Import it
 // directly via "@/game/ui/KamiTrialModal" where needed (see GameScreen).
 export { RankStrip } from './RankStrip';
+export { SeedBadge, NextSeedBadge, useNextSeedSource } from './SeedBadge';
+export { SeedAudit } from './SeedAudit';
+export { ReplayVerification } from './ReplayVerification';
 export { ChallengeBanner } from './ChallengeBanner';
 export { ControlsPanel } from './ControlsPanel';

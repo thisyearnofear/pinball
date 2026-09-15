@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
     createShotState, beginServe, signalAim, guardLaneAt, meterPosition, accuracyForPosition,
     launchVector, resolveRelease, laneForX, resolveDrain, reactionMsToTicks, canRelease, feintStage,
+    resolveLandingLane, laneTargetX, commitVelocityX,
     TICKS_PER_SECOND,
 } from "@/model/shot-calling";
 import { IMMERSION } from "@/config/immersion-tuning";
@@ -282,6 +283,73 @@ describe("shot-calling core", () => {
             s = signalAim(s, 0, 0);                  // aim
             expect(canRelease(s, 0)).toBe(true);     // immediate — no race
             expect(feintStage(s, 0)).toEqual("break"); // immediate break
+        });
+    });
+
+    describe("resolveLandingLane() — the landing is the shot's, not the descent's", () => {
+        const HOLD = IMMERSION.shotCalling.holdAccuracy;
+
+        it("should hold the called lane on a clean release", () => {
+            expect(resolveLandingLane(0, 1, 0, LANES)).toEqual(0);
+            expect(resolveLandingLane(1, 1, 0, LANES)).toEqual(1);
+            // Any signed drift is ignored while the release is clean.
+            expect(resolveLandingLane(0, HOLD, -0.5, LANES)).toEqual(0);
+            expect(resolveLandingLane(1, HOLD, 0.5, LANES)).toEqual(1);
+        });
+
+        it("should lose the call on a wild release (two lanes = the other mouth)", () => {
+            expect(resolveLandingLane(0, 0, -0.45, LANES)).toEqual(1);
+            expect(resolveLandingLane(1, 0, -0.45, LANES)).toEqual(0);
+        });
+
+        it("should be symmetric: a wild release never lands the called lane", () => {
+            for (const lane of [0, 1]) {
+                expect(resolveLandingLane(lane, 0, 0.2, LANES)).not.toEqual(lane);
+                expect(resolveLandingLane(lane, 0, -0.2, LANES)).not.toEqual(lane);
+            }
+        });
+
+        it("should collapse to lane 0 when there is only one lane", () => {
+            expect(resolveLandingLane(0, 1, 0, 1)).toEqual(0);
+        });
+    });
+
+    describe("laneTargetX() — commit-gate aim point", () => {
+        it("should place each lane's target on its own side of the centreline", () => {
+            const left = laneTargetX(0, LANES, 800);
+            const right = laneTargetX(1, LANES, 800);
+            expect(left).toBeLessThan(400);
+            expect(right).toBeGreaterThan(400);
+            expect(left).toBeGreaterThanOrEqual(0);
+            expect(right).toBeLessThanOrEqual(800);
+        });
+
+        it("should keep a safe margin from the lane boundary", () => {
+            const left = laneTargetX(0, LANES, 800);
+            const right = laneTargetX(1, LANES, 800);
+            expect(laneForX(left, 800, LANES)).toEqual(0);
+            expect(laneForX(right, 800, LANES)).toEqual(1);
+        });
+    });
+
+    describe("commitVelocityX() — ballistic guide to the target lane", () => {
+        const G = 0.85;
+        it("should push the ball toward the target side", () => {
+            const vxRight = commitVelocityX(400, 1290, 5, 520, 1441, G);
+            const vxLeft = commitVelocityX(400, 1290, 5, 280, 1441, G);
+            expect(vxRight).toBeGreaterThan(0);
+            expect(vxLeft).toBeLessThan(0);
+        });
+
+        it("should be deterministic and bounded", () => {
+            const a = commitVelocityX(360, 1300, 8, 500, 1441, G);
+            const b = commitVelocityX(360, 1300, 8, 500, 1441, G);
+            expect(a).toEqual(b);
+            expect(Number.isFinite(a)).toBe(true);
+        });
+
+        it("should return 0 when gravity is unusable", () => {
+            expect(commitVelocityX(400, 1290, 5, 520, 1441, 0)).toEqual(0);
         });
     });
 });

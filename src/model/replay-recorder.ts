@@ -39,6 +39,8 @@ export type ReplayDigest = {
     world?: string;
     /** Shot-calling: which control scheme produced this run (steer/feint/precision). */
     controlScheme?: string;
+    /** Where the run seed came from (qrng/csprng/local) — provenance, not physics. */
+    seedSource?: string;
     tickCount: number;
     finalScore: number;
     truncated: boolean;
@@ -64,6 +66,7 @@ let mode: "classic" | "kamikaze" = "classic";
 let aiDifficulty: string | undefined;
 let world: string | undefined;
 let controlScheme: string | undefined;
+let seedSource: string | undefined;
 let events: ReplayEvent[] = [];
 let trace: number[] = [];
 let lastTraceTick = -Infinity;
@@ -75,6 +78,7 @@ export function startReplayRecording(opts: {
     aiDifficulty?: string;
     world?: string;
     controlScheme?: string;
+    seedSource?: string;
 }): void {
     recording = true;
     truncated = false;
@@ -84,6 +88,7 @@ export function startReplayRecording(opts: {
     aiDifficulty = opts.aiDifficulty;
     world = opts.world;
     controlScheme = opts.controlScheme;
+    seedSource = opts.seedSource;
     events = [];
     trace = [];
     lastTraceTick = -Infinity;
@@ -132,6 +137,7 @@ export function finishReplayRecording(finalScore: number, tickCount: number): Re
         ...(aiDifficulty ? { aiDifficulty } : {}),
         ...(world ? { world } : {}),
         ...(controlScheme ? { controlScheme } : {}),
+        ...(seedSource ? { seedSource } : {}),
         tickCount,
         finalScore,
         truncated,

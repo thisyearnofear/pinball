@@ -7,6 +7,9 @@ import { formatGameScore } from "@/utils/score-format";
 import { shortenAddress } from "@/utils/address";
 import { getFromStorage, setInStorage } from "@/utils/local-storage";
 import { STORED_GHOST_RACE } from "@/definitions/settings";
+import { SeedAudit } from "./SeedAudit";
+import { ReplayVerification } from "./ReplayVerification";
+import { hasSeedAudit } from "@/utils/seed-audit";
 
 const TRAIL_MS = 450;
 
@@ -14,13 +17,17 @@ type Props = {
   replay: ReplayDigest;
   leaderScore: number;
   leaderAddress: string;
+  /** keccak256 of the leader's replay — lets viewers audit the ghost they race. */
+  replayHash?: string;
+  /** Signed score metadata the leader's replay was submitted with (when known). */
+  metadata?: string;
 };
 
 /**
  * Live picture-in-picture ghost of the tournament leader's run, synced to the
  * running game's engine tick so pauses freeze the ghost too.
  */
-export function GhostRace({ replay, leaderScore, leaderAddress }: Props) {
+export function GhostRace({ replay, leaderScore, leaderAddress, replayHash, metadata }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [enabled, setEnabled] = useState(() => getFromStorage(STORED_GHOST_RACE) !== "off");
 
@@ -122,7 +129,7 @@ export function GhostRace({ replay, leaderScore, leaderAddress }: Props) {
   if (!enabled) {
     return (
       <button
-        onClick={() => toggle(true)}
+        onClick={(e) => { e.stopPropagation(); toggle(true); }}
         style={{
           position: "absolute", bottom: 8, left: 8, zIndex: 30,
           background: "rgba(88, 28, 135, 0.8)", color: "#e9d5ff",
@@ -152,7 +159,7 @@ export function GhostRace({ replay, leaderScore, leaderAddress }: Props) {
           GHOST #1
         </span>
         <button
-          onClick={() => toggle(false)}
+          onClick={(e) => { e.stopPropagation(); toggle(false); }}
           aria-label="Hide ghost race"
           style={{ background: "none", border: "none", color: "#c084fc", cursor: "pointer", fontSize: 12, lineHeight: 1, padding: 0 }}
         >
@@ -162,6 +169,19 @@ export function GhostRace({ replay, leaderScore, leaderAddress }: Props) {
       <canvas ref={canvasRef} style={{ display: "block" }} />
       <div style={{ padding: "3px 6px", fontSize: 9, color: "#d8b4fe", fontVariantNumeric: "tabular-nums", textAlign: "center" }}>
         {formatGameScore(leaderScore, kamikaze)} · {shortAddr}
+      </div>
+      {/* Audit line: the ghost's seed provenance + fingerprint, plus whether the
+          replay's hash still matches the score metadata it was submitted with.
+          Both are recomputable from the stored replay, so a rival's run is
+          checkable while you race it. Clicks here must not nudge the ball. */}
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "0 6px 4px" }}
+      >
+        {hasSeedAudit(replay.seed, replayHash) && (
+          <SeedAudit variant="compact" seed={replay.seed} seedSource={replay.seedSource} replayHash={replayHash} />
+        )}
+        <ReplayVerification variant="compact" replay={replay} actualHash={replayHash} metadata={metadata} />
       </div>
     </div>
   );

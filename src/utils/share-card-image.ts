@@ -5,6 +5,7 @@
  */
 
 import { SEAL_VERMILLION, sealRotation, type Seal } from "./seal";
+import { describeSeedProvenance } from "./seed-provenance";
 
 export type ShareCardImageInput = {
   kamikaze: boolean;
@@ -23,7 +24,28 @@ export type ShareCardImageInput = {
   seal?: Seal | null;
   /** Verdict kanji stamped inside the seal ring (e.g. 神). */
   verdictKanji?: string;
+  /** Recorded RNG seed provenance (qrng/csprng/local) — the proof badge. */
+  seedSource?: string;
 };
+
+/** Rounded-rect path (avoids CanvasRenderingContext2D.roundRect for old WebViews). */
+function roundRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
 
 export const SHARE_CARD_WIDTH = 1200;
 export const SHARE_CARD_HEIGHT = 630;
@@ -114,6 +136,32 @@ export function renderShareCardImage(input: ShareCardImageInput): HTMLCanvasElem
   ctx.fillStyle = "rgba(227,66,52,0.95)";
   ctx.font = "400 40px 'Hiragino Mincho ProN', 'Yu Mincho', serif";
   ctx.fillText("神風", 600, 146);
+
+  // Proof-of-provenance chip (top-right): where this run's seed came from.
+  // Static copy only — it never claims the seed changed the physics.
+  const prov = describeSeedProvenance(input.seedSource);
+  if (prov.tone !== "unknown") {
+    const label = `${prov.symbol} ${prov.label}`;
+    ctx.save();
+    ctx.font = "700 20px system-ui, -apple-system, sans-serif";
+    const textW = ctx.measureText(label).width;
+    const padX = 16;
+    const chipH = 38;
+    const right = SHARE_CARD_WIDTH - 40;
+    const x0 = right - (textW + padX * 2);
+    const y0 = 48;
+    roundRectPath(ctx, x0, y0, textW + padX * 2, chipH, chipH / 2);
+    ctx.fillStyle = "rgba(8,8,16,0.6)";
+    ctx.fill();
+    ctx.strokeStyle = prov.color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = prov.color;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, x0 + padX, y0 + chipH / 2 + 1);
+    ctx.restore();
+  }
 
   // Score
   ctx.fillStyle = "#ffffff";

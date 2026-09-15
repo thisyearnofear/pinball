@@ -90,17 +90,20 @@ rather than one combined test (you can't debug six variables at once):
 - MAMORU visibly **pre-commits** a lane (fixed, shown from serve start); no live
   reaction race.
 - Pick the open lane, then a timing meter sets launch precision.
-- Misses are **signed and deterministic**: release left of center drifts left,
-  right of center drifts right, distance sets the magnitude — so the player
-  learns "I released late, so I pushed it right." No random scatter.
-- **Tight meter:** the sweet spot is narrow (10% of the half-range) and the
-  max angle error (1.0) exceeds the lateral bias (0.55), so an off-center
-  release can override the intended lane. A bad release costs time (weaker
-  launch + wrong direction); a good release threads the open lane.
-- **Known limitation:** physics bouncing after launch can wash out the meter's
-  directional effect, so a well-timed release doesn't yet reliably outperform
-  a careless one. See the precision critique in
-  `tests/sim/shot-calling-skill.sim.ts`.
+- **The landing lane is resolved from the shot, not the descent.** The meter is
+  a precision gate: a release inside the sweet spot (accuracy ≥ `holdAccuracy`)
+  holds the called lane; a wild release loses the call and lands MAMORU's lane
+  (the save). It is deterministic — no random scatter — so input → error →
+  outcome is learnable.
+- The ball is **guided into that lane** at a commit gate just above the drain
+  (a real, bounded lateral velocity), so what the player sees matches the
+  outcome. This replaced a physically-degenerate design: from the right plunger
+  the ball rode the right channel, crossed at the top, and the bottom funnel
+  herded *every* shot to the central drain, so the raw landing x never crossed
+  the lane boundary and both the aim and the meter were meaningless. See the
+  precision skill-gate assertion in `tests/sim/shot-calling-skill.sim.ts`.
+- **Tight meter:** the sweet spot is narrow (10% of the half-range), so holding
+  the call takes real timing; a bad release costs the save and the re-serve time.
 
 **Both:** at the drain the contest is telegraphed and deterministic — land in
 MAMORU's guarded lane and it saves (re-serve); an open lane drains (scores). No

@@ -71,6 +71,13 @@ flowchart LR
 | Lobby attract mode (machine plays itself) | ✅ live | `src/game/ui/ArcadeLobby.tsx` |
 | Adaptive MAMORU guard policy (feint hold vs chase) | ✅ live | `src/model/shot-calling.ts` |
 | Skill-discrimination bot harness (null/random/rote/optimal) | ✅ live | `tests/sim/shot-calling-skill.sim.ts` |
+| Quantum-seeded runs (QRNG seed, replay-verifiable) | ✅ live | `src/services/quantum-seed.ts` |
+| Seed audit readout in ghost race + replay viewer (provenance, seed + replay hashes, tap-to-copy) | ✅ live | `src/game/ui/SeedAudit.tsx` |
+| Replay-hash ↔ signed score-metadata check in the replay viewer + ghost race (with metadata copy) | ✅ live | `src/utils/replay-verify.ts` |
+
+A run's seed can optionally come from a quantum RNG (`GET /api/quantum/seed`) —
+the seed is recorded in the replay, so runs stay fully re-simulatable. See
+[docs/QUANTUM_SEEDS.md](docs/QUANTUM_SEEDS.md).
 
 **Verification story:** every run records its RNG seed, all inputs, and a ball
 position trace. The replay ships to the backend, its keccak hash is bound into

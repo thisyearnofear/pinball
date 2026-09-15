@@ -207,6 +207,8 @@ export type GameDef = {
     underworld: boolean; // whether underworld is accessible below the table
     kamikaze?: KamikazeState; // optional Kamikaze Ball mode state
     rngSeed?: number;    // seed for deterministic gameplay rolls (recorded in replays)
+    /** Provenance of rngSeed ("qrng" | "csprng" | "local"), recorded for audit. */
+    seedSource?: string;
     rng?: () => number;  // seeded PRNG; falls back to Math.random when absent
     worldPhysics?: TablePhysics; // A4: per-world gravity modifier (deterministic, seeded)
     /** Control scheme: "steer" = classic tap-to-nudge; "feint"/"precision" = the

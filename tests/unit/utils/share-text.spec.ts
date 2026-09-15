@@ -28,6 +28,20 @@ describe("buildShareText", () => {
         const text = buildShareText({ kamikaze: true, scoreText: "9.9s" });
         expect(text).not.toContain("Tournament:");
         expect(text).not.toContain("machine said");
+        expect(text).not.toContain("Seed:");
         expect(text).toContain("Drained the ball in 9.9s.");
+    });
+
+    it("adds a seed-provenance line when the source is recorded", () => {
+        const kamikaze = buildShareText({ kamikaze: true, scoreText: "4.5s", seedSource: "qrng" });
+        expect(kamikaze).toContain("Seed: ⚛ quantum RNG");
+
+        const classic = buildShareText({ kamikaze: false, scoreText: "125,000", seedSource: "local" });
+        expect(classic).toContain("Seed: ◇ device CSPRNG");
+    });
+
+    it("omits the seed line for unrecorded provenance", () => {
+        const text = buildShareText({ kamikaze: true, scoreText: "4.5s", seedSource: "mystery" });
+        expect(text).not.toContain("Seed:");
     });
 });

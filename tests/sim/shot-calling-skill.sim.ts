@@ -4,9 +4,11 @@
  * Purpose: answer "does doing nothing do as well as playing well?"
  *
  * Two test groups:
- *
- * 1. Shot-calling (feint / precision) — drives the real game model through
+ *     * 1. Shot-calling (feint / precision) — drives the real game model through
  *    init / update / shotAim / shotRelease. Four bots of escalating skill.
+ *    The skill being tested is the LANE CALL + the precision meter, both of
+ *    which decide the landing lane (see resolveLandingLane); the ball is then
+ *    guided into that lane at the commit gate.
  *
  * 2. Steer (classic tap-to-nudge) — drives init / update / nudgeBallToward.
  *    Three bots: null (no input), passive (occasional nudge), active (constant
@@ -16,7 +18,7 @@
  *
  * Both groups compute run verdicts (the same S/A/B/C/D grades a real player
  * sees) and assert the skill-discrimination invariant: the best bot must beat
- * the worst bot. Today this is expected to FAIL on steer — that's the point.
+ * the worst bot — and, on precision, beat the permanently-mistimed rote bot.
  *
  * Run: npm run sim:kamikaze
  * Debug: SIM_DEBUG=1 SIM_SEED=11 SIM_DIFF=easy SIM_VARIANT=feint npm run sim:kamikaze
@@ -32,7 +34,7 @@ import {
     init, update, shotAim, shotRelease,
     getShotPhase, getShotCanRelease, getShotFeintStage,
     getShotGuardLane, getShotLanes, getShotAimedLane,
-    getShotMeterPosition, getTickCount, getBallPosition,
+    getShotMeterPosition, getTickCount, getBallPosition, getLastShotResult,
     nudgeBallToward, getPhysicsEngine,
 } from "@/model/game";
 import Matter from "matter-js";
@@ -42,6 +44,7 @@ import { createKamikazeState, type AIDifficulty } from "@/model/kamikaze";
 import { mulberry32 } from "@/utils/rng";
 import { getRunVerdict } from "@/config/run-verdict";
 import { IMMERSION } from "@/config/immersion-tuning";
+import { TICKS_PER_SECOND } from "@/model/shot-calling";
 
 const FRAME_MS = 1000 / 60;
 const RUN_CAP_MS = 60_000;
@@ -224,6 +227,8 @@ type ShotBotCtx = {
     guardLane: number | null;
     aimedLane: number | null;
     meterPos: number;
+    /** Per-run scratch (reset every run) so a bot can hold timing state. */
+    state: Record<string, number>;
 };
 
 type ShotBot = {
@@ -304,17 +309,20 @@ const shotBots: ShotBot[] = [
                 }
                 return;
             }
-            // Precision: aim the open lane, fire immediately. The meter's
-            // sweet-spot wait doesn't help because physics bouncing washes
-            // out the launch direction — a good release gets saved while a
-            // bad release's chaos sometimes drains. This documents the known
-            // limitation: precision's meter doesn't discriminate skill yet.
+            // Precision: call the open lane, then release ON THE SWEET SPOT.
+            // The meter starts on the first aim and the marker is a triangle
+            // wave (0 -> 1 -> 0) with period TICKS_PER_SECOND/meterSpeed, so
+            // the first crossing of center (position 0.5) is a quarter-cycle
+            // after the aim. Release there for maximum accuracy.
             if (ctx.aimedLane === null) {
                 const open = ctx.guardLane === 0 ? 1 : 0;
+                ctx.state.aimTick = ctx.tick;
                 shotAim(open);
                 return;
             }
-            if (ctx.canRelease) shotRelease();
+            const ticksPerCycle = TICKS_PER_SECOND / IMMERSION.shotCalling.meterSpeed;
+            const sweetTick = (ctx.state.aimTick ?? ctx.tick) + Math.round(ticksPerCycle * 0.25);
+            if (ctx.tick >= sweetTick && ctx.canRelease) shotRelease();
         },
     },
 ];
@@ -355,9 +363,38 @@ async function simulateShotRun(
     const start = performance.now();
     const maxFrames = Math.ceil(RUN_CAP_MS / FRAME_MS);
     let prevPhase = "";
+    const botState: Record<string, number> = {};
+    // Prime with the previous run's result so a stale object from a prior bot
+    // doesn't log a phantom serve at frame 0.
+    let seenResult: unknown = getLastShotResult();
+    let flightMinX = Infinity;
+    let flightMaxX = -Infinity;
+    const crossings: string[] = [];
+    const crossYs = [800, 1000, 1100, 1200, 1300, 1400];
+    let lastY = -1e9;
 
     for (let frame = 0; frame < maxFrames; frame++) {
         update(performance.now(), 1);
+
+        if (process.env.SIM_TRACE) {
+            if (getShotPhase() === "resolving") {
+                const p = getBallPosition();
+                if (p) {
+                    flightMinX = Math.min(flightMinX, p.x); flightMaxX = Math.max(flightMaxX, p.x);
+                    for (const cy of crossYs) {
+                        if (lastY < cy && p.y >= cy) crossings.push(`${cy}:${p.x.toFixed(0)}`);
+                    }
+                    lastY = p.y;
+                }
+            }
+            const res = getLastShotResult();
+            if (res && res !== seenResult) {
+                seenResult = res;
+                // eslint-disable-next-line no-console
+                console.log(`[trace ${bot.id}/${variant}/s${seed}] called=${res.calledLane} guard=${res.guardLane} acc=${res.accuracy.toFixed(3)} off=${res.offset.toFixed(3)} xRange=[${flightMinX === Infinity ? "-" : flightMinX.toFixed(0)},${flightMaxX === -Infinity ? "-" : flightMaxX.toFixed(0)}] land=${res.landingLane}@${res.landingX.toFixed(0)} policy=${res.guardPolicy} desc=${crossings.join(",")} => ${res.result}`);
+                flightMinX = Infinity; flightMaxX = -Infinity; crossings.length = 0; lastY = -1e9;
+            }
+        }
 
         const phase = getShotPhase();
         if (phase === "aiming") {
@@ -373,6 +410,7 @@ async function simulateShotRun(
                 guardLane: getShotGuardLane(),
                 aimedLane: getShotAimedLane(),
                 meterPos: getShotMeterPosition(),
+                state: botState,
             };
             if (process.env.SIM_DEBUG && bot.id === "optimal") {
                 // eslint-disable-next-line no-console
@@ -573,25 +611,28 @@ describe("skill-discrimination simulation", () => {
         expect(optimalBeatsNull).toBe(true);
         expect(optimalBeatsRandom).toBe(true);
 
-        // ── Precision critique: rote beats optimal ──
-        // On precision, the rote bot (fire immediately at the open lane) scores
-        // BETTER than the optimal bot (wait for the meter sweet spot). This is
-        // because the meter timing barely matters — the lateral strength
-        // dominates the outcome, so waiting just adds time. This documents the
-        // problem: precision's meter doesn't discriminate skill.
-        let roteBeatsOptimalOnPrecision = false;
+        // ── Precision skill gate (the fixed limitation) ──
+        // The timing meter must BE the skill gate: a well-timed release holds the
+        // called lane and drains the open mouth, while a permanently mistimed
+        // release loses the call every serve and is saved forever. Rote fires the
+        // frame it aims (worst possible timing), so it must lose to an optimal
+        // meter. This is deliberately NOT tautological — if the commit guidance or
+        // the lane resolver is removed, optimal stops draining and this fails.
+        let optimalDrainsEverySeed = true;
+        let optimalBeatsRoteOnPrecision = false;
         for (const difficulty of DIFFICULTIES) {
             const opt = allResults.get(`optimal:precision:${difficulty}`)!;
             const rote = allResults.get(`rote:precision:${difficulty}`)!;
-            if (median(rote.map((r) => r.score)) < median(opt.map((r) => r.score))) {
-                roteBeatsOptimalOnPrecision = true;
+            if (opt.some((r) => r.drainMs === null)) optimalDrainsEverySeed = false;
+            if (median(opt.map((r) => r.score)) < median(rote.map((r) => r.score))) {
+                optimalBeatsRoteOnPrecision = true;
             }
         }
         // eslint-disable-next-line no-console
-        console.log(`  Precision critique: rote<optimal=${roteBeatsOptimalOnPrecision ? "CONFIRMED (rote beats optimal)" : "not detected"}`);
+        console.log(`  Precision skill gate: optimal-drains-every-seed=${optimalDrainsEverySeed ? "PASS" : "FAIL"} optimal<rote=${optimalBeatsRoteOnPrecision ? "PASS" : "FAIL"}`);
 
-        // This should be false once precision is fixed (meter should matter).
-        expect(roteBeatsOptimalOnPrecision).toBe(false);
+        expect(optimalDrainsEverySeed).toBe(true);
+        expect(optimalBeatsRoteOnPrecision).toBe(true);
     }, 600_000);
 
     it("steer: measures drain times and grades per bot × difficulty (the 'do nothing' critique)", async () => {

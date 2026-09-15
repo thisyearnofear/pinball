@@ -10,9 +10,12 @@
  *                 reacts to your aim after a human-scale delay; feint to draw it
  *                 off, then release the open lane before it catches up.
  *   - precision:  call + execute. MAMORU pre-commits a lane (shown); you pick the
- *                 open lane and nail a timing meter. Accuracy is a SIGNED,
- *                 deterministic error — release left of center drifts left, right
- *                 drifts right — so input → error → outcome is learnable.
+ *                 open lane and nail a timing meter. A release inside the sweet
+ *                 spot HOLDS the called lane; a wild one LOSES the call and lands
+ *                 MAMORU's lane (the save). The landing lane is thus a pure
+ *                 function of the shot — see resolveLandingLane — because the
+ *                 table's reflectors and bottom funnel otherwise erase the launch
+ *                 direction entirely.
  *
  * The duel starts on the player's FIRST aim: no lane, guard, or meter exists
  * before intent is expressed. Everything is pure and derived from
@@ -61,6 +64,11 @@ export type ShotState = {
     accuracy: number;
     /** Signed meter offset at release (-0.5..0.5); drives the directional miss. */
     releaseOffset: number;
+    /** Lane resolved at release from the shot (intent + signed meter error).
+     *  This — not the chaotic descent — is the drain authority. */
+    landingLane: number | null;
+    /** Whether the commit-gate guidance has fired for this shot. */
+    committed: boolean;
     serveCount: number;
     rallyStartTick: number;
     /** Feint: MAMORU's guard policy for this serve. */
@@ -90,6 +98,8 @@ export function createShotState(
         releaseTick: null,
         accuracy: 0,
         releaseOffset: 0,
+        landingLane: null,
+        committed: false,
         serveCount: 0,
         rallyStartTick: startTick,
         guardPolicy,
@@ -113,6 +123,8 @@ export function beginServe(state: ShotState, tick: number, precommittedGuard: nu
         releaseTick: null,
         accuracy: 0,
         releaseOffset: 0,
+        landingLane: null,
+        committed: false,
         serveCount: state.serveCount + 1,
         guardPolicy,
     };
@@ -245,7 +257,59 @@ export function resolveRelease(
     return { accuracy, offset, launch: launchVector(state.aimedLane, state.lanes, accuracy, offset, baseSpeed) };
 }
 
-/** Map a ball x-position to a lane index (drain landing detection). */
+/**
+ * The lane a shot lands in — resolved from the SHOT, not the descent.
+ *
+ * The 2D playfield is chaotic: from the right plunger the ball rides the right
+ * channel, crosses at the top, and the bottom funnel (y≈1218) herds every shot
+ * to the central drain, so raw landing x never crossed the lane boundary and the
+ * aim and meter were both meaningless (see tests/sim/shot-calling-skill.sim.ts).
+ * The fair, legible authority is the input the player actually made: the called
+ * lane plus how accurately the meter was released. A clean release (accuracy at
+ * or above the hold threshold) holds the call. A wild release fails to hold it —
+ * with two lanes it lands the other mouth (the one you didn't call), and with
+ * more lanes it slides one lane toward the side the meter was off, so the miss
+ * direction stays legible. Pure — replay-safe.
+ */
+export function resolveLandingLane(aimedLane: number, accuracy: number, offset: number, lanes: number): number {
+    if (lanes <= 1) return 0;
+    if (accuracy >= IMMERSION.shotCalling.holdAccuracy) return aimedLane;
+    const dir = offset < 0 ? -1 : 1;
+    const shifted = lanes <= 2 ? (lanes - 1) - aimedLane : aimedLane + dir;
+    return Math.max(0, Math.min(lanes - 1, shifted));
+}
+
+/**
+ * The x a guided shot aims for inside a lane: near the lane's own centre but
+ * pulled toward the table centreline so the commit slide reads as a curve into
+ * the lane, not a rubber-band. Pure.
+ */
+export function laneTargetX(lane: number, lanes: number, tableWidth: number): number {
+    const centre = (lane + 0.5) / lanes;
+    const fraction = centre + (0.5 - centre) * IMMERSION.shotCalling.commitTargetPull;
+    return tableWidth * fraction;
+}
+
+/**
+ * Horizontal velocity that carries the ball from (x, y) with vertical velocity
+ * `vy` into `targetX` by the drain (ballistic, under `gravity`). Pure: the same
+ * gate state always produces the same commit, so replays re-simulate
+ * identically. Returns 0 if the ball cannot reach the drain from here.
+ */
+export function commitVelocityX(
+    x: number, y: number, vy: number, targetX: number, drainY: number, gravity: number,
+): number {
+    const a = 0.5 * gravity;
+    if (a <= 0) return 0;
+    const c = y - drainY; // negative: the drain sits below the gate
+    const disc = vy * vy - 4 * a * c;
+    if (!Number.isFinite(disc) || disc < 0) return 0;
+    const t = (-vy + Math.sqrt(disc)) / (2 * a);
+    if (!Number.isFinite(t) || t <= 0) return 0;
+    return (targetX - x) / t;
+}
+
+/** Map a ball x-position to a lane index (classic drain detection / fallback). */
 export function laneForX(x: number, tableWidth: number, lanes: number): number {
     const frac = Math.max(0, Math.min(1, x / tableWidth));
     return Math.min(lanes - 1, Math.floor(frac * lanes));

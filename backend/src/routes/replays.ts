@@ -42,7 +42,19 @@ export async function getStoredReplay(
 
 const BEST_TTL_SECONDS = 60 * 60 * 24 * 90;
 
-export type BestReplay = { score: number; address: string; mode: string; replay: string };
+export type BestReplay = {
+  score: number;
+  address: string;
+  mode: string;
+  replay: string;
+  /**
+   * The signed score metadata the replay was submitted with. Carried so ghost
+   * viewers can verify the replay hash against the same payload the backend
+   * verified (see src/utils/replay-verify.ts). Absent on entries stored before
+   * this existed — clients must treat a missing value as "unverifiable".
+   */
+  metadata?: string;
+};
 
 const bestMemStore = new Map<number, BestReplay>();
 
@@ -55,10 +67,11 @@ export async function maybeStoreBestReplay(
   address: string,
   score: number,
   mode: 'classic' | 'kamikaze',
-  replay: string
+  replay: string,
+  metadata?: string
 ): Promise<boolean> {
   const improves = (next: number, cur: number) => (mode === 'kamikaze' ? next < cur : next > cur);
-  const entry: BestReplay = { score, address, mode, replay };
+  const entry: BestReplay = { score, address, mode, replay, ...(metadata ? { metadata } : {}) };
   const redis = getRedis();
   if (redis) {
     const key = `replay:best:${tournamentId}`;

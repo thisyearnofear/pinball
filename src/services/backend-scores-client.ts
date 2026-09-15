@@ -66,6 +66,9 @@ export type BestReplay = {
   address: string;
   mode: 'classic' | 'kamikaze';
   replay: string; // encoded ReplayDigest JSON
+  // Signed score metadata the replay was submitted with. Absent on entries
+  // stored before the backend recorded it — treat as "unverifiable", not a pass.
+  metadata?: string;
 };
 
 export type CommunityRun = {
@@ -112,6 +115,7 @@ export async function fetchBestReplay(tournamentId: number): Promise<BestReplay 
         address: String(data.address),
         mode: data.mode === 'kamikaze' ? 'kamikaze' : 'classic',
         replay: data.replay as string,
+        ...(typeof data.metadata === 'string' && data.metadata ? { metadata: data.metadata } : {}),
       };
     }
   } catch {

@@ -53,6 +53,7 @@ import { isInsideNimiqPay } from "@/services/nimiq/nimiq-provider";
 import type { ReplayDigest } from "@/model/replay-recorder";
 import { decodeReplay } from "@/model/replay-recorder";
 import { fetchBestReplay } from "@/services/backend-scores-client";
+import { replayHashOf } from "@/utils/seed-audit";
 
 type View = "lobby" | "game" | "paused";
 type ActiveModal = "settings" | "how" | "about" | "leaderboard" | null;
@@ -116,10 +117,12 @@ function GameScreenInner() {
   const [paymentBusy, setPaymentBusy] = useState(false);
   const [lastScore, setLastScore] = useState<number>(0);
   const [lastReplayHash, setLastReplayHash] = useState<string | undefined>(undefined);
+  const [lastSeedSource, setLastSeedSource] = useState<string | undefined>(undefined);
+  const [lastSignedMetadata, setLastSignedMetadata] = useState<string | undefined>(undefined);
   const [dailyResult, setDailyResult] = useState<{ dayKey: string; mode: "classic" | "kamikaze"; best: number; isPB: boolean } | null>(null);
   const [lastReplay, setLastReplay] = useState<ReplayDigest | null>(null);
   const [showReplay, setShowReplay] = useState(false);
-  const [ghost, setGhost] = useState<{ digest: ReplayDigest; score: number; address: string } | null>(null);
+  const [ghost, setGhost] = useState<{ digest: ReplayDigest; score: number; address: string; replayHash?: string; metadata?: string } | null>(null);
   const [submission, setSubmission] = useState<{
     tournamentId: number; score: number; playerName: string; metaData: string; walletPort: WalletPort;
   } | null>(null);
@@ -355,7 +358,15 @@ function GameScreenInner() {
         try {
           const digest = decodeReplay(best.replay);
           if (digest.v !== 1 || digest.mode !== effectiveGameMode || !digest.trace?.length) return;
-          setGhost({ digest, score: best.score, address: best.address });
+          // Hash the raw payload (before decode) so it matches the backend's
+          // verification binding, letting viewers audit the ghost they race.
+          setGhost({
+            digest,
+            score: best.score,
+            address: best.address,
+            replayHash: replayHashOf(best.replay),
+            ...(best.metadata ? { metadata: best.metadata } : {}),
+          });
         } catch {
           // corrupt replay payload: no ghost
         }
@@ -390,9 +401,11 @@ function GameScreenInner() {
     activityFeed.log("powerup", `The wind answers your first touch (+${XP_FIRST_ACTION} XP)`);
   }, [toast, activityFeed]);
 
-  const handleRunEnd = useCallback((score: number, replayHash?: string) => {
+  const handleRunEnd = useCallback((score: number, replayHash?: string, details?: { seedSource?: string; metaData?: string }) => {
     setLastScore(score);
     setLastReplayHash(replayHash);
+    setLastSeedSource(details?.seedSource);
+    setLastSignedMetadata(details?.metaData);
     recordRun({ score, mode, gameMode: effectiveGameMode, worldId: activeWorldId, tournamentId: tournament.tournamentId ?? undefined });
     // Daily Challenge retention: only runs matching today's mode count toward
     // the day's PB, so classic scores never pollute a kamikaze drain-time PB.
@@ -645,6 +658,7 @@ function GameScreenInner() {
               challengeOutcome={challengeOutcome}
               playerName={playerName || undefined}
               replayHash={lastReplayHash}
+              seedSource={lastSeedSource}
               onDismiss={() => setShowCelebration(false)}
               onPlayAgain={() => { setShowCelebration(false); if (mode === "practice") startPractice(); else startTournament(); }}
               onPlayTournament={() => { setShowCelebration(false); startTournament(); }}
@@ -655,7 +669,12 @@ function GameScreenInner() {
           )}
 
           {showReplay && lastReplay && (
-            <ReplayViewer replay={lastReplay} onClose={() => setShowReplay(false)} />
+            <ReplayViewer
+              replay={lastReplay}
+              replayHash={lastReplayHash}
+              signedMetadata={lastSignedMetadata}
+              onClose={() => setShowReplay(false)}
+            />
           )}
 
           <CelebrationParticles active={showCelebration} />

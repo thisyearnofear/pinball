@@ -32,4 +32,29 @@ describe('best replay store (ghost racing)', () => {
   it('returns null for tournaments without a best replay', async () => {
     expect(await getBestReplay(9999)).toBeNull();
   });
+
+  it('carries the signed score metadata alongside the replay', async () => {
+    // Ghost viewers verify the replay hash against this payload, so it must
+    // round-trip through the store byte-for-byte.
+    const metadata = JSON.stringify({ mode: 'kamikaze', replayHash: '0x' + 'ab'.repeat(32) });
+    await maybeStoreBestReplay(104, A, 4000, 'kamikaze', replayA, metadata);
+    const best = await getBestReplay(104);
+    expect(best?.metadata).toBe(metadata);
+    expect(best?.replay).toBe(replayA);
+  });
+
+  it('omits metadata for entries stored without it (older replays)', async () => {
+    await maybeStoreBestReplay(105, A, 4000, 'kamikaze', replayA);
+    const best = await getBestReplay(105);
+    expect(best?.metadata).toBeUndefined();
+  });
+
+  it('replaces a metadata-free leader with one that has metadata', async () => {
+    await maybeStoreBestReplay(106, A, 5000, 'kamikaze', replayA);
+    const metadata = JSON.stringify({ mode: 'kamikaze', replayHash: '0x' + 'cd'.repeat(32) });
+    expect(await maybeStoreBestReplay(106, B, 3000, 'kamikaze', replayB, metadata)).toBe(true);
+    const best = await getBestReplay(106);
+    expect(best?.address).toBe(B);
+    expect(best?.metadata).toBe(metadata);
+  });
 });

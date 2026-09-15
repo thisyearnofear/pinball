@@ -37,6 +37,12 @@ const EnvSchema = z.object({
   NIM_TREASURY_ADDRESS: z.string().optional(),
   NIM_ENTRY_FEE_LUNA: z.coerce.number().int().nonnegative().default(100000),
   NIMIQ_RPC_URL: z.string().optional(),
+
+  // Quantum-seeded runs: optional HTTP-JSON QRNG to source run seeds from.
+  // When unset, /api/quantum/seed returns CSPRNG seeds (feature stays inert).
+  QUANTUM_SEED_URL: z.string().url().optional(),
+  QUANTUM_SEED_API_KEY: z.string().optional(),
+  QUANTUM_SEED_TIMEOUT_MS: z.coerce.number().int().positive().default(2000),
 });
 
 export const env = EnvSchema.parse(process.env);

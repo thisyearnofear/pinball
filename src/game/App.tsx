@@ -7,12 +7,15 @@ import { ToastProvider } from "@/game/ui";
 import GameScreen from "./GameScreen";
 import { WagmiGameShell } from "./WagmiGameShell";
 import { NimiqGameShell } from "./NimiqGameShell";
+import { prefetchQuantumSeeds } from "@/services/quantum-seed";
 
 const queryClient = new QueryClient();
 
 export default function App() {
   useEffect(() => {
     injectGlobalStyles();
+    // Warm the quantum seed buffer in the background; harmless if unavailable.
+    void prefetchQuantumSeeds();
   }, []);
 
   const cfg = getAppConfig();

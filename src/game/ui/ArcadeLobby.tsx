@@ -11,6 +11,7 @@ import { Button, Skeleton, NeonTitle, CRTOverlay, PlayerCard } from "@/game/ui";
 import { burstOnElement } from "@/utils/burst-fx";
 import { AttractMode } from "./AttractMode";
 import { RankStrip } from "./RankStrip";
+import { NextSeedBadge } from "./SeedBadge";
 import { ChallengeBanner } from "./ChallengeBanner";
 import { CommunityFeedPanel } from "./CommunityFeedPanel";
 import type { CommunityRun } from "@/services/backend-scores-client";
@@ -87,6 +88,10 @@ export function ArcadeLobby(props: Props) {
           <p className={styles.marqueeSubtitle}>
             Drain-to-win pinball — the machine fights back
           </p>
+          {/* Proof-of-provenance: where the NEXT run's RNG seed comes from. */}
+          <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
+            <NextSeedBadge caption="next run seed" />
+          </div>
         </div>
 
         <AttractMode />

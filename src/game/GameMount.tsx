@@ -21,7 +21,8 @@ import { type WorldReaction } from "@/presentation/world-reactor";
 import { isKamikazeMode, getLastTaunt, getTickCount, getTimeScale, consumeMomentumShift, getMachineMood, consumeKillCam, setKillCamEnabled, isShotCallMode, getShotVariant, getShotPhase, getShotAimedLane, getShotGuardLane, getShotMeterPosition, getShotLanes, getLastShotResult, getShotCanRelease, getShotFeintStage, shotRelease, type ShotResult } from "@/model/game";
 import { createKamikazeState, POWERUP_NAMES, type AIDifficulty } from "@/model/kamikaze";
 import type { PowerUpSide } from "@/definitions/game";
-import { mulberry32, createRunSeed } from "@/utils/rng";
+import { mulberry32 } from "@/utils/rng";
+import { nextRunSeed, lastSeedSource } from "@/services/quantum-seed";
 import * as haptics from "@/utils/haptics";
 import { startMachinePulse, stopMachinePulse } from "@/services/audio-service";
 import { formatGameScore } from "@/utils/score-format";
@@ -40,7 +41,9 @@ function createRunGame(opts: {
   worldId?: string;
   controlScheme?: "steer" | "feint" | "precision";
 }): GameDef {
-  const rngSeed = createRunSeed();
+  // Quantum when available, local CSPRNG otherwise — both recorded in the
+  // replay, so the run stays reproducible either way.
+  const rngSeed = nextRunSeed();
   return {
     id: opts.id,
     active: false,
@@ -52,6 +55,7 @@ function createRunGame(opts: {
     underworld: false,
     kamikaze: opts.gameMode === "kamikaze" ? createKamikazeState(opts.aiDifficulty) : undefined,
     rngSeed,
+    seedSource: lastSeedSource(),
     rng: mulberry32(rngSeed),
     worldPhysics: getWorldById(opts.worldId ?? "")?.physics,
     controlScheme: opts.controlScheme,
@@ -66,6 +70,7 @@ function beginRunRecording(g: GameDef, gameMode: GameMode, aiDifficulty?: AIDiff
     mode: gameMode,
     world: worldId,
     controlScheme: g.controlScheme,
+    seedSource: g.seedSource,
     aiDifficulty: gameMode === "kamikaze" ? aiDifficulty ?? "medium" : undefined,
   });
 }
@@ -200,9 +205,9 @@ type Props = {
   controlScheme?: "steer" | "feint" | "precision"; // Kamikaze control: nudge vs the two shot-calling variants
   paused: boolean;
   /** Tournament leader's replay for live ghost racing. */
-  ghost?: { digest: ReplayDigest; score: number; address: string } | null;
+  ghost?: { digest: ReplayDigest; score: number; address: string; replayHash?: string; metadata?: string } | null;
   onActiveChange?: (active: boolean) => void;
-  onRunEnd?: (score: number, replayHash?: string) => void;
+  onRunEnd?: (score: number, replayHash?: string, details?: { seedSource?: string; metaData?: string }) => void;
   /** Fired once on the player's first deliberate in-run action (early win). */
   onFirstAction?: () => void;
   onReplayAvailable?: (replay: ReplayDigest) => void;
@@ -661,15 +666,8 @@ export default function GameMount(props: Props) {
           Math.max(1, Math.round(performance.now() - runStartRef.current)),
         );
 
-        props.onRunEnd?.(g.score, replayHash);
-
-        if (props.mode !== "tournament") return;
-
-        const tournamentId = props.tournamentId;
-        const address = props.playerAddress;
-
-        if (!tournamentId || !address || !props.walletPort) return;
-
+        // Built before the run-end notification so the replay viewer can verify
+        // the replay's hash against the exact payload that gets submitted/signed.
         const metadata = JSON.stringify({
           table: g.table,
           multiplier: g.multiplier,
@@ -679,6 +677,18 @@ export default function GameMount(props: Props) {
           ...(replayHash ? { replayHash } : {}),
           ...(props.gameMode === "kamikaze" ? { aiDifficulty: props.aiDifficulty ?? "medium" } : {}),
         });
+
+        props.onRunEnd?.(g.score, replayHash, {
+          seedSource: g.seedSource,
+          ...(props.mode === "tournament" ? { metaData: metadata } : {}),
+        });
+
+        if (props.mode !== "tournament") return;
+
+        const tournamentId = props.tournamentId;
+        const address = props.playerAddress;
+
+        if (!tournamentId || !address || !props.walletPort) return;
 
         // Ship the full replay to the backend BEFORE requesting the signature:
         // the backend looks the replay up by its hash to verify it pre-signing.
@@ -1207,6 +1217,8 @@ export default function GameMount(props: Props) {
             replay={props.ghost.digest}
             leaderScore={props.ghost.score}
             leaderAddress={props.ghost.address}
+            replayHash={props.ghost.replayHash}
+            metadata={props.ghost.metadata}
           />
         )}
         {kamikazeMessage && (

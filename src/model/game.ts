@@ -43,8 +43,8 @@ import { worldGravityX, worldGravityY } from "@/model/world-physics";
 import { IMMERSION } from "@/config/immersion-tuning";
 import {
     createShotState, beginServe, signalAim, guardLaneAt, resolveRelease, meterPosition,
-    laneForX, resolveDrain, canRelease, feintStage, type ShotState, type ShotVariant, type FeintStage,
-    type GuardPolicy,
+    laneForX, resolveDrain, canRelease, feintStage, resolveLandingLane, laneTargetX, commitVelocityX,
+    type ShotState, type ShotVariant, type FeintStage, type GuardPolicy,
 } from "@/model/shot-calling";
 import { enqueueTrack, setFrequency, playSoundEffect, duckMusic, playTaikoHit, playFurinChime, momentarySilence } from "@/services/audio-service";
 import * as haptics from "@/utils/haptics";
@@ -130,7 +130,12 @@ export type ShotResult = {
     accuracy: number;
     offset: number;        // signed meter deviation (-0.5..0.5)
     landingLane: number;
+    /** Ball x at the drain gate (px) — the HUD's precise "why" behind the lane. */
+    landingX: number;
     guardLane: number | null;
+    /** Feint: how MAMORU played this serve. "hold" = it read the feint and
+     *  pre-committed; "chase" = it reacted to the aim. HUD-facing. */
+    guardPolicy: GuardPolicy;
     result: "save" | "drain";
 };
 let lastShotResult: ShotResult | null = null;
@@ -756,6 +761,23 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
 
         const tableBottom = (!tableHasUnderworld || game.underworld) ? table.height : table.underworld;
 
+        // Shot-calling commit gate: once the ball descends past the gate, guide
+        // it into the lane the SHOT resolved to. Below the bottom funnel the path
+        // to the drain is clear, so the ball visibly lands where the resolver
+        // says — the sight-line the player reads. Fires once per shot.
+        if (shotCallActive && shotState && shotState.phase === "resolving"
+            && !shotState.committed && shotState.landingLane !== null
+            && ball.body.velocity.y > 0
+            && ball.body.position.y >= tableBottom - IMMERSION.shotCalling.commitGateDistance) {
+            const targetX = laneTargetX(shotState.landingLane, shotState.lanes, table.width);
+            const vx = commitVelocityX(
+                ball.body.position.x, ball.body.position.y, ball.body.velocity.y,
+                targetX, tableBottom, engine.engine.gravity.y,
+            );
+            Body.setVelocity(ball.body, { x: vx, y: ball.body.velocity.y });
+            shotState.committed = true;
+        }
+
         if (top > tableBottom) {
             // Kamikaze Ball: drain is the GOAL. Force Field blocks it.
             if (game.kamikaze?.enabled) {
@@ -769,7 +791,11 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
                     // frozen saved ball must not re-trigger drain processing.
                     if (shotState.phase === "saved" || shotState.phase === "drained") continue;
                     const coveredLane = guardLaneAt(shotState, shotState.releaseTick ?? tickCount);
-                    const landingLane = laneForX(ball.body.position.x, table.width, shotState.lanes);
+                    // The resolved lane (shot intent + meter error) is the drain
+                    // authority; ball x is the fallback and the visual check.
+                    const landingLane = shotState.landingLane
+                        ?? laneForX(ball.body.position.x, table.width, shotState.lanes);
+                    const landingX = ball.body.position.x;
                     const result = resolveDrain(landingLane, coveredLane);
                     // Causal feedback: capture the full chain so the HUD can
                     // explain exactly why the shot saved or drained.
@@ -778,7 +804,9 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
                         accuracy: shotState.accuracy,
                         offset: shotState.releaseOffset,
                         landingLane,
+                        landingX,
                         guardLane: coveredLane,
+                        guardPolicy: shotState.guardPolicy,
                         result,
                     };
                     if (result === "save") {
@@ -1217,6 +1245,13 @@ export const shotRelease = (): void => {
     shotState.releaseTick = tickCount;
     shotState.accuracy = accuracy;
     shotState.releaseOffset = offset;
+    // The landing lane is a deterministic consequence of the SHOT (intent +
+    // signed meter error), not of the chaotic descent — the table's reflectors
+    // and bottom funnel can mirror or erase the launch direction entirely. The
+    // ball is guided to this lane at the commit gate so what the player sees
+    // matches the outcome.
+    shotState.landingLane = resolveLandingLane(shotState.aimedLane, accuracy, offset, shotState.lanes);
+    shotState.committed = false;
     shotState.phase = "resolving";
     recordReplayEvent(tickCount, "release");
     Body.setStatic(ball.body, false);

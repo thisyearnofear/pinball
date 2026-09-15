@@ -7,6 +7,7 @@ import { getRandomTaunt } from "@/model/kamikaze";
 import { getAppConfig } from "@/config/app-config";
 import { getRunVerdict, type RunVerdict, type VerdictDifficulty } from "@/config/run-verdict";
 import { sealFromReplayHash, sealRotation, SEAL_VERMILLION } from "@/utils/seal";
+import { SeedBadge } from "./SeedBadge";
 import type { ProgressUpdate } from "@/config/progression";
 import type { ChallengeInvite } from "@/utils/challenge-link";
 
@@ -27,6 +28,8 @@ type Props = {
   playerName?: string;
   /** keccak256 hash of the run's replay — the seal is derived from it (A3). */
   replayHash?: string;
+  /** Recorded RNG seed provenance (qrng/csprng/local) for the proof badge. */
+  seedSource?: string;
   onDismiss: () => void;
   onPlayAgain: () => void;
   onPlayTournament: () => void;
@@ -71,6 +74,7 @@ export function CelebrationOverlay(props: Props) {
         rankName={props.progress?.rank.name}
         replayHash={props.replayHash}
         verdictKanji={verdict.kanji}
+        seedSource={props.seedSource}
         onDismiss={() => setShowShare(false)}
       />
     );
@@ -188,6 +192,12 @@ export function CelebrationOverlay(props: Props) {
                 </span>
               </div>
             )}
+          </div>
+
+          {/* Seed provenance: the audit trail behind the seal. Practice runs are
+              unsealed but still record where their RNG seed came from. */}
+          <div style={{ marginTop: spacing.xs, display: "flex", justifyContent: "center" }}>
+            <SeedBadge source={props.seedSource} caption="seed source" />
           </div>
 
           {props.isNewBest && (

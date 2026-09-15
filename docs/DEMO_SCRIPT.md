@@ -27,9 +27,9 @@ Target: hackathon judges. One take, no wallet fumbling (pre-connect before recor
 *Screen: score submission overlay stepping validating → verifying → signing → ready; "Replay verified" toast; wallet confirm; leaderboard.*
 
 **1:10 – 1:30 — Close.**
-"And you're never racing alone — the tournament leader's verified replay plays live as a ghost in the corner. Two modes, four live tournaments, real prizes, provably honest scores. Kamikaze Ball: the arcade where even the cheating is impossible and the machine is your opponent."
+"And you're never racing alone — the tournament leader's verified replay plays live as a ghost in the corner, with its own audit line: where its RNG seed came from, and whether its replay hash still matches the score metadata it was signed with. Open any replay and the picker shows the same — seed provenance, seed and replay fingerprints, one tap to copy. You don't have to trust the scoreboard; you can check it."
 
-*Screen: live ghost race PiP during a run → lobby attract mode as outro.*
+*Screen: live ghost race PiP during a run (audit line visible) → Watch Replay with the `SEED AUDIT` + `SCORE METADATA ✓ HASH MATCHES` panels → lobby attract mode as outro.*
 
 ---
 
@@ -41,5 +41,7 @@ Target: hackathon judges. One take, no wallet fumbling (pre-connect before recor
 | Watch the machine play itself | lobby attract mode (no wallet needed) |
 | Replay verification engine | `backend/src/lib/replay-verifier.ts` |
 | Ghost racing | `src/game/ui/GhostRace.tsx` + `GET /api/replays/best/:id` |
+| In-app audit readout (seed provenance + fingerprints) | `src/game/ui/SeedAudit.tsx` + `src/utils/seed-audit.ts` |
+| Replay-hash ↔ signed-metadata check | `src/utils/replay-verify.ts` + `src/game/ui/ReplayVerification.tsx` |
 | Inverted-win contract | `contracts/contracts/TournamentManager.sol` |
 | Signed O(topN) settlement | `finalizeWithSignedWinners` + `backend/src/scripts/finalize-tournament.ts` |

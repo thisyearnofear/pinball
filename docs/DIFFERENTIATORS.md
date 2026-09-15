@@ -153,6 +153,15 @@ deterministic replay mode, on-chain/IPFS storage of run data, ghost-rendering
 in the playfield. Heavier work; better suited to post-hackathon. This is the
 foundation for the trustless-settlement protocol.
 
+**Shipped so far:** deterministic replays (`src/model/replay-recorder.ts`),
+server-side verification before signing (`backend/src/lib/replay-verifier.ts`),
+live ghost racing (`src/game/ui/GhostRace.tsx`), and an in-app audit trail —
+seed provenance plus seed/replay fingerprints (`src/utils/seed-audit.ts`) and a
+replay-hash ↔ signed-metadata binding check (`src/utils/replay-verify.ts`) shown
+in both the replay viewer and the ghost picture-in-picture. **Remaining:**
+on-chain/IPFS storage of run data, and retiring the trusted signer once input
+streams are independently replayable.
+
 ### Inversion 4 — The machine has a self (MAMORU 守)
 
 **The pitch:** the AI opponent is not a heuristic with taunt strings — it is a
