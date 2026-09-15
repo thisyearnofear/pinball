@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ReplayVerification } from "@/game/ui/ReplayVerification";
 import { encodeReplay, type ReplayDigest } from "@/model/replay-recorder";
 import { replayHashOf, shortHash } from "@/utils/seed-audit";
+import { colors } from "@/theme/tokens";
 
 const digest: ReplayDigest = {
     v: 1,
@@ -43,11 +44,15 @@ describe("ReplayVerification", () => {
         expect(markup).toContain(shortHash(other, 10));
     });
 
-    it("reports unavailable (never a pass) without signed metadata", () => {
+    it("reports no-record as informational (never a pass, never a failure)", () => {
         const markup = html({ replay: digest });
-        expect(markup).toContain("NO METADATA");
-        expect(markup).toContain("cannot be checked");
+        expect(markup).toContain("NO SCORE RECORD");
+        expect(markup).toContain("Nothing to compare");
         expect(markup).not.toContain("HASH MATCHES");
+        // Informational, not an error — and never worded as distrust.
+        expect(markup).toContain(colors.status.info);
+        expect(markup).not.toContain(colors.status.error);
+        expect(markup.toLowerCase()).not.toContain("unverified");
     });
 
     it("raises a warning note when the metadata disagrees with the replay", () => {
@@ -69,7 +74,7 @@ describe("ReplayVerification", () => {
     it("checks a supplied payload hash (ghost path) instead of re-encoding", () => {
         const markup = html({ actualHash: hash, metadata: JSON.stringify({ replayHash: hash }) });
         expect(markup).toContain("HASH MATCHES");
-        expect(markup).not.toContain("NO METADATA");
+        expect(markup).not.toContain("NO SCORE RECORD");
     });
 
     it("renders nothing without a replay or a hash", () => {
@@ -98,7 +103,7 @@ describe("ReplayVerification — compact (ghost PiP)", () => {
     it("shows a short result word for each state", () => {
         expect(html({ variant: "compact", actualHash: hash, metadata: JSON.stringify({ replayHash: hash }) })).toContain("matches");
         expect(html({ variant: "compact", actualHash: hash, metadata: JSON.stringify({ replayHash: "0x" + "cd".repeat(32) }) })).toContain("mismatch");
-        expect(html({ variant: "compact", actualHash: hash })).toContain("unverified");
+        expect(html({ variant: "compact", actualHash: hash })).toContain("no record");
     });
 
     it("stays a single inline element (no panel chrome) and carries the full hash in its title", () => {

@@ -71,10 +71,15 @@ describe("SeedAudit readout", () => {
         expect(markup).toContain("Tap to copy");
     });
 
-    it("labels an unrecorded provenance honestly instead of guessing", () => {
+    it("labels an unlabelled seed source as a neutral fact, not a warning", () => {
         const markup = html({ seed: 9 });
-        expect(markup).toContain("PROVENANCE UNRECORDED");
+        expect(markup).toContain("SEED ON RECORD");
         expect(markup).not.toContain("QUANTUM");
+        // The default state must not read as something missing or failed.
+        const upper = markup.toUpperCase();
+        for (const banned of ["UNRECORDED", "UNKNOWN", "MISSING", "UNVERIFIED"]) {
+            expect(upper).not.toContain(banned);
+        }
     });
 
     it("renders nothing for a digest with no auditable seed or replay hash", () => {

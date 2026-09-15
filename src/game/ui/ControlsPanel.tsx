@@ -93,7 +93,7 @@ export function ControlsPanel(props: Props) {
           Pause anytime and commune with the kami for a boon that tips the table in your favor.
         </div>
         <Button variant="secondary" size="sm" onClick={props.onConsultKami}>
-          🎋 Pause → Consult the Kami
+          神託 · Pause → Consult the Kami
         </Button>
       </div>
     </div>

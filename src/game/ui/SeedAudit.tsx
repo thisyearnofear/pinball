@@ -78,11 +78,9 @@ export function SeedAudit({ seed, seedSource, replayHash, variant = "full" }: Pr
                     background: state === true ? "rgba(34,197,94,0.2)" : "transparent",
                     cursor: "pointer",
                     fontFamily: typography.fontFamilyMono,
-                    fontSize: 9,
+                    fontSize: 11,
                     letterSpacing: "0.04em",
-                    color: state === false
-                        ? colors.status.error
-                        : provenance.tone === "unknown" ? colors.text.muted : provenance.color,
+                    color: state === false ? colors.status.error : provenance.color,
                     fontVariantNumeric: "tabular-nums",
                 }}
             >
@@ -114,7 +112,7 @@ export function SeedAudit({ seed, seedSource, replayHash, variant = "full" }: Pr
                         fontSize: typography.size.xs,
                         fontWeight: typography.weight.bold,
                         letterSpacing: "0.08em",
-                        color: provenance.tone === "unknown" ? colors.text.muted : provenance.color,
+                        color: provenance.color,
                         whiteSpace: "nowrap",
                     }}
                 >

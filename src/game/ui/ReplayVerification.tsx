@@ -22,10 +22,15 @@ type Props = {
     variant?: "full" | "compact";
 };
 
+/**
+ * Copy + colour per result. Only a genuine mismatch is styled as a problem:
+ * "nothing to compare" is an informational state, not distrust — most players
+ * meet it on their first practice run, so it must not read as a failed check.
+ */
 const STATUS: Record<string, { label: string; short: string; color: string; symbol: string }> = {
     match: { label: "HASH MATCHES", short: "matches", color: colors.status.success, symbol: "✓" },
     mismatch: { label: "HASH MISMATCH", short: "mismatch", color: colors.status.error, symbol: "✗" },
-    unavailable: { label: "NO METADATA", short: "unverified", color: colors.text.muted, symbol: "○" },
+    unavailable: { label: "NO SCORE RECORD", short: "no record", color: colors.status.info, symbol: "○" },
 };
 
 function statusFor(status: string) {
@@ -75,7 +80,7 @@ export function ReplayVerification({ replay, actualHash, metadata, recordedHash,
                     alignItems: "center",
                     gap: 3,
                     fontFamily: typography.fontFamilyMono,
-                    fontSize: 9,
+                    fontSize: 11,
                     letterSpacing: "0.04em",
                     color: status.color,
                     whiteSpace: "nowrap",
@@ -152,8 +157,9 @@ export function ReplayVerification({ replay, actualHash, metadata, recordedHash,
             )}
 
             {binding.status === "unavailable" && (
-                <span style={{ fontSize: typography.size.xs, color: colors.text.muted }}>
-                    No score metadata was recorded for this run, so the binding cannot be checked.
+                <span style={{ fontSize: typography.size.xs, color: colors.text.secondary }}>
+                    Nothing to compare — no signed score record exists for this run (practice runs
+                    are not submitted). The hash above is what was recorded for this replay.
                 </span>
             )}
 
@@ -170,7 +176,7 @@ function compactTitle(status: string, actual: string, expected: string, notes: s
     const lines: string[] = [];
     if (status === "match") lines.push(`Replay hash matches the signed score metadata.\n${actual}`);
     else if (status === "mismatch") lines.push(`Replay hash does NOT match the signed score metadata.\nreplay: ${actual}\nmetadata: ${expected}`);
-    else lines.push(`No signed score metadata to check against.\nreplay hash: ${actual}`);
+    else lines.push(`Nothing to compare — this run has no signed score record.\nreplay hash: ${actual}`);
     if (notes.length) lines.push(...notes.map((n) => `⚠ ${n}`));
     return lines.join("\n");
 }

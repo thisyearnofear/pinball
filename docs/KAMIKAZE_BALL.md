@@ -22,10 +22,20 @@ The machine is the protagonist. You are the antagonist.
 | Metric | Normal mode | Kamikaze Ball |
 |---|---|---|
 | Primary score | Points (higher = better) | Time alive in ms (lower = better) |
-| Bumper hits | +500 points | +500ms penalty (kept ball alive) |
-| Trigger groups | +2500 bonus | +2500ms penalty |
+| Bumper hits | +500 points | +150ms tax (kept ball alive) |
+| Trigger groups | +2500 bonus | +750ms tax |
 | Multiball | Jackpot | Nightmare (3 balls to drain) |
 | Tournament ranking | Descending (highest wins) | Ascending (fastest drain wins) |
+
+**Why the tax is light:** these were 500ms/2500ms, which made *avoiding* the
+table's toys the optimal play — the fun surfaces were traps. A light tax keeps
+the machine's assists meaningful (bumpers do keep the ball alive) without
+dominating the clock, so you can actually play the table on the way to the
+drain.
+
+**Session shape:** a run is the best of 3 balls (each score is that ball's
+drain time; the game score is the fastest). The 4-second drain is the clip; the
+three-ball arc is the session.
 
 **Contract integration:** the score submitted is time-alive-in-ms. The
 `TournamentManager` gains an `invertedWinCondition` flag. When true,

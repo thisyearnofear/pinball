@@ -46,8 +46,12 @@ export const RETRY_TIMEOUT  = 3000; // if a Ball is lost within this period, pla
 
 // Kamikaze Ball scoring (score = time alive in ms, lower = better)
 
-export const KAMIKAZE_BUMPER_PENALTY_MS  = 500;  // penalty per bumper hit (kept ball alive)
-export const KAMIKAZE_TRIGGER_PENALTY_MS = 2500; // penalty per completed trigger group
+// Time-tax per machine assist. Deliberately a LIGHT tax: the table's toys are
+// the fun surfaces, and a heavy tax made avoiding them the optimal play (the
+// table punished you for touching it). Engaging now costs a little rather than
+// dominating the clock. Tuned down from 500/2500 — see docs/KAMIKAZE_BALL.md.
+export const KAMIKAZE_BUMPER_PENALTY_MS  = 150;  // penalty per bumper hit (kept ball alive)
+export const KAMIKAZE_TRIGGER_PENALTY_MS = 750;  // penalty per completed trigger group
 export const MIN_DRAIN_MS = 800; // fastest physically plausible drain, shared with backend validation
 export const AI_FLIPPER_HOLD_MS = 200; // how long AI holds a flipper up
 

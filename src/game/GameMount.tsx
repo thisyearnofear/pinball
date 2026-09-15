@@ -260,6 +260,8 @@ export default function GameMount(props: Props) {
   const [drainStreak, setDrainStreak] = useState(0);
   const [penaltyBumper, setPenaltyBumper] = useState(0);
   const [penaltyTrigger, setPenaltyTrigger] = useState(0);
+  // Best-of-3: the fastest completed ball so far (the session headline).
+  const [bestDrainMs, setBestDrainMs] = useState<number | null>(null);
   const [ripples, setRipples] = useState<{ id: number; x: number; y: number }[]>([]);
   const rippleIdRef = useRef(0);
   // Victory FX: incrementing id keys the flash/shake/punch animations; confetti auto-clears.
@@ -295,6 +297,21 @@ export default function GameMount(props: Props) {
       duration: 500,
       onComplete: () => world?.pauseBallTracking(false),
     });
+  }
+
+  /**
+   * Why the machine just saved the ball. An adversary that simply refuses to
+   * lose reads as "unfair"; naming the mechanism (and its counter-play) turns
+   * the same event into a legible rule the player can beat.
+   */
+  function describeSave(): string {
+    const g = gameRef.current;
+    const now = performance.now();
+    const counter = g?.kamikaze?.activePowerUps.find((p) => p.side === "machine" && p.expiresAt > now);
+    if (counter) return `countermeasure: ${POWERUP_NAMES[counter.type]}`;
+    const saves = g?.kamikaze?.aiSavesUsed ?? 0;
+    if (saves > 1) return `emergency save #${saves} — its grip is tiring`;
+    return "emergency save — a drainward nudge beats the roll";
   }
 
   function spawnRipple(e: React.MouseEvent<HTMLDivElement>) {
@@ -392,7 +409,7 @@ export default function GameMount(props: Props) {
           }
           const kamikazeMessages: Record<number, string> = {
             [GameMessages.KAMIKAZE_START]: "神風 — DRAIN IT!",
-            [GameMessages.SAVED]: "The machine catches the blossom.",
+
             [GameMessages.POWERUP_ROULETTE]: "Munitions crate! Rolling…",
             [GameMessages.POWERUP_PLAYER]: "Munition activated!",
             [GameMessages.POWERUP_MACHINE]: "Countermeasure deployed!",
@@ -400,6 +417,10 @@ export default function GameMount(props: Props) {
             [GameMessages.KAMIS_WRATH]: "神の怒り · KAMI'S WRATH! The table hurls the ball.",
             [GameMessages.UNSTOPPABLE]: "無双 · UNSTOPPABLE!",
           };
+          // Saves must explain themselves: name what caught the ball.
+          if (msg === GameMessages.SAVED) {
+            kamikazeMessages[GameMessages.SAVED] = `守 CATCHES IT — ${describeSave()}`;
+          }
           const kamMsg = msg === GameMessages.AI_TAUNT
             ? `守: "${getLastTaunt()}"`
             : kamikazeMessages[msg];
@@ -552,6 +573,11 @@ export default function GameMount(props: Props) {
         setDrainStreak((prev) => (prev === g.kamikaze!.drainStreak ? prev : g.kamikaze!.drainStreak));
         setPenaltyBumper((prev) => (prev === g.kamikaze!.totalBumperHits ? prev : g.kamikaze!.totalBumperHits));
         setPenaltyTrigger((prev) => (prev === g.kamikaze!.totalTriggerGroupCompletions ? prev : g.kamikaze!.totalTriggerGroupCompletions));
+        const completedBalls = g.kamikaze.completedBallScores;
+        setBestDrainMs((prev) => {
+          const next = completedBalls.length ? Math.min(...completedBalls) : null;
+          return prev === next ? prev : next;
+        });
         const shift = consumeMomentumShift();
         if (shift) {
           setMomentumShift(shift);
@@ -1028,10 +1054,16 @@ export default function GameMount(props: Props) {
           {kamikazeActive ? (
             <>
               <div style={{ color: "#ff4444", fontWeight: "bold" }}>神風 KAMIKAZE BALL</div>
-              <div>Time: {formatGameScore(hud.score, true)}</div>
+              {/* Session shape: a run is the best of 3 balls, so say so — the
+                  4s drain is the clip, the three-ball arc is the session. */}
+              <div style={{ marginTop: 2, fontSize: 10, opacity: 0.75, letterSpacing: "0.08em" }}>
+                BEST OF {BALLS_PER_GAME} · BALL {Math.min(BALLS_PER_GAME, BALLS_PER_GAME - hud.balls + 1)}
+                {bestDrainMs !== null ? ` · BEST ${formatGameScore(bestDrainMs, true)}` : ""}
+              </div>
+              <div style={{ marginTop: 2 }}>Time: {formatGameScore(hud.score, true)}</div>
               {/* Lives as sakura petals: one per ball, faded when spent */}
               <div style={{ marginTop: 4, display: "flex", gap: 3, alignItems: "center" }}>
-                <span style={{ fontSize: 9, opacity: 0.6, marginRight: 2, letterSpacing: "0.1em" }}>命</span>
+                <span style={{ fontSize: 11, opacity: 0.6, marginRight: 2, letterSpacing: "0.1em" }}>命</span>
                 {Array.from({ length: BALLS_PER_GAME }).map((_, i) => (
                   <span
                     key={i}
@@ -1047,15 +1079,15 @@ export default function GameMount(props: Props) {
               </div>
               {/* Streak: consecutive drains without a save */}
               {drainStreak > 0 && (
-                <div style={{ marginTop: 4, fontSize: 10, color: "#fbbf24", fontWeight: 700, letterSpacing: "0.1em" }}>
-                  🔥 STREAK ×{drainStreak}{drainStreak >= 2 ? " — 無双 soon" : ""}
+                <div style={{ marginTop: 4, fontSize: 11, color: "#fbbf24", fontWeight: 700, letterSpacing: "0.1em" }}>
+                  STREAK ×{drainStreak}{drainStreak >= 2 ? " — 無双 soon" : ""}
                 </div>
               )}
               {/* Penalty breakdown: how the machine is racking up your time */}
               {(penaltyBumper > 0 || penaltyTrigger > 0) && (
                 <div style={{ marginTop: 6 }}>
-                  <div style={{ fontSize: 9, opacity: 0.6, marginBottom: 3, letterSpacing: "0.15em" }}>PENALTY</div>
-                  <div style={{ fontSize: 10, lineHeight: 1.6 }}>
+                  <div style={{ fontSize: 10, opacity: 0.6, marginBottom: 3, letterSpacing: "0.15em" }}>TIME TAX</div>
+                  <div style={{ fontSize: 11, lineHeight: 1.6 }}>
                     {penaltyBumper > 0 && (
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
                         <span style={{ opacity: 0.7 }}>番兵 bumpers ×{penaltyBumper}</span>
@@ -1074,10 +1106,16 @@ export default function GameMount(props: Props) {
               <div style={{ marginTop: 6 }}>
                 <StabilityMeter value={stability} machineSaving={machineSaving} />
               </div>
-              {/* Momentum tug-of-war: player (green) vs machine (red) */}
+              {/* Momentum tug-of-war: player (green, left) vs machine (red, right).
+                  Read positionally rather than by colour alone, and labelled for
+                  screen readers instead of with a second row of text. */}
               <div style={{ marginTop: 6 }}>
-                <div style={{ fontSize: 9, opacity: 0.6, marginBottom: 3, letterSpacing: "0.15em" }}>MOMENTUM</div>
-                <div style={{ position: "relative", height: 8, borderRadius: 4, overflow: "hidden", background: "rgba(255,255,255,0.12)" }}>
+                <div style={{ fontSize: 10, opacity: 0.6, marginBottom: 3, letterSpacing: "0.15em" }}>MOMENTUM</div>
+                <div
+                  role="img"
+                  aria-label={`Momentum: ${Math.round(momentum * 100)}% yours, ${Math.round((1 - momentum) * 100)}% the machine's`}
+                  style={{ position: "relative", height: 8, borderRadius: 4, overflow: "hidden", background: "rgba(255,255,255,0.12)" }}
+                >
                   <div style={{
                     position: "absolute", left: 0, top: 0, bottom: 0,
                     width: `${momentum * 100}%`,
@@ -1093,29 +1131,24 @@ export default function GameMount(props: Props) {
                     boxShadow: "0 0 8px rgba(239,68,68,0.6)",
                   }} />
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, opacity: 0.5, marginTop: 2 }}>
-                  <span style={{ color: "#4ade80" }}>YOU</span>
-                  <span style={{ color: "#f87171" }}>MACHINE</span>
-                </div>
               </div>
-              {/* Banked munition: double-tap / D to deploy */}
-              <div style={{ marginTop: 6 }}>
-                <div style={{ fontSize: 9, opacity: 0.6, marginBottom: 3, letterSpacing: "0.15em" }}>MUNITION</div>
-                {storedMunition ? (
+              {/* Banked munition: shown only when you actually have one. */}
+              {storedMunition && (
+                <div style={{ marginTop: 6 }}>
+                  <div style={{ fontSize: 10, opacity: 0.6, marginBottom: 3, letterSpacing: "0.15em" }}>MUNITION</div>
                   <div style={{
                     display: "inline-block", padding: "2px 8px", borderRadius: 6,
                     background: "rgba(34,197,94,0.18)", border: "1px solid rgba(34,197,94,0.6)",
-                    color: "#4ade80", fontSize: 10, fontWeight: 700,
+                    color: "#4ade80", fontSize: 11, fontWeight: 700,
                   }}>
                     {storedMunition} · tap×2
                   </div>
-                ) : (
-                  <div style={{ fontSize: 10, opacity: 0.4 }}>— clear a target bank to earn one</div>
-                )}
-              </div>
-              {/* Underworld charge meter */}
+                </div>
+              )}
+              {/* Underworld charge meter: hidden until it is actually charging. */}
+              {underworldCharge > 0 && (
               <div style={{ marginTop: 6 }}>
-                <div style={{ fontSize: 9, opacity: 0.6, marginBottom: 3, letterSpacing: "0.15em" }}>
+                <div style={{ fontSize: 10, opacity: 0.6, marginBottom: 3, letterSpacing: "0.15em" }}>
                   UNDERWORLD {underworldCharge >= 1 ? "· READY" : ""}
                 </div>
                 <div style={{ position: "relative", height: 6, borderRadius: 3, overflow: "hidden", background: "rgba(255,255,255,0.12)" }}>
@@ -1130,23 +1163,27 @@ export default function GameMount(props: Props) {
                   }} />
                 </div>
               </div>
-              {/* Contextual hint: surfaces the most relevant verb right now
-                  instead of a static cheat-sheet players tune out. */}
+              )}
+              {/* Live action feedback — transient, shown only while it applies. */}
               {storedMunition ? (
-                <div style={{ fontSize: 10, opacity: 0.95, marginTop: 6, lineHeight: 1.5, color: "#4ade80", fontWeight: 700 }}>
-                  ⚡ {storedMunition} banked — double-tap to deploy!
+                <div style={{ fontSize: 11, opacity: 0.95, marginTop: 6, lineHeight: 1.5, color: "#4ade80", fontWeight: 700 }}>
+                  {storedMunition} banked — double-tap to deploy
                 </div>
               ) : underworldCharge >= 1 ? (
-                <div style={{ fontSize: 10, opacity: 0.95, marginTop: 6, lineHeight: 1.5, color: "#c084fc", fontWeight: 700 }}>
-                  👆 UNDERWORLD READY — swipe up to tilt-lock!
+                <div style={{ fontSize: 11, opacity: 0.95, marginTop: 6, lineHeight: 1.5, color: "#c084fc", fontWeight: 700 }}>
+                  UNDERWORLD READY — swipe up to tilt-lock
                 </div>
               ) : chargePower !== null && chargePower > 1.05 ? (
-                <div style={{ fontSize: 10, opacity: 0.95, marginTop: 6, lineHeight: 1.5, color: "#4ade80", fontWeight: 700 }}>
+                <div style={{ fontSize: 11, opacity: 0.95, marginTop: 6, lineHeight: 1.5, color: "#4ade80", fontWeight: 700 }}>
                   Release to fire your nudge
                 </div>
-              ) : (
-                <div style={{ fontSize: 9, opacity: 0.6, marginTop: 6, lineHeight: 1.5 }}>
-                  {shotHud.active ? "tap a side to aim · RELEASE (or Space) to fire" : "HOLD charge · SWIPE↓ dive · SWIPE↑ tilt-lock · tap×2 deploy"}
+              ) : null}
+              {/* Persistent cheat-sheet: first ball only. Later balls leave it out
+                  — a four-second run cannot afford reading, and the tutorial has
+                  already taught the verbs. */}
+              {hud.balls === BALLS_PER_GAME && !storedMunition && underworldCharge < 1 && (
+                <div style={{ fontSize: 10, opacity: 0.55, marginTop: 6, lineHeight: 1.5 }}>
+                  {shotHud.active ? "tap a side to aim · RELEASE to fire" : "HOLD charge · SWIPE↓ dive · SWIPE↑ tilt-lock"}
                 </div>
               )}
             </>

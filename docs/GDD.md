@@ -1,6 +1,6 @@
 # Game Design Document — Kamikaze Ball (神風)
 
-> Living document. Last updated: 2026-07-29.
+> Living document. Last updated: 2026-09-15.
 > See also: [VISION.md](./VISION.md) · [KAMIKAZE_BALL.md](./KAMIKAZE_BALL.md) · [DIFFERENTIATORS.md](./DIFFERENTIATORS.md) · [NIMIQ_SETUP.md](./NIMIQ_SETUP.md)
 
 ---
@@ -22,7 +22,10 @@ REWARD    Drain = kanji verdict stamp (神/風/波/芽/石) + XP + rank-up
 REPEAT    Next ball, harder machine, ghost of the leader racing beside you
 ```
 
-A single run lasts 30–90 seconds. Three balls per game. Instant play, no wallet required for practice.
+A run is **best of 3 balls**: each ball's score is its drain time, and the game
+score is the fastest. A single drain is seconds (2–6s typical), so the three-ball
+arc — not the single drain — is the session. Instant play, no wallet required for
+practice.
 
 ---
 
@@ -116,11 +119,37 @@ just the code, understands why.
 - **Replay-verifiable by construction:** each serve records tick-stamped `aim`,
   `release`, `serve` events and the run's `controlScheme`; the guard commit and
   launch error derive from `(tickCount, seed)` only.
-- **Status:** prototype behind a lobby toggle (Control → Steer | 守 Feint duel |
-  守 Precision), serves-only. Core in `src/model/shot-calling.ts`; tuning in
-  `src/config/immersion-tuning.ts` (`shotCalling`). Test each variant alone;
-  combine only after one proves fun; then add mid-table possession (flipper
-  cradles, catch zones).
+- **Status:** prototype behind a lobby **Advanced** disclosure. **Steer is the
+  ranked default**; Advanced reveals 守 Feint duel | 守 Precision. The two
+  variants are not peers of the default until one proves fun — exposing them as
+  equal options made an unproven mechanic look like a shipped feature. Core in
+  `src/model/shot-calling.ts`; tuning in `src/config/immersion-tuning.ts`
+  (`shotCalling`). Test each variant alone; combine only after one proves fun;
+  then add mid-table possession (flipper cradles, catch zones).
+
+### Readability rules (UI)
+
+Four constraints keep a seconds-long drain legible. They are rules, not
+preferences:
+
+1. **The HUD is a glance, not a dashboard.** Time, lives and streak are always
+   on; everything else (time tax, munition, underworld charge) appears only when
+   it applies. A four-second run cannot afford reading.
+2. **Teach before, not during.** The persistent control cheat-sheet shows on the
+   **first ball only**; the tutorial and the desktop side panel own instruction.
+   Transient cues (charge feedback, "munition banked") still fire when relevant.
+3. **A save must explain itself.** MAMORU's emergency save is named together with
+   its counter-play ("a drainward nudge beats the roll", or the countermeasure
+   that fired). An adversary that simply refuses to lose reads as unfair rather
+   than hard.
+4. **The proof never covers the product.** In the replay viewer the seed-audit and
+   score-metadata panels sit **below** the replay; the thing you came to watch
+   comes first.
+
+**Time tax:** bumper/trigger assists cost **150ms / 750ms** (down from
+500/2500). The old values made avoiding the table's toys the optimal play; a
+light tax keeps the machine's assists meaningful without dominating the clock.
+See [KAMIKAZE_BALL.md](./KAMIKAZE_BALL.md).
 
 ### AI machine (the antagonist)
 

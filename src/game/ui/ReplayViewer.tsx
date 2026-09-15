@@ -250,11 +250,6 @@ export function ReplayViewer({ replay, replayHash, signedMetadata, onClose }: Pr
           </span>
         </div>
 
-        {/* Audit trail: recomputable from the digest, so a viewer can check the
-            run they are watching against what was actually recorded. */}
-        <SeedAudit seed={replay.seed} seedSource={replay.seedSource} replayHash={replayHash} />
-        <ReplayVerification replay={replay} metadata={signedMetadata} recordedHash={replayHash} />
-
         {samples.length === 0 ? (
           <div style={{ color: colors.text.secondary, padding: spacing.lg, textAlign: "center" }}>
             No ghost trace was recorded for this run.
@@ -316,6 +311,11 @@ export function ReplayViewer({ replay, replayHash, signedMetadata, onClose }: Pr
             </div>
           </>
         )}
+
+        {/* Proof panels sit BELOW the replay: the thing you came to watch comes
+            first, and the audit trail is there when you want to check it. */}
+        <SeedAudit seed={replay.seed} seedSource={replay.seedSource} replayHash={replayHash} />
+        <ReplayVerification replay={replay} metadata={signedMetadata} recordedHash={replayHash} />
       </div>
     </Modal>
   );

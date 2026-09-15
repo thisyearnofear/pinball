@@ -88,7 +88,7 @@ export function CelebrationOverlay(props: Props) {
             {formatGameScore(props.score, kamikaze)}
           </div>
           <div style={{ fontSize: typography.size.md, color: colors.text.secondary, marginTop: spacing.xs }}>
-            {kamikaze ? "Best drain time this run." : ""}
+            {kamikaze ? "Best of 3 — fastest drain of your three balls." : ""}
             {kamikaze ? " " : ""}
             {props.isPractice ? "Practice run complete." : "Tournament run complete."}
           </div>

@@ -103,18 +103,27 @@ Where the seed came from is surfaced to the player, from one formatter
 | **Share text** | A `Seed: …` line |
 | **Ghost race / replay viewer** (`SeedAudit`) | Provenance, the raw seed, a seed fingerprint, and the replay hash — the audit trail for a rival's run |
 | **Replay viewer** (`ReplayVerification`) | Whether the replay's hash still matches the score metadata it was submitted with, plus a copy button for that metadata block |
-| **Ghost race** (`ReplayVerification` compact) | The same check as a one-line status under the PiP: `✓ matches` / `✗ mismatch` / `○ unverified` |
+| **Ghost race** (`ReplayVerification` compact) | The same check as a one-line status under the PiP: `✓ matches` / `✗ mismatch` / `○ no record` |
 
 | Value | Chip | Meaning |
 |---|---|---|
 | `qrng` | `⚛ QUANTUM-SEEDED` | Seed came from the configured quantum RNG |
 | `csprng` | `◈ SERVER ENTROPY` | Backend CSPRNG (provider unset/unreachable) |
 | `local` | `◇ DEVICE ENTROPY` | On-device CSPRNG (offline / cold buffer) |
-| absent | *(no chip)* | Practice/legacy run with no recorded provenance |
+| unlabelled | `◆ SEED ON RECORD` | A seed exists but its origin label was not recorded (legacy/practice digest) |
+| absent | *(no chip)* | Share/badge surfaces omit the chip rather than render the fallback |
 
 The copy states **where the entropy came from** and nothing more — it never
 claims a quantum seed makes a run fairer, stronger, or unhackable, because it
 does not: the physics and the verifier are identical either way.
+
+**Voice rule: the default state must not read as distrust.** The audit surfaces
+open on whichever state a run happens to be in, and for most players that is the
+unlabelled case — so `describeSeedProvenance` returns `◆ SEED ON RECORD` (the seed
+*is* on record; only its source label is missing) rather than a warning, and the
+unavailable binding check is styled as information (`NO SCORE RECORD`, info blue)
+rather than a failure. Only a genuine mismatch — a replay whose hash disagrees
+with the score it was submitted with — is allowed to look like a problem.
 
 ---
 
@@ -188,7 +197,7 @@ returned by `GET /api/replays/best/:tournamentId`), so a ghost can be checked
 too. For a ghost the checked value is the hash of the **stored payload**
 (`verifyReplayHash`), not a re-encode of the decoded digest, because the stored
 bytes are the true submission binding. Entries stored before this existed carry
-no metadata and correctly report `○ unverified`.
+no metadata and correctly report `○ no record` (informational, not a failure).
 
 Ghost taps must never register as gameplay, so the PiP's audit and verification
 lines stop event propagation before the playfield's tap-to-nudge handler sees

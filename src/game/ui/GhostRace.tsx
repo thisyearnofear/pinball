@@ -50,7 +50,9 @@ export function GhostRace({ replay, leaderScore, leaderAddress, replayHash, meta
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const cssW = 96;
+    // Wide enough that the audit line and result word stay legible on a phone
+    // (the Nimiq Pay target) rather than shrinking to a thumbnail.
+    const cssW = 112;
     const cssH = Math.round(cssW * (viewHeight / table.width));
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     canvas.width = cssW * dpr;
@@ -134,7 +136,7 @@ export function GhostRace({ replay, leaderScore, leaderAddress, replayHash, meta
           position: "absolute", bottom: 8, left: 8, zIndex: 30,
           background: "rgba(88, 28, 135, 0.8)", color: "#e9d5ff",
           border: "1px solid rgba(168, 85, 247, 0.5)", borderRadius: 8,
-          padding: "4px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer",
+          padding: "5px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer",
           letterSpacing: "0.04em",
         }}
       >
@@ -155,7 +157,7 @@ export function GhostRace({ replay, leaderScore, leaderAddress, replayHash, meta
       }}
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "3px 6px", gap: 6 }}>
-        <span style={{ fontSize: 9, fontWeight: 800, color: "#c084fc", letterSpacing: "0.06em" }}>
+        <span style={{ fontSize: 10, fontWeight: 800, color: "#c084fc", letterSpacing: "0.06em" }}>
           GHOST #1
         </span>
         <button
@@ -167,7 +169,7 @@ export function GhostRace({ replay, leaderScore, leaderAddress, replayHash, meta
         </button>
       </div>
       <canvas ref={canvasRef} style={{ display: "block" }} />
-      <div style={{ padding: "3px 6px", fontSize: 9, color: "#d8b4fe", fontVariantNumeric: "tabular-nums", textAlign: "center" }}>
+      <div style={{ padding: "3px 6px", fontSize: 10, color: "#d8b4fe", fontVariantNumeric: "tabular-nums", textAlign: "center" }}>
         {formatGameScore(leaderScore, kamikaze)} · {shortAddr}
       </div>
       {/* Audit line: the ghost's seed provenance + fingerprint, plus whether the

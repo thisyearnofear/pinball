@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { getAllTournaments, type TournamentMeta, type GameMode } from "@/config/tournaments";
 import { getTournamentWorld } from "@/config/tournaments";
 import type { AIDifficulty } from "@/model/kamikaze";
@@ -55,6 +55,11 @@ const DIFFICULTIES: AIDifficulty[] = ["easy", "medium", "hard"];
 
 export function ArcadeLobby(props: Props) {
   const tournaments = props.tournaments.length > 0 ? props.tournaments : getAllTournaments();
+  // Shot-calling is a prototype, not a peer of the default control scheme, so
+  // it lives behind a disclosure — but a scheme picked earlier keeps it open.
+  const [showAdvancedControls, setShowAdvancedControls] = useState(
+    props.controlScheme === "feint" || props.controlScheme === "precision",
+  );
 
   if (props.loading) {
     return (
@@ -70,6 +75,7 @@ export function ArcadeLobby(props: Props) {
   }
 
   const hasActive = tournaments.some(t => props.activeTournamentId === t.id);
+  const shotCallingSelected = props.controlScheme === "feint" || props.controlScheme === "precision";
 
   return (
     <CRTOverlay intensity={0.15}>
@@ -106,7 +112,7 @@ export function ArcadeLobby(props: Props) {
             <span className={styles.modeName}>
               Kamikaze <span style={{ fontFamily: "'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif", color: "#e34234", fontSize: "1.1em" }} aria-hidden="true">神風</span>
             </span>
-            <span className={styles.modeDesc}>Drain the ball. The machine fights back. Fastest drain wins.</span>
+            <span className={styles.modeDesc}>Drain the ball. The machine fights back. Best of 3 — fastest drain wins.</span>
           </button>
           <button
             type="button"
@@ -116,6 +122,21 @@ export function ArcadeLobby(props: Props) {
             <span className={styles.modeName}>Classic</span>
             <span className={styles.modeDesc}>Traditional pinball. Rack up the highest score.</span>
           </button>
+        </div>
+
+        {/* Primary, wallet-free path — feel the machine before any money is
+            mentioned. Everything else is configured after this is obvious. */}
+        <div className={styles.instantPlay}>
+          <button
+            type="button"
+            className={styles.instantPlayCta}
+            onClick={(e) => { burstOnElement(e.currentTarget, { count: 16, colors: ["#e34234", "#c026d3", "#fbbf24"] }); props.onPractice(); }}
+          >
+            {props.gameMode === "kamikaze" ? "PLAY NOW — 神風" : "PLAY NOW"}
+          </button>
+          <div className={styles.instantPlayHint}>
+            No wallet needed · {props.gameMode === "kamikaze" ? "best of 3 · fastest drain wins" : "classic practice"} · free
+          </div>
         </div>
 
         {props.gameMode === "kamikaze" && (
@@ -149,6 +170,22 @@ export function ArcadeLobby(props: Props) {
               </button>
               <button
                 type="button"
+                className={`${styles.difficultyPill} ${shotCallingSelected ? styles.difficultyPillActive : ""}`}
+                aria-expanded={showAdvancedControls}
+                aria-controls="advanced-controls"
+                onClick={() => setShowAdvancedControls((v) => !v)}
+              >
+                Advanced {showAdvancedControls ? "▾" : "▸"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {props.gameMode === "kamikaze" && showAdvancedControls && (
+          <div id="advanced-controls" className={styles.advancedPanel}>
+            <div className={styles.advancedRow}>
+              <button
+                type="button"
                 className={`${styles.difficultyPill} ${props.controlScheme === "feint" ? styles.difficultyPillActive : ""}`}
                 onClick={() => props.onSelectControlScheme("feint")}
               >
@@ -162,19 +199,15 @@ export function ArcadeLobby(props: Props) {
                 守 Precision
               </button>
             </div>
+            <p className={styles.advancedHint}>
+              Shot-calling prototypes: call a lane, then release on the meter. <strong>Steer stays the ranked default</strong> —
+              these change how the serve works, so expect a rougher feel.
+            </p>
           </div>
         )}
 
         {props.progress && props.progress.totalRuns > 0 && (
           <RankStrip progress={props.progress} />
-        )}
-
-        {!props.isConnected && (
-          <div className={styles.connectPrompt}>
-            <div className={styles.connectIcon}>🔌</div>
-            <div className={styles.connectText}>Connect your wallet to enter tournaments and win prizes</div>
-            <div className={styles.connectChain}>NIM · USDT on Polygon · Nimiq Pay</div>
-          </div>
         )}
 
         {props.pendingChallenge && props.onAcceptChallenge && props.onDismissChallenge && (
@@ -187,22 +220,15 @@ export function ArcadeLobby(props: Props) {
 
         <DailyBanner onPlayDaily={props.onPlayDaily} />
 
-        <div className={styles.instantPlay}>
-          <button
-            type="button"
-            className={styles.instantPlayCta}
-            onClick={(e) => { burstOnElement(e.currentTarget, { count: 16, colors: ["#e34234", "#c026d3", "#fbbf24"] }); props.onPractice(); }}
-          >
-            {props.gameMode === "kamikaze" ? "PLAY NOW — 神風" : "PLAY NOW"}
-          </button>
-          <div className={styles.instantPlayHint}>No wallet needed · {props.gameMode === "kamikaze" ? "drain-to-win practice" : "classic practice"} · free</div>
-        </div>
+        {/* Contextual, not a gate — the wallet only matters for tournaments. */}
+        {!props.isConnected && (
+          <div className={styles.connectPrompt}>
+            <div className={styles.connectText}>Connect a wallet to enter a tournament and win prizes</div>
+            <div className={styles.connectChain}>NIM · USDT on Polygon · Nimiq Pay</div>
+          </div>
+        )}
 
         <div className={styles.tournamentList}>
-          <CommunityFeedPanel
-            playerAddress={props.playerAddress}
-            onChallengeRun={props.onChallengeCommunityRun}
-          />
           {tournaments.map((t) => (
             <ArcadeCard
               key={t.id}
@@ -215,6 +241,11 @@ export function ArcadeLobby(props: Props) {
               onStart={() => props.onStartTournament(t.id)}
             />
           ))}
+          {/* The socializer loop sits after the competitive ladder, not above it. */}
+          <CommunityFeedPanel
+            playerAddress={props.playerAddress}
+            onChallengeRun={props.onChallengeCommunityRun}
+          />
         </div>
 
         {props.playerAddress && props.playerStats && props.playerStats.gamesPlayed > 0 && (
@@ -250,7 +281,7 @@ function DailyBanner(props: { onPlayDaily: (c: DailyChallenge) => void }) {
 
   return (
     <div className={styles.daily}>
-      <div className={styles.dailyIcon} aria-hidden="true">🏯</div>
+      <div className={styles.dailyIcon} aria-hidden="true">毎日</div>
       <div className={styles.dailyBody}>
         <div className={styles.dailyLabel}>Daily Challenge · {challenge.dayKey}</div>
         <div className={styles.dailyDesc}>

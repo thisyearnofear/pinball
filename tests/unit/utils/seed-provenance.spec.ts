@@ -29,6 +29,25 @@ describe("describeSeedProvenance", () => {
         }
     });
 
+    it("the default state reads as a neutral fact, not as distrust", () => {
+        // The audit surfaces open on this state, so it must not look like a
+        // failed check or a missing requirement.
+        const p = describeSeedProvenance(undefined);
+        const copy = `${p.label} ${p.phrase}`.toLowerCase();
+        expect(p.label).toBe("SEED ON RECORD");
+        expect(p.symbol).toBe("◆");
+        for (const banned of ["unrecorded", "unknown", "missing", "unverified", "cannot"]) {
+            expect(copy).not.toContain(banned);
+        }
+    });
+
+    it("keeps the default state visually distinct from the three known sources", () => {
+        const known = ["qrng", "csprng", "local"].map((s) => describeSeedProvenance(s));
+        const fallback = describeSeedProvenance(undefined);
+        expect(new Set([...known.map((p) => p.color), fallback.color]).size).toBe(4);
+        expect(new Set([...known.map((p) => p.symbol), fallback.symbol]).size).toBe(4);
+    });
+
     it("never claims a quantum seed changes the outcome", () => {
         const p = describeSeedProvenance("qrng");
         const copy = `${p.label} ${p.phrase}`.toLowerCase();
