@@ -1,6 +1,8 @@
 import React from "react";
 import { Modal } from "./Modal";
 
+import { extraControlLines } from "@/config/table-coach";
+
 import { colors, spacing, typography, radius } from "@/theme/tokens";
 
 type ControlGroupProps = {
@@ -31,6 +33,12 @@ function ControlGroup({ title, icon, children }: ControlGroupProps) {
 }
 
 export function HowToPlayModal(props: { onClose: () => void }) {
+  // The secondary verbs live here rather than on the table: the first run
+  // coaches the rule and the winning move, and this is the reference a player
+  // opens once they want the rest.
+  const touchscreen = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)")?.matches === true;
+  const extraControls = extraControlLines("kamikaze", touchscreen);
+
   return (
     <Modal title="How to play" onClose={props.onClose}>
       <div style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}>
@@ -39,8 +47,18 @@ export function HowToPlayModal(props: { onClose: () => void }) {
           you want to <strong style={{ color: colors.text.primary }}>drain</strong> it. Fastest drain time wins.
           <br /><br />
           <strong style={{ color: colors.text.primary }}>Tap / click the table</strong> to nudge the ball toward the drain &nbsp;·&nbsp;
+          <strong style={{ color: colors.text.primary }}>swipe down</strong> (or ↓) to <strong style={{ color: colors.text.primary }}>DIVE</strong> —
+          a deliberate drain the machine can't save &nbsp;·&nbsp;
           grab <strong style={{ color: colors.text.primary }}>munition crates</strong> for power-ups (some side with the machine) &nbsp;·&nbsp;
           bumpers and targets add <strong style={{ color: colors.text.primary }}>penalty time</strong>, so avoid them.
+        </ControlGroup>
+
+        <ControlGroup title="Advanced" icon="🎋">
+          <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 4 }}>
+            {extraControls.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
         </ControlGroup>
 
         <ControlGroup title="Classic" icon="🕹️">

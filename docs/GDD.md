@@ -135,16 +135,40 @@ preferences:
 1. **The HUD is a glance, not a dashboard.** Time, lives and streak are always
    on; everything else (time tax, munition, underworld charge) appears only when
    it applies. A four-second run cannot afford reading.
-2. **Teach before, not during.** The persistent control cheat-sheet shows on the
-   **first ball only**; the tutorial and the desktop side panel own instruction.
-   Transient cues (charge feedback, "munition banked") still fire when relevant.
+2. **Teach on the table, not in front of it.** The first run has **no intro
+   slides** — no screen the player must page through before touching the
+   machine. Instead `src/config/table-coach.ts` plays cues **on the playfield,
+   while the ball is live**: one card carrying both the inversion and the
+   winning verb, then a contextual callout the moment the table taxes the player.
+   The card is `pointer-events: none`, so a tip can never eat the nudge it asks
+   for. Cues are selected from *observations* (engaged / dived / taxed) rather
+   than an event stream, so the outcome never depends on the order the player
+   does things. Each cue carries an auto-dismiss budget in seconds, because a
+   run is measured in seconds. **Zero blocking beats.** A standing **? How to
+   win** chip on the table carries both depth and breadth: **tap** replays the
+   script from the top, **hold** (550ms) opens the full reference. It swallows
+   the tap either way, so asking for help is never a nudge, and the hold is only
+   wired when there is a guide to open. A hold is one gesture, not two — the
+   click it produces is eaten. The time-tax
+   callout is edge-triggered on the tax counter so a replay waits for a *new*
+   hit rather than reopening something the player already understood. The secondary verbs
+   (power nudge, munition, tilt-lock) live in **How to Play**
+   (`extraControlLines()`), never in the critical path; the desktop side panel
+   owns the same reference. Transient cues (charge feedback, "munition banked")
+   still fire when relevant.
 3. **A save must explain itself.** MAMORU's emergency save is named together with
    its counter-play ("a drainward nudge beats the roll", or the countermeasure
    that fired). An adversary that simply refuses to lose reads as unfair rather
    than hard.
 4. **The proof never covers the product.** In the replay viewer the seed-audit and
-   score-metadata panels sit **below** the replay; the thing you came to watch
-   comes first.
+   score-metadata panels sit **below** the replay and stay **collapsed** behind a
+   one-line `AUDIT` status and an *Audit trail* toggle. The thing you came to
+   watch comes first; the evidence is one tap away.
+
+**The cheat-sheet replaces itself.** The persistent one-line control cheat-sheet
+still appears on the first ball, but **not on a coached run** — the coach is
+saying the same thing better, and saying it twice is what makes a HUD read as a
+dashboard.
 
 **Time tax:** bumper/trigger assists cost **150ms / 750ms** (down from
 500/2500). The old values made avoiding the table's toys the optimal play; a
@@ -156,6 +180,11 @@ See [KAMIKAZE_BALL.md](./KAMIKAZE_BALL.md).
 - AI flippers activate when the ball approaches (accuracy + reaction speed scale with difficulty)
 - Difficulty: Easy (50% accuracy, 250ms reaction) · Medium (80%, 150ms) · Hard (95%, 80ms)
 - Rubber-banding: crates bias toward the losing side (70/30 when behind, 60/40 when dominating)
+- **Named escalation:** the HUD shows MAMORU's current mood state (CALM → SMUG →
+  WARY → DESPERATE → ENRAGED → GRIEVING) with a one-line reason for it.
+  Rubber-band difficulty that goes unnamed reads as the game cheating; naming the
+  state makes the same escalation read as character. Copy in
+  `src/utils/mood-display.ts`.
 
 ### Power-up tug-of-war
 

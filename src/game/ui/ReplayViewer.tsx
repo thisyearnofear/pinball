@@ -7,7 +7,7 @@ import tables from "@/definitions/tables";
 import { formatGameScore } from "@/utils/score-format";
 import { SeedAudit } from "./SeedAudit";
 import { ReplayVerification } from "./ReplayVerification";
-import { colors, spacing, typography } from "@/theme/tokens";
+import { colors, radius, spacing, typography } from "@/theme/tokens";
 
 const TRAIL_MS = 550;
 const EVENT_FX_MS = 450;
@@ -18,14 +18,17 @@ type Props = {
   replayHash?: string;
   /** Signed score metadata submitted with this run; enables the binding check. */
   signedMetadata?: string;
+  /** Expand the full audit trail immediately (used by tests and deep links). */
+  initialAuditOpen?: boolean;
   onClose: () => void;
 };
 
-export function ReplayViewer({ replay, replayHash, signedMetadata, onClose }: Props) {
+export function ReplayViewer({ replay, replayHash, signedMetadata, initialAuditOpen = false, onClose }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(1);
   const [timeMs, setTimeMs] = useState(0);
+  const [auditOpen, setAuditOpen] = useState(initialAuditOpen);
 
   const playheadRef = useRef(0);
   const playingRef = useRef(true);
@@ -312,10 +315,47 @@ export function ReplayViewer({ replay, replayHash, signedMetadata, onClose }: Pr
           </>
         )}
 
-        {/* Proof panels sit BELOW the replay: the thing you came to watch comes
-            first, and the audit trail is there when you want to check it. */}
-        <SeedAudit seed={replay.seed} seedSource={replay.seedSource} replayHash={replayHash} />
-        <ReplayVerification replay={replay} metadata={signedMetadata} recordedHash={replayHash} />
+        {/* Proof sits BELOW the replay and stays collapsed. A viewer gets one
+            line they can trust at a glance; the full trail is one tap away for
+            when they actually want to check it. */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing.sm, width: "100%" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: spacing.xs, minWidth: 0 }}>
+            <span style={{ fontSize: typography.size.xs, color: colors.text.muted, letterSpacing: "0.12em" }}>
+              AUDIT
+            </span>
+            <ReplayVerification variant="compact" replay={replay} metadata={signedMetadata} recordedHash={replayHash} />
+          </span>
+          <button
+            type="button"
+            onClick={() => setAuditOpen((v) => !v)}
+            aria-expanded={auditOpen}
+            aria-controls="replay-audit-details"
+            style={{
+              padding: "2px 8px",
+              border: `1px solid ${colors.border.default}`,
+              borderRadius: radius.sm,
+              background: "transparent",
+              color: colors.text.secondary,
+              fontFamily: typography.fontFamilyMono,
+              fontSize: typography.size.xs,
+              letterSpacing: "0.08em",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {auditOpen ? "Audit trail ▴" : "Audit trail ▾"}
+          </button>
+        </div>
+
+        {auditOpen && (
+          <div
+            id="replay-audit-details"
+            style={{ display: "flex", flexDirection: "column", gap: spacing.md, width: "100%" }}
+          >
+            <SeedAudit seed={replay.seed} seedSource={replay.seedSource} replayHash={replayHash} />
+            <ReplayVerification replay={replay} metadata={signedMetadata} recordedHash={replayHash} />
+          </div>
+        )}
       </div>
     </Modal>
   );

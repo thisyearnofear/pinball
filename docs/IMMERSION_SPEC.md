@@ -9,7 +9,7 @@
 
 | System | Phase | State |
 |---|---|---|
-| A1 · Machine mood (MAMORU 守) | demo | ✅ shipped — `computeMood` + mood-keyed taunts + mood-colored overlay |
+| A1 · Machine mood (MAMORU 守) | demo | ✅ shipped — `computeMood` + mood-keyed taunts + mood-colored overlay + **mood named in the HUD** |
 | A2 · Kill cam | demo | ✅ shipped — ball capture + 900ms slow-mo + camera push + deep taiko |
 | A3 · Hash-sealed stamp | demo | ✅ shipped — `sealFromReplayHash` + verdict seal overlay + share-card stamp |
 | A4 · World-physics coupling | demo | ✅ shipped — `worldGravityX/Y` + per-world sway/drift + tournament ruleset line |
@@ -135,8 +135,16 @@ tier; new pools per mood. Examples:
 - enraged: `"ENOUGH."`, `"You think this is skill?"`
 - grieving (drain): `"…I failed it."`, `"It trusted me."`, `"NOOO"` (kept from current pool)
 
-**UI:** taunt overlay (GameMount.tsx:1136) color shifts per mood (calm red `#ff4444` →
+**UI:** taunt overlay (GameMount.tsx) color shifts per mood (calm red `#ff4444` →
 desperate amber `#f59e0b` → enraged white-hot → grieving dim indigo). Prefix `守:`.
+
+The HUD also **names** the state — `守 MAMORU · WARY` — with the reason in the
+row's `title`. Colour alone reads as an unexplained difficulty swing; the word
+plus "you keep coming back, it is watching you now" is what makes the
+rubber-band legible as character. Copy and palette: `src/utils/mood-display.ts`
+(`describeMood`, `MOOD_COLORS`), guarded by
+`tests/unit/utils/mood-display.spec.ts` (distinct label/meaning/colour per mood,
+calm fallback for unknown values, HUD-sized labels).
 
 ### A2. Kill cam (the signature moment)
 

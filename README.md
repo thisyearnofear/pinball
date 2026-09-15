@@ -74,6 +74,8 @@ flowchart LR
 | Quantum-seeded runs (QRNG seed, replay-verifiable) | ✅ live | `src/services/quantum-seed.ts` |
 | Seed audit readout in ghost race + replay viewer (provenance, seed + replay hashes, tap-to-copy) | ✅ live | `src/game/ui/SeedAudit.tsx` |
 | Replay-hash ↔ signed score-metadata check in the replay viewer + ghost race (with metadata copy) | ✅ live | `src/utils/replay-verify.ts` |
+| First run taught **on the table** (no intro slides, zero blocking beats), replayable from a "How to win" chip — tap replays the tips, hold opens the full guide | ✅ live | `src/config/table-coach.ts` |
+| MAMORU's mood named in the HUD (escalation reads as character, not cheating) | ✅ live | `src/utils/mood-display.ts` |
 
 A run's seed can optionally come from a quantum RNG (`GET /api/quantum/seed`) —
 the seed is recorded in the replay, so runs stay fully re-simulatable. See

@@ -26,7 +26,6 @@ import {
   useToast, ErrorBoundary,
   ScorePopupProvider, ScreenFxProvider,
   CelebrationParticles,
-  OnboardingIntro,
   CRTOverlay, ArcadeLobby, AppHeader,
   AmbientBackground, ActivityFeedProvider, useActivityFeed,
   SakuraPetals, KanjiWatermark,
@@ -39,7 +38,7 @@ import { SettingsModal } from "./ui/SettingsModal";
 import { HowToPlayModal } from "./ui/HowToPlayModal";
 import { AboutModal } from "./ui/AboutModal";
 import { LeaderboardModal } from "./ui/LeaderboardModal";
-import { TutorialOverlay, hasSeenTutorial, markTutorialSeen } from "./ui/TutorialOverlay";
+import { hasSeenFirstRun, markFirstRunSeen } from "@/utils/first-run";
 import { ScoreSubmissionOverlay, type SubmissionStep } from "./ui/ScoreSubmissionOverlay";
 import { CelebrationOverlay } from "./ui/CelebrationOverlay";
 import { ReplayViewer } from "./ui/ReplayViewer";
@@ -57,13 +56,6 @@ import { replayHashOf } from "@/utils/seed-audit";
 
 type View = "lobby" | "game" | "paused";
 type ActiveModal = "settings" | "how" | "about" | "leaderboard" | null;
-
-// Raw localStorage key (predates the ps_data blob; migrating would reset user state)
-const ONBOARDING_SEEN_KEY = "pinball_onboarding_seen";
-
-function markOnboardingSeen(): void {
-  try { localStorage.setItem(ONBOARDING_SEEN_KEY, "true"); } catch {}
-}
 
 function shortAddr(addr: string): string {
   if (!addr || addr.length < 10) return "rival";
@@ -110,7 +102,6 @@ function GameScreenInner() {
   const [playerName] = useState<string>(() => {
     try { return localStorage.getItem("pinball_player_name") ?? ""; } catch { return ""; }
   });
-  const [showTutorial, setShowTutorial] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [showKamiTrials, setShowKamiTrials] = useState(false);
   const [showPaymentSelector, setShowPaymentSelector] = useState(false);
@@ -128,9 +119,10 @@ function GameScreenInner() {
   } | null>(null);
   const [submissionStep, setSubmissionStep] = useState<SubmissionStep | null>(null);
   const [submissionError, setSubmissionError] = useState<string>("");
-  const [showOnboarding, setShowOnboarding] = useState(() => {
-    try { return !localStorage.getItem(ONBOARDING_SEEN_KEY); } catch { return true; }
-  });
+  // First run: the teaching happens on the table (see `@/config/table-coach`),
+  // so this only decides whether the coach plays — there is no intro to page
+  // through before the player is allowed to touch the machine.
+  const [coachEnabled, setCoachEnabled] = useState(() => !hasSeenFirstRun());
   // Meta-progression (rank / XP / streak) and friend-challenge state.
   const [progress, setProgress] = useState<PlayerProgress>(() => getProgress());
   const [progressUpdate, setProgressUpdate] = useState<ProgressUpdate | null>(null);
@@ -149,12 +141,26 @@ function GameScreenInner() {
   }, []);
   const demoStartedRef = useRef(false);
 
+  // First run: put a ball on the table immediately. The teaching lives on the
+  // table, so a lobby between a newcomer and the lesson is the one screen that
+  // can still stop it from happening. It starts after mount rather than in the
+  // initial state so the server-rendered markup stays the lobby — the playfield
+  // must never be part of the static export.
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (isDemo || autoStartedRef.current || !coachEnabled) return;
+    autoStartedRef.current = true;
+    startPractice();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coachEnabled, isDemo]);
+
   useEffect(() => {
     if (!isDemo || demoStartedRef.current) return;
     demoStartedRef.current = true;
-    markOnboardingSeen();
-    setShowOnboarding(false);
-    markTutorialSeen();
+    // A demo is a scripted walkthrough: the narrator toast is the teaching, so
+    // the table coach stays out of its way.
+    markFirstRunSeen();
+    setCoachEnabled(false);
     selectGameMode("kamikaze");
     const t = window.setTimeout(() => {
       setMode("practice");
@@ -212,7 +218,6 @@ function GameScreenInner() {
   function startPractice() {
     setMode("practice");
     setShowCelebration(false);
-    if (!hasSeenTutorial()) setShowTutorial(true);
     setRunKey((k) => k + 1);
     setView("game");
   }
@@ -222,7 +227,6 @@ function GameScreenInner() {
     setAiDifficulty(challenge.aiDifficulty);
     setMode("practice");
     setShowCelebration(false);
-    markTutorialSeen();
     setRunKey((k) => k + 1);
     setView("game");
     activityFeed.log("entry", `Daily challenge started · ${challenge.worldId} · ${challenge.mode}`);
@@ -237,7 +241,6 @@ function GameScreenInner() {
     setMode("practice");
     setShowCelebration(false);
     setChallengeOutcome(null);
-    markTutorialSeen();
     setActiveChallenge(invite);
     setPendingChallenge(null);
     setRunKey((k) => k + 1);
@@ -261,7 +264,6 @@ function GameScreenInner() {
     setMode("practice");
     setShowCelebration(false);
     setChallengeOutcome(null);
-    markTutorialSeen();
     setActiveChallenge(invite);
     setPendingChallenge(null);
     setRunKey((k) => k + 1);
@@ -273,7 +275,6 @@ function GameScreenInner() {
   function proceedAfterEntry() {
     setMode("tournament");
     setShowCelebration(false);
-    if (!hasSeenTutorial()) setShowTutorial(true);
     setRunKey((k) => k + 1);
     setView("game");
   }
@@ -343,7 +344,7 @@ function GameScreenInner() {
     return gameMode;
   }, [mode, tournament.tournamentId, gameMode]);
 
-  const pausedEffective = view === "paused" || activeModal !== null || showTutorial || showCelebration || showReplay || submissionStep !== null || showKamiTrials;
+  const pausedEffective = view === "paused" || activeModal !== null || showCelebration || showReplay || submissionStep !== null || showKamiTrials;
 
   // Ghost racing: fetch the tournament leader's replay for each run. Skip when
   // the leader's replay is for a different mode or the leader is the player.
@@ -443,7 +444,13 @@ function GameScreenInner() {
         ? `Ball drained in ${(score / 1000).toFixed(1)}s`
         : `Score submitted: ${score.toLocaleString()} pts`,
     );
-  }, [mode, effectiveGameMode, activeWorldId, tournament.tournamentId, activeChallenge, recordRun, activityFeed]);
+    // The first run is taught; subsequent runs play clean. Marked at run end so
+    // the coaching covers a whole session (all three balls), not one ball.
+    if (coachEnabled) {
+      markFirstRunSeen();
+      setCoachEnabled(false);
+    }
+  }, [mode, effectiveGameMode, activeWorldId, tournament.tournamentId, activeChallenge, recordRun, activityFeed, coachEnabled]);
 
   return (
     <ScreenFxProvider>
@@ -517,7 +524,6 @@ function GameScreenInner() {
                   setTournament((prev) => ({ ...prev, tournamentId: id }));
                   setMode("tournament");
                   setShowCelebration(false);
-                  if (!hasSeenTutorial()) setShowTutorial(true);
                   setRunKey((k) => k + 1);
                   setView("game");
                 }}
@@ -581,6 +587,8 @@ function GameScreenInner() {
                       gameMode={effectiveGameMode}
                       aiDifficulty={aiDifficulty}
                       controlScheme={effectiveGameMode === "kamikaze" ? controlScheme : "steer"}
+                      coach={coachEnabled}
+                      onOpenControls={() => setActiveModal("how")}
                       tournamentId={tournament.tournamentId}
                       worldId={mode === "practice" ? selectedWorldId : tournament.worldId}
                       playerAddress={address ?? null}
@@ -620,8 +628,6 @@ function GameScreenInner() {
           {activeModal === "leaderboard" && (
             <LeaderboardModal onClose={() => setActiveModal(null)} rows={tournament.leaderboard} playerAddress={address} loading={isLoadingTournament} loadError={Boolean(loadError)} onRetry={refreshTournament} inverted={tournament.invertedWinCondition} />
           )}
-
-          {showTutorial && <TutorialOverlay gameMode={effectiveGameMode} onClose={() => { markTutorialSeen(); setShowTutorial(false); }} />}
 
           {submissionStep && (
             <ScoreSubmissionOverlay
@@ -679,12 +685,6 @@ function GameScreenInner() {
 
           <CelebrationParticles active={showCelebration} />
 
-          {showOnboarding && (
-            <OnboardingIntro
-              onComplete={() => { markOnboardingSeen(); setShowOnboarding(false); startPractice(); }}
-              onSkip={() => { markOnboardingSeen(); setShowOnboarding(false); }}
-            />
-          )}
           </div>
         </div>
       </ScorePopupProvider>

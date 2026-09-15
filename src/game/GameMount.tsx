@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { preloadAssets } from "@/services/asset-preloader";
 import { mountGame, type MountedGame } from "@/domains/game/mount-game";
@@ -15,6 +15,7 @@ import { CelebrationParticles } from "./ui/CelebrationParticles";
 import { ShotCallHud } from "./ui/ShotCallHud";
 import { IMMERSION } from "@/config/immersion-tuning";
 import { GhostRace } from "./ui/GhostRace";
+import { TableCoach, CoachReplayChip } from "./ui/TableCoach";
 import { StabilityMeter } from "./ui/StabilityMeter";
 import { KanjiWatermark } from "./ui/KanjiWatermark";
 import { type WorldReaction } from "@/presentation/world-reactor";
@@ -22,6 +23,8 @@ import { isKamikazeMode, getLastTaunt, getTickCount, getTimeScale, consumeMoment
 import { createKamikazeState, POWERUP_NAMES, type AIDifficulty } from "@/model/kamikaze";
 import type { PowerUpSide } from "@/definitions/game";
 import { mulberry32 } from "@/utils/rng";
+import { describeMood } from "@/utils/mood-display";
+import { coachScript, currentCue, noObservations, type CoachCueId, type CoachObservations } from "@/config/table-coach";
 import { nextRunSeed, lastSeedSource } from "@/services/quantum-seed";
 import * as haptics from "@/utils/haptics";
 import { startMachinePulse, stopMachinePulse } from "@/services/audio-service";
@@ -112,20 +115,6 @@ function applyWorldReaction(reaction: WorldReaction): void {
 }
 
 /**
- * A1: the machine's mood drives the taunt overlay color. Calm reads as the
- * classic adversary red; as MAMORU destabilizes the palette shifts toward
- * amber (desperate), white-hot (enraged), and dim indigo (grieving).
- */
-const MOOD_COLORS: Record<string, { color: string; border: string }> = {
-    calm:      { color: "#ff4444", border: "rgba(255,68,68,0.4)" },
-    smug:      { color: "#ff6b6b", border: "rgba(255,107,107,0.5)" },
-    wary:      { color: "#fbbf24", border: "rgba(251,191,36,0.5)" },
-    desperate: { color: "#f59e0b", border: "rgba(245,158,11,0.6)" },
-    enraged:   { color: "#ffffff", border: "rgba(255,255,255,0.8)" },
-    grieving:  { color: "#818cf8", border: "rgba(129,140,248,0.5)" },
-};
-
-/**
  * Faint directional guide drawn from the ball to the pointer while charging.
  * Shows the player that their hold is aiming a nudge, not just waiting.
  */
@@ -204,6 +193,10 @@ type Props = {
   worldId?: string; // Optional world override (for themed tournaments)
   controlScheme?: "steer" | "feint" | "precision"; // Kamikaze control: nudge vs the two shot-calling variants
   paused: boolean;
+  /** First run: teach on the table itself instead of in an intro screen. */
+  coach?: boolean;
+  /** Opens the full control reference (How to Play) from the table's coach chip. */
+  onOpenControls?: () => void;
   /** Tournament leader's replay for live ghost racing. */
   ghost?: { digest: ReplayDigest; score: number; address: string; replayHash?: string; metadata?: string } | null;
   onActiveChange?: (active: boolean) => void;
@@ -271,6 +264,43 @@ export default function GameMount(props: Props) {
   const victoryClearRef = useRef(0);
   // Shake is applied imperatively: re-keying the wrapper would remount (and kill) the canvas.
   const shakeRef = useRef<HTMLDivElement | null>(null);
+  // A1: mood drives the taunt overlay colour and the named state in the HUD.
+  const moodDisplay = describeMood(machineMood);
+  // First-run coach: what the table has seen the player do, and which cues they
+  // have already waved away. Both survive the best-of-3 balls, so the teaching
+  // does not restart every ball.
+  const [coachObs, setCoachObs] = useState<CoachObservations>(noObservations);
+  const [coachDismissed, setCoachDismissed] = useState<CoachCueId[]>([]);
+  // Set once the player asks for the tips again. The first run teaches
+  // unprompted; after that the coach only speaks when invited.
+  const [coachArmed, setCoachArmed] = useState(false);
+  // The coach copy adapts to the input device, so detect it the same way the
+  // rest of the UI does (coarse pointer rather than viewport width).
+  const coachTouchscreen = useMemo(
+    () => typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)")?.matches === true,
+    [],
+  );
+  const coachCues = useMemo(() => coachScript(props.gameMode, coachTouchscreen), [props.gameMode, coachTouchscreen]);
+  const coachCue = useMemo(
+    () => (props.coach || coachArmed ? currentCue(coachCues, coachObs, new Set<string>(coachDismissed)) : null),
+    [props.coach, coachArmed, coachCues, coachObs, coachDismissed],
+  );
+  const dismissCoachCue = useCallback((id: CoachCueId) => {
+    setCoachDismissed((prev) => (prev.includes(id) ? prev : [...prev, id]));
+  }, []);
+  // Replay on demand: wipe what the coach has already said and play the script
+  // from the top, without leaving the table.
+  const replayCoach = useCallback(() => {
+    setCoachObs(noObservations());
+    setCoachDismissed([]);
+    setCoachArmed(true);
+  }, []);
+  const observeCoach = useCallback((patch: Partial<CoachObservations>) => {
+    setCoachObs((prev) => {
+      const next = { ...prev, ...patch };
+      return (Object.keys(patch) as Array<keyof CoachObservations>).every((k) => prev[k] === next[k]) ? prev : next;
+    });
+  }, []);
 
   function fireVictoryFx() {
     const g = gameRef.current;
@@ -341,6 +371,8 @@ export default function GameMount(props: Props) {
   const lastDuckTimeRef = useRef<number>(0);
   const runStartRef = useRef<number>(0);
   const worldContainerStyleRef = useRef<HTMLDivElement | null>(null);
+  /** Running total of the table's time tax, for edge-triggering the coach cue. */
+  const taxSeenRef = useRef(0);
 
   const initialGame = useMemo<GameDef>(
     () => createRunGame({ id: "practice", table: START_TABLE_INDEX, paused: false, gameMode: props.gameMode, aiDifficulty: props.aiDifficulty, worldId: props.worldId, controlScheme: props.controlScheme }),
@@ -386,7 +418,7 @@ export default function GameMount(props: Props) {
         game: initialGame,
         touchscreen: true,
         onCharge: (power) => setChargePower(power),
-        onDive: () => showAgencyBanner("突っ込む · DIVE!"),
+        onDive: () => { observeCoach({ dived: true }); showAgencyBanner("突っ込む · DIVE!"); },
         onNudge: (power) => showAgencyBanner(power >= 2.9 ? "全力 · MAX NUDDGE!" : "突き · POWER NUDDGE!"),
         onDeploy: () => {
           const g = gameRef.current;
@@ -395,7 +427,7 @@ export default function GameMount(props: Props) {
         },
         onTiltLock: () => showAgencyBanner("封 · TILT-LOCK!"),
         onTiltLockCooldown: () => showAgencyBanner("…still charging"),
-        onFirstAction: () => props.onFirstAction?.(),
+        onFirstAction: () => { observeCoach({ engaged: true }); props.onFirstAction?.(); },
         onAim: (x, y) => setAimPoint(x !== null && y !== null ? { x, y } : null),
         onMessage: (msg: GameMessages | null) => {
           if (!msg) return;
@@ -494,6 +526,7 @@ export default function GameMount(props: Props) {
     multiballRef.current = false;
     prevActiveRef.current = false;
     gameOverRef.current = false;
+    taxSeenRef.current = 0;
     gameRef.current = g;
 
     // Reset world reactor for new game
@@ -573,6 +606,15 @@ export default function GameMount(props: Props) {
         setDrainStreak((prev) => (prev === g.kamikaze!.drainStreak ? prev : g.kamikaze!.drainStreak));
         setPenaltyBumper((prev) => (prev === g.kamikaze!.totalBumperHits ? prev : g.kamikaze!.totalBumperHits));
         setPenaltyTrigger((prev) => (prev === g.kamikaze!.totalTriggerGroupCompletions ? prev : g.kamikaze!.totalTriggerGroupCompletions));
+        // Coach: the first time the table taxes the player is the only moment
+        // the tax is worth explaining. Edge-triggered on the running total so a
+        // replayed coach waits for a *new* hit instead of firing immediately on
+        // a tax the player already understood.
+        const taxTotal = g.kamikaze.totalBumperHits + g.kamikaze.totalTriggerGroupCompletions;
+        if (taxTotal > taxSeenRef.current) {
+          taxSeenRef.current = taxTotal;
+          observeCoach({ taxed: true });
+        }
         const completedBalls = g.kamikaze.completedBallScores;
         setBestDrainMs((prev) => {
           const next = completedBalls.length ? Math.min(...completedBalls) : null;
@@ -918,12 +960,13 @@ export default function GameMount(props: Props) {
             onDismiss={() => setWorldLoadingProgress(null)}
           />
         )}
-        {/* Fallback notice when 3D world unavailable */}
+        {/* Fallback notice when 3D world unavailable. Sits above the "How to
+            win" chip rather than under it so the two never overlap. */}
         {worldFallback && (
           <div
             style={{
               position: "absolute",
-              bottom: 8,
+              bottom: 40,
               right: 8,
               padding: "4px 10px",
               borderRadius: 6,
@@ -1054,6 +1097,15 @@ export default function GameMount(props: Props) {
           {kamikazeActive ? (
             <>
               <div style={{ color: "#ff4444", fontWeight: "bold" }}>神風 KAMIKAZE BALL</div>
+              {/* MAMORU's state, named. The machine's difficulty is rubber-banded,
+                  so naming the state (and saying why) makes the escalation read
+                  as character rather than as the game quietly cheating. */}
+              <div
+                title={moodDisplay.meaning}
+                style={{ marginTop: 2, fontSize: 10, letterSpacing: "0.08em", color: moodDisplay.color }}
+              >
+                守 MAMORU · {moodDisplay.label}
+              </div>
               {/* Session shape: a run is the best of 3 balls, so say so — the
                   4s drain is the clip, the three-ball arc is the session. */}
               <div style={{ marginTop: 2, fontSize: 10, opacity: 0.75, letterSpacing: "0.08em" }}>
@@ -1178,10 +1230,10 @@ export default function GameMount(props: Props) {
                   Release to fire your nudge
                 </div>
               ) : null}
-              {/* Persistent cheat-sheet: first ball only. Later balls leave it out
-                  — a four-second run cannot afford reading, and the tutorial has
-                  already taught the verbs. */}
-              {hud.balls === BALLS_PER_GAME && !storedMunition && underworldCharge < 1 && (
+              {/* Persistent cheat-sheet: first ball only, and never while the
+                  first-run coach is on the table saying the same thing. Later
+                  balls leave it out — a four-second run cannot afford reading. */}
+              {!props.coach && hud.balls === BALLS_PER_GAME && !storedMunition && underworldCharge < 1 && (
                 <div style={{ fontSize: 10, opacity: 0.55, marginTop: 6, lineHeight: 1.5 }}>
                   {shotHud.active ? "tap a side to aim · RELEASE to fire" : "HOLD charge · SWIPE↓ dive · SWIPE↑ tilt-lock"}
                 </div>
@@ -1268,8 +1320,8 @@ export default function GameMount(props: Props) {
               padding: "12px 24px",
               borderRadius: 12,
               background: "rgba(0,0,0,0.75)",
-              border: `1px solid ${MOOD_COLORS[machineMood]?.border ?? MOOD_COLORS.calm.border}`,
-              color: MOOD_COLORS[machineMood]?.color ?? MOOD_COLORS.calm.color,
+              border: `1px solid ${moodDisplay.border}`,
+              color: moodDisplay.color,
               fontSize: 18,
               fontWeight: "bold",
               textTransform: "uppercase",
@@ -1283,6 +1335,11 @@ export default function GameMount(props: Props) {
             {kamikazeMessage}
           </div>
         )}
+        {/* First-run coach: the teaching, on the table, while the ball is live. */}
+        {coachCue && <TableCoach cue={coachCue} onDismiss={dismissCoachCue} />}
+        {/* …and the standing way to ask for it again (tap) or for the whole
+            reference (hold). */}
+        {!mountError && <CoachReplayChip onReplay={replayCoach} onOpenGuide={props.onOpenControls} />}
         {/* Charge ring: grows while holding to build a power nudge */}
         {kamikazeActive && !shotHud.active && chargePower !== null && chargePower > 1.05 && (
           <div

@@ -102,8 +102,9 @@ Where the seed came from is surfaced to the player, from one formatter
 | **Share card image** | A chip in the top-right corner |
 | **Share text** | A `Seed: …` line |
 | **Ghost race / replay viewer** (`SeedAudit`) | Provenance, the raw seed, a seed fingerprint, and the replay hash — the audit trail for a rival's run |
-| **Replay viewer** (`ReplayVerification`) | Whether the replay's hash still matches the score metadata it was submitted with, plus a copy button for that metadata block |
+| **Replay viewer** (`ReplayVerification`) | Whether the replay's hash still matches the score metadata it was submitted with, plus a copy button for that metadata block. Collapsed by default — see below |
 | **Ghost race** (`ReplayVerification` compact) | The same check as a one-line status under the PiP: `✓ matches` / `✗ mismatch` / `○ no record` |
+| **Replay viewer, collapsed row** | An `AUDIT` label plus that one-line status, with an **Audit trail ▾** control that expands the two full panels on demand |
 
 | Value | Chip | Meaning |
 |---|---|---|
@@ -202,6 +203,12 @@ no metadata and correctly report `○ no record` (informational, not a failure).
 Ghost taps must never register as gameplay, so the PiP's audit and verification
 lines stop event propagation before the playfield's tap-to-nudge handler sees
 them.
+
+**Collapsed by default.** The replay viewer shows only the one-line `AUDIT`
+status (`✓ matches` / `✗ mismatch` / `○ no record`) until the viewer presses
+**Audit trail ▾**; the full `SEED AUDIT` and `SCORE METADATA` panels then render
+below the replay. Proof should be one tap away, not the first thing on screen —
+and the default state must not read as distrust (see the voice rule above).
 
 **Copying the metadata.** The replay viewer's `SCORE METADATA` panel has a copy
 button that puts the whole signed metadata payload on the clipboard — the exact
