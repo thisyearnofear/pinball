@@ -85,7 +85,9 @@ rather than one combined test (you can't debug six variables at once):
     coin flip, not a guaranteed win.
   This breaks the rote script so feinting requires reading the guard, not
   memorizing a pattern. See `tests/sim/shot-calling-skill.sim.ts` for the
-  skill-discrimination harness that validates this.
+  skill-discrimination harness that validates this — it runs on every pull
+  request, alongside a watch that fails the run if a physics draw ever comes
+  from an unseeded source (`.github/workflows/sim-gate.yml`).
 - MAMORU's guard is **embodied**: the flipper on the guarded lane rises
   (visual-only — the deterministic lane resolver is the single authority).
 
@@ -254,7 +256,7 @@ Pacing: early wins (bonus XP on the very first touch, first grade after first ru
 - Matter.js physics + zCanvas rendering, client-only (`dynamic({ ssr: false })`)
 - Backend: Fastify (score signing, replay storage, NIM entry verification)
 - Contracts: Solidity 0.8.28 (TournamentManager ERC-20 + Native variants, MissionPool)
-- Tests: 251 frontend + backend + contract suites, all passing; plus a sim harness (`tests/sim/`) that runs headless bot matchups to validate skill discrimination
+- Tests: 380 frontend + backend + contract suites, all passing; plus a sim harness (`tests/sim/`) that runs headless bot matchups to validate skill discrimination and enforce seeded physics — gated in CI on every PR
 - MIT license, public GitHub repo
 
 ---

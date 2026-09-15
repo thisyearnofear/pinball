@@ -20,10 +20,19 @@
  * sees) and assert the skill-discrimination invariant: the best bot must beat
  * the worst bot — and, on precision, beat the permanently-mistimed rote bot.
  *
+ * A run must also hand the worker's event loop a turn: this body never reaches
+ * the event loop on its own, and the worker's RPC deadline is a hard 60s, so a
+ * slower (or busier) machine can finish with every test green and still exit 1.
+ * See ./event-loop.ts.
+ *
+ * Reproducible by construction: every physics draw comes off the run's rngSeed
+ * (including the KAMI'S WRATH hurl jitter, src/model/kamikaze.ts), so the same
+ * seeds must produce the same table run after run.
+ *
  * Run: npm run sim:kamikaze
  * Debug: SIM_DEBUG=1 SIM_SEED=11 SIM_DIFF=easy SIM_VARIANT=feint npm run sim:kamikaze
  */
-import { describe, it, expect, vi, beforeAll } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import "vitest-canvas-mock";
 import { readFileSync } from "fs";
 import path from "path";
@@ -45,6 +54,10 @@ import { mulberry32 } from "@/utils/rng";
 import { getRunVerdict } from "@/config/run-verdict";
 import { IMMERSION } from "@/config/immersion-tuning";
 import { TICKS_PER_SECOND } from "@/model/shot-calling";
+import { yieldToEventLoop } from "./event-loop";
+import {
+    watchForUnseededDraws, unseededDrawReport, type UnseededDrawWatch,
+} from "./unseeded-draws";
 
 const FRAME_MS = 1000 / 60;
 const RUN_CAP_MS = 60_000;
@@ -333,6 +346,9 @@ async function simulateShotRun(
     seed: number,
     bot: ShotBot,
 ): Promise<RunResult> {
+    // A run blocks the worker ~1s of physics; hand the event loop a turn between
+    // runs so its pending RPC replies stay read (see ./event-loop.ts).
+    await yieldToEventLoop();
     vi.clearAllTimers();
 
     const game: GameDef = {
@@ -484,6 +500,8 @@ async function simulateSteerRun(
     seed: number,
     bot: SteerBot,
 ): Promise<RunResult> {
+    // See simulateShotRun: never let one test body monopolise the event loop.
+    await yieldToEventLoop();
     vi.clearAllTimers();
 
     const game: GameDef = {
@@ -551,11 +569,21 @@ async function simulateSteerRun(
 // ════════════════════════════════════════════════════════════════
 
 describe("skill-discrimination simulation", () => {
+    // Hard rule 1: a run must be reproducible from its seed alone, so no bot
+    // below may reach an unseeded source. See ./unseeded-draws.ts for why this
+    // watches the source instead of comparing two runs.
+    let draws: UnseededDrawWatch;
+
     beforeAll(() => {
+        draws = watchForUnseededDraws();
         vi.useFakeTimers({
             toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "performance"],
         });
         seedSvgCache();
+    });
+
+    afterAll(() => {
+        expect(unseededDrawReport(draws)).toEqual({ calls: 0 });
     });
 
     it("shot-calling: measures drain times and grades per bot × variant × difficulty", async () => {

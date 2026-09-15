@@ -265,7 +265,8 @@ export function applyPowerUpEffects(
     engine: IPhysicsEngine,
     ballBody: Body | null,
     _tableHeight: number,
-    now: number
+    now: number,
+    rng: () => number = Math.random
 ): void {
     if (!ballBody) return;
 
@@ -284,7 +285,10 @@ export function applyPowerUpEffects(
         const vx = ballBody.velocity.x;
         const vy = ballBody.velocity.y;
         const speed = Math.hypot(vx, vy) || 1;
-        const jitterX = (Math.random() - 0.5) * 0.6;
+        // Seeded, never Math.random: this is ball motion, so it must derive from
+        // the run's rngSeed (IMMERSION_SPEC rule 1). An unseeded draw here makes
+        // a replay wander off the run it claims to be.
+        const jitterX = (rng() - 0.5) * 0.6;
         const boost = 0.12;
         engine.launchBall(ballBody, {
             x: (vx / speed) * boost + jitterX,

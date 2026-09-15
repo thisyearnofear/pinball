@@ -1,0 +1,63 @@
+name: Sim Gate
+
+# The physics gate. Two regressions can only be caught by running the real
+# engine headlessly against bot players:
+#
+#   1. skill discrimination collapsing — passive play scoring as well as active
+#      play (the "do nothing and still do well" critique), or the precision
+#      meter ceasing to be the gate it claims to be;
+#   2. an unseeded draw sneaking onto the physics path, which makes a run
+#      unreproducible from the seed it recorded (`tests/sim/unseeded-draws.ts`).
+#
+# Deliberately the FULL grid: SIM_DEBUG narrows the run to one seed, variant and
+# difficulty, and the unseeded-draw watch can only vouch for paths that were
+# actually walked.
+#
+# The suite is deterministic (seeded RNG + fake timers) and hands the worker's
+# event loop a turn between runs, so a slow runner changes how long it takes,
+# never whether it passes.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: sim-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Reads the pnpm version from package.json's `packageManager` field, so
+      # the local and CI versions cannot drift apart.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          # pnpm-lock.yaml is gitignored in this repo, so key the store cache on
+          # package.json — setup-node needs a tracked path here.
+          cache-dependency-path: package.json
+
+      # Not frozen, deliberately: pnpm-lock.yaml is gitignored here, so CI has
+      # no committed lockfile to install from — and `--frozen-lockfile` refuses
+      # to install when none exists. Same flag the repo's own `ci` script uses
+      # for backend and contracts. A no-lockfile resolve was checked against the
+      # local lockfile and picks identical versions, so the sim's numbers match
+      # local runs (`pnpm install --lockfile-only` re-checks that).
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Run the kamikaze sim (physics + skill discrimination)
+        run: pnpm run sim:kamikaze

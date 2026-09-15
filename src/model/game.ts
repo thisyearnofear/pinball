@@ -696,7 +696,7 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
         }
 
         if (balls.length > 0) {
-            applyPowerUpEffects(game.kamikaze, engine, balls[0].body, table.height, now);
+            applyPowerUpEffects(game.kamikaze, engine, balls[0].body, table.height, now, game.rng ?? Math.random);
         }
 
         // Update score = time alive + penalties (frozen between drain and next launch)

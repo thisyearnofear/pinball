@@ -71,6 +71,7 @@ flowchart LR
 | Lobby attract mode (machine plays itself) | ✅ live | `src/game/ui/ArcadeLobby.tsx` |
 | Adaptive MAMORU guard policy (feint hold vs chase) | ✅ live | `src/model/shot-calling.ts` |
 | Skill-discrimination bot harness (null/random/rote/optimal) | ✅ live | `tests/sim/shot-calling-skill.sim.ts` |
+| Physics gate in CI (skill discrimination + unseeded-draw detection) | ✅ live | `.github/workflows/sim-gate.yml` |
 | Quantum-seeded runs (QRNG seed, replay-verifiable) | ✅ live | `src/services/quantum-seed.ts` |
 | Seed audit readout in ghost race + replay viewer (provenance, seed + replay hashes, tap-to-copy) | ✅ live | `src/game/ui/SeedAudit.tsx` |
 | Replay-hash ↔ signed score-metadata check in the replay viewer + ghost race (with metadata copy) | ✅ live | `src/utils/replay-verify.ts` |
@@ -87,6 +88,12 @@ the EIP-191 signed metadata, and the verifier checks physics plausibility
 (bounds, no teleports, drain segments vs claimed time, human input rates)
 before any score is signed. Cheating requires forging a physically plausible
 replay — not just POSTing a number.
+
+Determinism is what makes a replay mean anything: the run is reproducible from
+its recorded seed and inputs, which only holds while every physics draw comes
+off that seed — no wall clock, no `Math.random()` on the ball. That rule is
+enforced rather than intended: the sim gate below fails the build if an unseeded
+draw reappears on the physics path.
 
 ## Ecosystem profiles
 
@@ -166,7 +173,8 @@ Statically exports to `out/` — deploy to Netlify, Cloudflare Pages, or any CDN
 ### Testing
 
 ```bash
-pnpm test              # Frontend unit tests (65 tests, Vitest + jsdom)
+pnpm test               # Frontend unit tests (380 tests, Vitest + jsdom)
+pnpm run sim:kamikaze   # Headless physics + skill-discrimination sim (~1 min; gates PRs)
 pnpm run test:backend   # Backend API tests
 pnpm run test:contracts # Contract tests (Hardhat)
 pnpm run test:all       # All three suites

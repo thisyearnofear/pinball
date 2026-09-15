@@ -157,6 +157,49 @@ describe("Kamikaze Ball", () => {
         });
     });
 
+    // IMMERSION_SPEC rule 1: anything that moves the ball must derive from
+    // rngSeed. An unseeded draw here makes a replay (and any verifier re-running
+    // it) wander off the run it claims to be.
+    describe("Kami's Wrath hurls", () => {
+        const hurledBall = {
+            position: { x: 300, y: 400 },
+            velocity: { x: 0, y: 8 },
+        } as never;
+
+        function wrathState(): KamikazeState {
+            const state = getState();
+            activatePowerUp(state, PowerUpType.KAMIS_WRATH, "machine", 1000);
+            return state;
+        }
+
+        /** The impulse(s) the table applies with a given seed. */
+        function hurlsFor(seed: number): { x: number; y: number }[] {
+            const hurls: { x: number; y: number }[] = [];
+            const engine = getMockPhysicsEngine();
+            engine.launchBall = vi.fn((_body: unknown, impulse: { x: number; y: number }) => {
+                hurls.push(impulse);
+            });
+            applyPowerUpEffects(wrathState(), engine, hurledBall, 800, 1500, mulberry32(seed));
+            return hurls;
+        }
+
+        it("should derive the sideways jitter from the supplied rng", () => {
+            expect(hurlsFor(99)).toEqual([{ x: expect.any(Number), y: 0.12 }]);
+            expect(hurlsFor(99)).toEqual(hurlsFor(99));
+        });
+
+        it("should hurl differently when the seed differs", () => {
+            expect(hurlsFor(99)).not.toEqual(hurlsFor(100));
+        });
+
+        it("should never fall back to Math.random", () => {
+            const spy = vi.spyOn(Math, "random");
+            hurlsFor(7);
+            expect(spy).not.toHaveBeenCalled();
+            spy.mockRestore();
+        });
+    });
+
     describe("AI flippers", () => {
         function getFlipper(left = 200, top = 700) {
             return {

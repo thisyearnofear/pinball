@@ -12,7 +12,7 @@
  *
  * Run: npm run sim:kamikaze
  */
-import { describe, it, expect, vi, beforeAll } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import "vitest-canvas-mock";
 import { readFileSync } from "fs";
 import path from "path";
@@ -25,6 +25,10 @@ import { BALLS_PER_GAME, type GameDef } from "@/definitions/game";
 import Tables from "@/definitions/tables";
 import { createKamikazeState, type AIDifficulty } from "@/model/kamikaze";
 import { mulberry32 } from "@/utils/rng";
+import { yieldToEventLoop } from "./event-loop";
+import {
+  watchForUnseededDraws, unseededDrawReport, type UnseededDrawWatch,
+} from "./unseeded-draws";
 
 const FRAME_MS = 1000 / 60;
 const RUN_CAP_MS = 45_000;
@@ -108,6 +112,9 @@ function realignSvgBodies(): void {
 }
 
 async function simulateRun(difficulty: AIDifficulty, seed: number, activePlayer: boolean): Promise<RunResult> {
+  // A run blocks the worker ~1s of physics; hand the event loop a turn between
+  // runs so its pending RPC replies stay read (see ./event-loop.ts).
+  await yieldToEventLoop();
   // stale endRound / teleport timers from a previous run would spawn phantom balls
   vi.clearAllTimers();
 
@@ -175,6 +182,8 @@ async function simulateRun(difficulty: AIDifficulty, seed: number, activePlayer:
 async function drainScore(
   difficulty: AIDifficulty, seed: number, killCam: boolean
 ): Promise<{ score: number; frozen: boolean; drained: boolean }> {
+  // See simulateRun: never let one test body monopolise the event loop.
+  await yieldToEventLoop();
   vi.clearAllTimers();
   setKillCamEnabled(killCam);
 
@@ -241,7 +250,12 @@ function summarize(label: string, results: RunResult[]): { label: string; med: n
 }
 
 describe("kamikaze balance simulation", () => {
+  // Hard rule 1: a run must be reproducible from its seed alone, so nothing the
+  // engine steps may reach an unseeded source. See ./unseeded-draws.ts.
+  let draws: UnseededDrawWatch;
+
   beforeAll(() => {
+    draws = watchForUnseededDraws();
     vi.useFakeTimers({
       toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "performance"],
     });
@@ -251,6 +265,10 @@ describe("kamikaze balance simulation", () => {
     for (const reflector of table.reflectors) {
       seedVertexCache(reflector.source, sampleSvgVertices(reflector.source));
     }
+  });
+
+  afterAll(() => {
+    expect(unseededDrawReport(draws)).toEqual({ calls: 0 });
   });
 
   it("measures drain times per difficulty (passive + active player)", async () => {

@@ -54,6 +54,7 @@ Build produces static `out/index.html` for Netlify/any CDN. Game runs entirely c
 - **Client (inspectable):** `src/utils/seed-audit.ts` derives seed provenance + seed/replay fingerprints; `src/utils/replay-verify.ts` recomputes a replay's hash and compares it with the `replayHash` committed by the signed score metadata.
 - The client check is deliberately narrower than the server one: it proves the replay payload matches what was submitted. It is not a signature check and does not re-simulate the run. See [QUANTUM_SEEDS.md](./QUANTUM_SEEDS.md).
 - `GET /api/replays/best/:tournamentId` returns the leader's replay **and** its signed metadata, so a ghost viewer runs the same check (`backend/src/routes/replays.ts`).
+- **Enforced, not merely intended:** the physics path draws only from the run's `rngSeed` (IMMERSION_SPEC rule 1). `tests/sim/unseeded-draws.ts` fails the sim if any physics draw slips back to `Math.random()` — a run that does is unreproducible from the seed it recorded — and that sim runs on every pull request (`.github/workflows/sim-gate.yml`).
 
 ## Domain-driven boundaries (DDD)
 

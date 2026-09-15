@@ -17,7 +17,7 @@
 | B2 · Relationship-skinned ranks | retention | ✅ shipped — rank-tier address; max rank earns the machine's silence |
 | B3 · Adaptive audio (taiko pulse) | retention | ✅ shipped — mood-driven heartbeat + 200ms audio dodge |
 
-**Verified:** 213 frontend unit tests + a real-engine sim guard proving the
+**Verified:** 380 frontend unit tests + a real-engine sim guard proving the
 kill cam never alters the scored time-alive (hard rule 3). The machine mood is
 derived purely from seeded/run state; its only physics touch is a bounded
 ±0.05 accuracy variance within the rubber-band precedent, so replays stay
@@ -66,7 +66,11 @@ These constraints keep every feature below compatible with replay verification a
 
 1. **Physics time is `tickCount`, never wall clock.** Any feature that touches gravity, AI
    decisions, or ball motion must derive from `getTickCount()` + `rngSeed` (deterministic).
-   Wall-clock is only for cosmetics (overlays, audio, DOM transforms).
+   Wall-clock is only for cosmetics (overlays, audio, DOM transforms). The KAMI'S WRATH hurl
+   jitter (`kamikaze.ts`) is seeded for this reason — unseeded, it made a run's outcome
+   depend on luck rather than the recorded seed, so no replay could reproduce it.
+   `tests/unit/model/kamikaze.spec.ts` fails if that draw ever reverts to `Math.random()`, and
+   the sim harness watches the whole grid for unseeded draws (`tests/sim/unseeded-draws.ts`).
 2. **Memory talks, never touches.** Cross-session machine memory (localStorage) may drive
    taunt text and greetings only. It must never influence physics or AI in a way that isn't
    reconstructible from the seeded run — otherwise replays stop being verifiable.

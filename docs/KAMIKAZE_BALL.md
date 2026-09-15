@@ -44,6 +44,9 @@ three-ball arc is the session.
 **Run verdicts:** grades (S/A/B/C/D with kanji stamps) are calibrated against a
 bot harness (`tests/sim/shot-calling-skill.sim.ts`) so passive play earns B/D,
 not S/A. Pars: easy 2.5s · medium 5s · hard 9s. S requires beating par by 80%+.
+That harness runs in CI on every PR, and also fails the run if any physics draw
+comes from an unseeded source — a run has to be reproducible from its recorded
+seed for a replay to mean anything.
 
 ## Control scheme
 
