@@ -271,7 +271,7 @@ Pacing: early wins (bonus XP on the very first touch, first grade after first ru
 - Matter.js physics + zCanvas rendering, client-only (`dynamic({ ssr: false })`)
 - Backend: Fastify (score signing, replay storage, NIM entry verification)
 - Contracts: Solidity 0.8.28 (TournamentManager ERC-20 + Native variants, MissionPool)
-- Tests: 388 frontend + backend + contract suites, all passing; plus a sim harness (`tests/sim/`) that runs headless bot matchups to validate skill discrimination and enforce seeded physics — gated in CI on every PR
+- Tests: 403 frontend + backend + contract suites, all passing; plus a sim harness (`tests/sim/`) that runs headless bot matchups to validate skill discrimination and enforce seeded physics — gated in CI on every PR
 - MIT license, public GitHub repo
 
 ---

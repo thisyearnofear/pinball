@@ -175,7 +175,7 @@ Statically exports to `out/` — deploy to Netlify, Cloudflare Pages, or any CDN
 ### Testing
 
 ```bash
-pnpm test               # Frontend unit tests (388 tests, Vitest + jsdom)
+pnpm test               # Frontend unit tests (403 tests, Vitest + jsdom)
 pnpm run sim:kamikaze   # Headless physics + skill-discrimination sim (~1 min; gates PRs)
 pnpm run test:backend   # Backend API tests
 pnpm run test:contracts # Contract tests (Hardhat)

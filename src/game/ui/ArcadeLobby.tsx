@@ -53,13 +53,20 @@ type Props = {
 
 const DIFFICULTIES: AIDifficulty[] = ["easy", "medium", "hard"];
 
+const CONTROL_LABELS: Record<"steer" | "feint" | "precision", string> = {
+  steer: "Steer",
+  feint: "守 Feint duel",
+  precision: "守 Precision",
+};
+
 export function ArcadeLobby(props: Props) {
   const tournaments = props.tournaments.length > 0 ? props.tournaments : getAllTournaments();
-  // Shot-calling is a prototype, not a peer of the default control scheme, so
-  // it lives behind a disclosure — but a scheme picked earlier keeps it open.
-  const [showAdvancedControls, setShowAdvancedControls] = useState(
-    props.controlScheme === "feint" || props.controlScheme === "precision",
-  );
+  // The lobby's one job is to start a run. Mode, machine difficulty and control
+  // scheme are three choices a newcomer cannot evaluate before playing, so they
+  // share a single disclosure that defaults closed for everyone. The summary on
+  // the toggle states the current setup, so it never has to be opened to check
+  // what you are about to play.
+  const [showSetup, setShowSetup] = useState(false);
 
   if (props.loading) {
     return (
@@ -75,7 +82,12 @@ export function ArcadeLobby(props: Props) {
   }
 
   const hasActive = tournaments.some(t => props.activeTournamentId === t.id);
-  const shotCallingSelected = props.controlScheme === "feint" || props.controlScheme === "precision";
+  const setupSummary = [
+    props.gameMode === "kamikaze" ? "Kamikaze 神風" : "Classic",
+    ...(props.gameMode === "kamikaze"
+      ? [ `machine: ${props.aiDifficulty}`, `control: ${CONTROL_LABELS[props.controlScheme]}` ]
+      : []),
+  ].join(" · ");
 
   return (
     <CRTOverlay intensity={0.15}>
@@ -102,30 +114,11 @@ export function ArcadeLobby(props: Props) {
 
         <AttractMode />
 
-        <div className={styles.modeSelector}>
-          <button
-            type="button"
-            className={`${styles.modeCard} ${styles.modeCardKamikaze} ${props.gameMode === "kamikaze" ? styles.modeCardSelected : ""}`}
-            onClick={(e) => { burstOnElement(e.currentTarget, { count: 10, colors: ["#ef4444", "#f87171", "#fbbf24"] }); props.onSelectGameMode("kamikaze"); }}
-          >
-            <span className={styles.modeBadgeFlagship}>FLAGSHIP</span>
-            <span className={styles.modeName}>
-              Kamikaze <span style={{ fontFamily: "'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif", color: "#e34234", fontSize: "1.1em" }} aria-hidden="true">神風</span>
-            </span>
-            <span className={styles.modeDesc}>Drain the ball. The machine fights back. Best of 3 — fastest drain wins.</span>
-          </button>
-          <button
-            type="button"
-            className={`${styles.modeCard} ${props.gameMode === "classic" ? styles.modeCardSelected : ""}`}
-            onClick={(e) => { burstOnElement(e.currentTarget, { count: 10, colors: ["#6366f1", "#818cf8", "#a78bfa"] }); props.onSelectGameMode("classic"); }}
-          >
-            <span className={styles.modeName}>Classic</span>
-            <span className={styles.modeDesc}>Traditional pinball. Rack up the highest score.</span>
-          </button>
-        </div>
-
         {/* Primary, wallet-free path — feel the machine before any money is
-            mentioned. Everything else is configured after this is obvious. */}
+            mentioned, and before being asked to choose anything. The pickers sit
+            behind the disclosure below: three control schemes you have never
+            played is not a question a lobby can ask, so it asks for nothing and
+            lets the summary line keep the current setup legible. */}
         <div className={styles.instantPlay}>
           <button
             type="button"
@@ -137,72 +130,87 @@ export function ArcadeLobby(props: Props) {
           <div className={styles.instantPlayHint}>
             No wallet needed · {props.gameMode === "kamikaze" ? "best of 3 · fastest drain wins" : "classic practice"} · free
           </div>
+          <button
+            type="button"
+            className={styles.setupToggle}
+            aria-expanded={showSetup}
+            aria-controls="run-setup"
+            onClick={(e) => { if (!showSetup) burstOnElement(e.currentTarget, { count: 6, colors: ["#6366f1", "#818cf8"], distance: [12, 30], size: 3 }); setShowSetup((v) => !v); }}
+          >
+            <span aria-hidden="true">{showSetup ? "▾" : "▸"}</span> Change setup · {setupSummary}
+          </button>
         </div>
 
-        {props.gameMode === "kamikaze" && (
-          <div className={styles.difficultyRow}>
-            <span className={styles.difficultyLabel}>Machine difficulty</span>
-            <div className={styles.difficultyPills}>
-              {DIFFICULTIES.map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  className={`${styles.difficultyPill} ${props.aiDifficulty === d ? styles.difficultyPillActive : ""}`}
-                  onClick={(e) => { if (props.aiDifficulty !== d) burstOnElement(e.currentTarget, { count: 8, colors: ["#ef4444", "#fbbf24"], distance: [20, 50], size: 4 }); props.onSelectDifficulty(d); }}
-                >
-                  {d.charAt(0).toUpperCase() + d.slice(1)}
-                </button>
-              ))}
+        {showSetup && (
+          <div id="run-setup" className={styles.setupPanel}>
+            <div className={styles.modeSelector}>
+              <button
+                type="button"
+                className={`${styles.modeCard} ${styles.modeCardKamikaze} ${props.gameMode === "kamikaze" ? styles.modeCardSelected : ""}`}
+                onClick={(e) => { burstOnElement(e.currentTarget, { count: 10, colors: ["#ef4444", "#f87171", "#fbbf24"] }); props.onSelectGameMode("kamikaze"); }}
+              >
+                <span className={styles.modeBadgeFlagship}>FLAGSHIP</span>
+                <span className={styles.modeName}>
+                  Kamikaze <span style={{ fontFamily: "'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif", color: "#e34234", fontSize: "1.1em" }} aria-hidden="true">神風</span>
+                </span>
+                <span className={styles.modeDesc}>Drain the ball. The machine fights back. Best of 3 — fastest drain wins.</span>
+              </button>
+              <button
+                type="button"
+                className={`${styles.modeCard} ${props.gameMode === "classic" ? styles.modeCardSelected : ""}`}
+                onClick={(e) => { burstOnElement(e.currentTarget, { count: 10, colors: ["#6366f1", "#818cf8", "#a78bfa"] }); props.onSelectGameMode("classic"); }}
+              >
+                <span className={styles.modeName}>Classic</span>
+                <span className={styles.modeDesc}>Traditional pinball. Rack up the highest score.</span>
+              </button>
             </div>
-          </div>
-        )}
 
-        {props.gameMode === "kamikaze" && (
-          <div className={styles.difficultyRow}>
-            <span className={styles.difficultyLabel}>Control</span>
-            <div className={styles.difficultyPills}>
-              <button
-                type="button"
-                className={`${styles.difficultyPill} ${props.controlScheme === "steer" ? styles.difficultyPillActive : ""}`}
-                onClick={() => props.onSelectControlScheme("steer")}
-              >
-                Steer
-              </button>
-              <button
-                type="button"
-                className={`${styles.difficultyPill} ${shotCallingSelected ? styles.difficultyPillActive : ""}`}
-                aria-expanded={showAdvancedControls}
-                aria-controls="advanced-controls"
-                onClick={() => setShowAdvancedControls((v) => !v)}
-              >
-                Advanced {showAdvancedControls ? "▾" : "▸"}
-              </button>
-            </div>
-          </div>
-        )}
+            {props.gameMode === "kamikaze" && (
+              <div className={styles.difficultyRow}>
+                <span className={styles.difficultyLabel}>Machine difficulty</span>
+                <div className={styles.difficultyPills}>
+                  {DIFFICULTIES.map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      className={`${styles.difficultyPill} ${props.aiDifficulty === d ? styles.difficultyPillActive : ""}`}
+                      onClick={(e) => { if (props.aiDifficulty !== d) burstOnElement(e.currentTarget, { count: 8, colors: ["#ef4444", "#fbbf24"], distance: [20, 50], size: 4 }); props.onSelectDifficulty(d); }}
+                    >
+                      {d.charAt(0).toUpperCase() + d.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
-        {props.gameMode === "kamikaze" && showAdvancedControls && (
-          <div id="advanced-controls" className={styles.advancedPanel}>
-            <div className={styles.advancedRow}>
-              <button
-                type="button"
-                className={`${styles.difficultyPill} ${props.controlScheme === "feint" ? styles.difficultyPillActive : ""}`}
-                onClick={() => props.onSelectControlScheme("feint")}
-              >
-                守 Feint duel
-              </button>
-              <button
-                type="button"
-                className={`${styles.difficultyPill} ${props.controlScheme === "precision" ? styles.difficultyPillActive : ""}`}
-                onClick={() => props.onSelectControlScheme("precision")}
-              >
-                守 Precision
-              </button>
-            </div>
-            <p className={styles.advancedHint}>
-              Shot-calling prototypes: call a lane, then release on the meter. <strong>Steer stays the ranked default</strong> —
-              these change how the serve works, so expect a rougher feel.
-            </p>
+            {/* All three schemes are equal citizens here: the whole block is
+                already opt-in, so a second nested disclosure would just be
+                another layer to open. */}
+            {props.gameMode === "kamikaze" && (
+              <div className={styles.difficultyRow}>
+                <span className={styles.difficultyLabel}>Control</span>
+                <div className={styles.difficultyPills}>
+                  {(["steer", "feint", "precision"] as const).map((scheme) => (
+                    <button
+                      key={scheme}
+                      type="button"
+                      className={`${styles.difficultyPill} ${props.controlScheme === scheme ? styles.difficultyPillActive : ""}`}
+                      onClick={() => props.onSelectControlScheme(scheme)}
+                    >
+                      {CONTROL_LABELS[scheme]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Only worth saying once a prototype is actually selected. */}
+            {props.gameMode === "kamikaze" && props.controlScheme !== "steer" && (
+              <p className={styles.advancedHint}>
+                Shot-calling prototypes: call a lane, then release on the meter. <strong>Steer stays the ranked default</strong> —
+                these change how the serve works, so expect a rougher feel.
+              </p>
+            )}
           </div>
         )}
 

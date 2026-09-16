@@ -160,24 +160,7 @@
   color: var(--text-primary);
 }
 
-/* Advanced control schemes (shot-calling prototypes) behind a disclosure. */
-.advancedPanel {
-  max-width: 560px;
-  margin: 0 auto var(--space-lg);
-  padding: var(--space-md) var(--space-lg);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.03);
-  text-align: center;
-}
-
-.advancedRow {
-  display: flex;
-  justify-content: center;
-  gap: var(--space-xs);
-  flex-wrap: wrap;
-}
-
+/* Caveat under the shot-calling prototypes, shown only once one is selected. */
 .advancedHint {
   margin: var(--space-sm) 0 0;
   font-size: var(--text-xs);
@@ -287,6 +270,37 @@
   font-size: var(--text-xs);
   color: var(--text-muted);
   letter-spacing: 0.04em;
+}
+
+/* The run setup disclosure: deliberately quiet, because the setup behind it is
+   the thing a newcomer is not yet equipped to choose. */
+.setupToggle {
+  margin-top: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  background: none;
+  border: none;
+  border-bottom: 1px dashed var(--border-subtle);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.setupToggle:hover {
+  color: var(--text-primary);
+  border-bottom-color: var(--text-muted);
+}
+
+.setupPanel {
+  max-width: 720px;
+  margin: 0 auto var(--space-xl);
+  padding: var(--space-md) var(--space-lg) var(--space-xs);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.03);
+  text-align: center;
 }
 
 /* Daily challenge — date-seeded retention hook. */
