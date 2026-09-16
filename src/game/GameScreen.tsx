@@ -456,7 +456,9 @@ function GameScreenInner() {
     <ScreenFxProvider>
       <ScorePopupProvider>
         <div style={{ minHeight: "100vh", background: colors.background.primary, position: "relative" }}>
-          <AmbientBackground />
+          {/* Paused while a run is live: the playfield has its own render
+              loops, and this one covers the whole viewport. */}
+          <AmbientBackground paused={view === "game"} />
           {view === "lobby" && effectiveGameMode === "kamikaze" && <SakuraPetals />}
           <div style={{ position: "relative", zIndex: 1 }}>
           <AppHeader

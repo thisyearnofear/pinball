@@ -210,7 +210,7 @@ of this *and* the four layers above.
   custom properties from `src/theme/tokens.ts`
 - **Clean wallet adapter**: WalletPort interface with explicit injection —
   contract clients require `wallet: WalletPort`, no hidden globals
-- **Test coverage**: 65 frontend + 54 backend + 10 contract tests, all passing
+- **Test coverage**: 388 frontend + 54 backend + 10 contract tests, all passing
 - **Domain-driven boundaries**: game, presentation, tournament, wallet domains
   with strict dependency rules (see [ARCHITECTURE.md](./ARCHITECTURE.md))
 - **Dead code purge**: 6 obsolete files removed, `@mezo-org/passport`

@@ -8,14 +8,30 @@ import React, { useEffect, useRef } from "react";
  * rAF loop for particles. Respects prefers-reduced-motion (renders nothing).
  * Themed via the active world's --world-primary CSS variable.
  *
+ * Set `paused` while a run is live: this is a full-viewport second render loop
+ * and a fullscreen canvas has no frames to spare for the scene behind it. The
+ * layers stay mounted so the look does not change, they just stop moving.
+ *
  * Core Principles:
  * - PERFORMANT: particles use a shared rAF; count is capped; CSS transforms only.
  * - CLEAN: self-contained, no external state, pointer-events: none.
  */
-export function AmbientBackground({ particleCount = 18 }: { particleCount?: number }) {
+export function AmbientBackground({
+  particleCount = 18,
+  paused = false,
+}: {
+  particleCount?: number;
+  paused?: boolean;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
+    if (paused) {
+      // Hand the canvas back empty rather than frozen mid-drift.
+      const canvas = canvasRef.current;
+      canvas?.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     const canvas = canvasRef.current;
@@ -130,7 +146,7 @@ export function AmbientBackground({ particleCount = 18 }: { particleCount?: numb
       window.removeEventListener("resize", resize);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [particleCount]);
+  }, [particleCount, paused]);
 
   if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     return null;
@@ -149,6 +165,7 @@ export function AmbientBackground({ particleCount = 18 }: { particleCount?: numb
           `,
           backgroundSize: "48px 48px",
           animation: "ambientGridDrift 24s linear infinite",
+          animationPlayState: paused ? "paused" : "running",
         }}
       />
       {/* Radial vignette so the grid fades toward the edges */}
@@ -168,6 +185,7 @@ export function AmbientBackground({ particleCount = 18 }: { particleCount?: numb
           height: "40%",
           background: "linear-gradient(180deg, transparent, rgba(99,102,241,0.025), transparent)",
           animation: "ambientScanSweep 8s ease-in-out infinite",
+          animationPlayState: paused ? "paused" : "running",
         }}
       />
       {/* Floating embers */}

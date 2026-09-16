@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { preloadAssets } from "@/services/asset-preloader";
 import { mountGame, type MountedGame } from "@/domains/game/mount-game";
-import { type GameDef, GameMessages, BALLS_PER_GAME, KAMIKAZE_BUMPER_PENALTY_MS, KAMIKAZE_TRIGGER_PENALTY_MS } from "@/definitions/game";
+import { type GameDef, GameMessages, BALLS_PER_GAME } from "@/definitions/game";
 import { START_TABLE_INDEX } from "@/definitions/tables";
 import { stopGame } from "@/services/high-scores-service";
 import { getPlayerInfo } from "@/services/contracts/tournament-client";
@@ -16,7 +16,8 @@ import { ShotCallHud } from "./ui/ShotCallHud";
 import { IMMERSION } from "@/config/immersion-tuning";
 import { GhostRace } from "./ui/GhostRace";
 import { TableCoach, CoachReplayChip } from "./ui/TableCoach";
-import { StabilityMeter } from "./ui/StabilityMeter";
+import { RunHud } from "./ui/RunHud";
+import { useIsSmallScreen } from "@/hooks/use-media-query";
 import { KanjiWatermark } from "./ui/KanjiWatermark";
 import { type WorldReaction } from "@/presentation/world-reactor";
 import { isKamikazeMode, getLastTaunt, getTickCount, getTimeScale, consumeMomentumShift, getMachineMood, consumeKillCam, setKillCamEnabled, isShotCallMode, getShotVariant, getShotPhase, getShotAimedLane, getShotGuardLane, getShotMeterPosition, getShotLanes, getLastShotResult, getShotCanRelease, getShotFeintStage, shotRelease, type ShotResult } from "@/model/game";
@@ -34,6 +35,17 @@ import { uploadReplay } from "@/services/backend-scores-client";
 import { keccak256, toUtf8Bytes } from "ethers";
 
 type GameMode = "classic" | "kamikaze";
+
+/**
+ * How often the run readout may sample the engine.
+ *
+ * The physics steps at 60fps, but the readout is text and bars: 20 samples a
+ * second is faster than anyone can read a changing number, and it is a third of
+ * the reconciliations of the mount tree the panel lives in. The shot-calling
+ * timing meter is the deliberate exception — that one is a gameplay input, so
+ * it keeps the full frame rate.
+ */
+const HUD_SAMPLE_MS = 50;
 
 function createRunGame(opts: {
   id: string;
@@ -224,6 +236,11 @@ export default function GameMount(props: Props) {
   const worldHandleRef = useRef<WorldHandle | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [mountError, setMountError] = useState<string | null>(null);
+  // Timestamp of the last run-readout sample (see HUD_SAMPLE_MS).
+  const hudSampleRef = useRef(0);
+  // Phones: the table is ~360px wide there, so the readout moves out of the
+  // playfield rather than floating in its corner (see RunHud).
+  const hudCompact = useIsSmallScreen();
   const [hud, setHud] = useState<{ score: number; balls: number; multiplier: number }>({
     score: 0,
     balls: BALLS_PER_GAME,
@@ -265,7 +282,8 @@ export default function GameMount(props: Props) {
   // Shake is applied imperatively: re-keying the wrapper would remount (and kill) the canvas.
   const shakeRef = useRef<HTMLDivElement | null>(null);
   // A1: mood drives the taunt overlay colour and the named state in the HUD.
-  const moodDisplay = describeMood(machineMood);
+  // Memoised so the memoised RunHud can bail out when nothing else changed.
+  const moodDisplay = useMemo(() => describeMood(machineMood), [machineMood]);
   // First-run coach: what the table has seen the player do, and which cues they
   // have already waved away. Both survive the best-of-3 balls, so the teaching
   // does not restart every ball.
@@ -562,17 +580,8 @@ export default function GameMount(props: Props) {
         props.onActiveChange?.(isActive);
       }
 
-      // Bail-out compares: this runs at 60fps, only re-render when values change.
-      setHud((prev) =>
-        prev.score === g.score && prev.balls === g.balls && prev.multiplier === g.multiplier
-          ? prev
-          : { score: g.score, balls: g.balls, multiplier: g.multiplier },
-      );
-      setKamikazeActive(isKamikazeMode());
-      // A1: surface the machine's mood so the taunt overlay can color-shift.
-      const mood = getMachineMood();
-      setMachineMood((prev) => (prev === mood ? prev : mood));
-      // Shot-calling HUD: poll the live duel state (the meter animates per frame).
+      // Shot-calling HUD: poll the live duel state. The timing meter is a
+      // gameplay input rather than a readout, so this one keeps the full rate.
       if (isShotCallMode()) {
         setShotHud({
           active: true,
@@ -590,11 +599,32 @@ export default function GameMount(props: Props) {
         setShotHud((prev) => (prev.active ? { ...prev, active: false } : prev));
       }
 
+      // The run readout is sampled at ~20Hz rather than 60 (see HUD_SAMPLE_MS).
+      // Engine work that genuinely needs every frame — camera tracking, audio
+      // reactivity, submit detection — stays outside this gate.
+      const frameNow = performance.now();
+      const sampleHud = frameNow - hudSampleRef.current >= HUD_SAMPLE_MS;
+      if (sampleHud) {
+        hudSampleRef.current = frameNow;
+        // Bail-out compares: only re-render when values change.
+        setHud((prev) =>
+          prev.score === g.score && prev.balls === g.balls && prev.multiplier === g.multiplier
+            ? prev
+            : { score: g.score, balls: g.balls, multiplier: g.multiplier },
+        );
+        setKamikazeActive(isKamikazeMode());
+        // A1: surface the machine's mood so the taunt overlay can color-shift.
+        const mood = getMachineMood();
+        setMachineMood((prev) => (prev === mood ? prev : mood));
+      }
+
       // Slow-mo + momentum (Phase 1 immersion)
-      const ts = getTimeScale();
-      setSlowMoActive((prev) => (ts < 0.85) !== prev ? ts < 0.85 : prev);
-      if (g.kamikaze?.enabled) {
-        setMomentum(g.kamikaze.rubberBandBias);
+      if (sampleHud) {
+        const ts = getTimeScale();
+        setSlowMoActive((prev) => ((ts < 0.85) !== prev ? ts < 0.85 : prev));
+      }
+      if (sampleHud && g.kamikaze?.enabled) {
+        setMomentum((prev) => (prev === g.kamikaze!.rubberBandBias ? prev : g.kamikaze!.rubberBandBias));
         // Phase 2 agency: surface banked munition + underworld charge
         const banked = g.kamikaze.storedPowerUp;
         setStoredMunition((prev) => {
@@ -645,7 +675,7 @@ export default function GameMount(props: Props) {
       }
 
       // Kamikaze power-up HUD: active effects per side with countdown
-      if (g.kamikaze?.enabled) {
+      if (sampleHud && g.kamikaze?.enabled) {
         const now = performance.now();
         setActivePowerUps((prev) => {
           const next = g.kamikaze!.activePowerUps
@@ -669,17 +699,17 @@ export default function GameMount(props: Props) {
           worldHandleRef.current?.updateBallLight(ballPos.x, ballPos.y, 10);
 
           // Stability meter: how close is the ball to the drain (bottom of table)?
-          if (g.kamikaze?.enabled) {
+          if (sampleHud && g.kamikaze?.enabled) {
             const tableHeight = mountedRef.current.getTableHeight();
             if (tableHeight > 0) {
               const proximity = Math.max(0, Math.min(1, ballPos.y / tableHeight));
-              setStability(proximity);
+              setStability((prev) => (prev === proximity ? prev : proximity));
               // Check if machine is actively saving (force field or save power-up)
               const now = performance.now();
               const saving = g.kamikaze.activePowerUps.some(
                 (p) => p.side === "machine" && p.expiresAt > now,
               );
-              setMachineSaving(saving);
+              setMachineSaving((prev) => (prev === saving ? prev : saving));
             }
           }
         }
@@ -825,8 +855,36 @@ export default function GameMount(props: Props) {
     };
   }, [props.mode, props.tournamentId, props.playerAddress, props.walletPort, props.playerName, props.onActiveChange]);
 
+  // One readout, two placements: over the playfield on desktop, above it on
+  // phones (see RunHud — the desktop panel is ~200×300, which on a 358px-wide
+  // table would cover the corner the ball actually plays in). Exactly one of
+  // the two spots below renders it.
+  const runHud = (
+    <RunHud
+      kamikazeActive={kamikazeActive}
+      hud={hud}
+      mood={moodDisplay}
+      bestDrainMs={bestDrainMs}
+      drainStreak={drainStreak}
+      penaltyBumper={penaltyBumper}
+      penaltyTrigger={penaltyTrigger}
+      stability={stability}
+      machineSaving={machineSaving}
+      momentum={momentum}
+      storedMunition={storedMunition}
+      underworldCharge={underworldCharge}
+      chargePower={chargePower}
+      powerUps={activePowerUps}
+      shotCalling={shotHud.active}
+      coached={Boolean(props.coach)}
+      paused={props.paused}
+      variant={hudCompact ? "strip" : "overlay"}
+    />
+  );
+
   return (
     <div style={{ marginTop: 16 }}>
+      {hudCompact && runHud}
       {message ? (
         <div style={{ fontSize: 12, opacity: 0.9, marginBottom: 8 }}>Event: {message}</div>
       ) : null}
@@ -1079,178 +1137,12 @@ export default function GameMount(props: Props) {
             </div>
           </div>
         )}
-        <div
-          style={{
-            position: "absolute",
-            left: 10,
-            top: 10,
-            padding: "8px 10px",
-            borderRadius: 10,
-            background: "rgba(0,0,0,0.55)",
-            border: "1px solid rgba(255,255,255,0.15)",
-            color: "#fff",
-            fontSize: 12,
-            lineHeight: 1.5,
-            pointerEvents: "none",
-          }}
-        >
-          {kamikazeActive ? (
-            <>
-              <div style={{ color: "#ff4444", fontWeight: "bold" }}>神風 KAMIKAZE BALL</div>
-              {/* MAMORU's state, named. The machine's difficulty is rubber-banded,
-                  so naming the state (and saying why) makes the escalation read
-                  as character rather than as the game quietly cheating. */}
-              <div
-                title={moodDisplay.meaning}
-                style={{ marginTop: 2, fontSize: 10, letterSpacing: "0.08em", color: moodDisplay.color }}
-              >
-                守 MAMORU · {moodDisplay.label}
-              </div>
-              {/* Session shape: a run is the best of 3 balls, so say so — the
-                  4s drain is the clip, the three-ball arc is the session. */}
-              <div style={{ marginTop: 2, fontSize: 10, opacity: 0.75, letterSpacing: "0.08em" }}>
-                BEST OF {BALLS_PER_GAME} · BALL {Math.min(BALLS_PER_GAME, BALLS_PER_GAME - hud.balls + 1)}
-                {bestDrainMs !== null ? ` · BEST ${formatGameScore(bestDrainMs, true)}` : ""}
-              </div>
-              <div style={{ marginTop: 2 }}>Time: {formatGameScore(hud.score, true)}</div>
-              {/* Lives as sakura petals: one per ball, faded when spent */}
-              <div style={{ marginTop: 4, display: "flex", gap: 3, alignItems: "center" }}>
-                <span style={{ fontSize: 11, opacity: 0.6, marginRight: 2, letterSpacing: "0.1em" }}>命</span>
-                {Array.from({ length: BALLS_PER_GAME }).map((_, i) => (
-                  <span
-                    key={i}
-                    style={{
-                      fontSize: 14,
-                      lineHeight: 1,
-                      opacity: i < hud.balls ? 1 : 0.18,
-                      filter: i < hud.balls ? "none" : "grayscale(1)",
-                      transition: "opacity 300ms ease, filter 300ms ease",
-                    }}
-                  >🌸</span>
-                ))}
-              </div>
-              {/* Streak: consecutive drains without a save */}
-              {drainStreak > 0 && (
-                <div style={{ marginTop: 4, fontSize: 11, color: "#fbbf24", fontWeight: 700, letterSpacing: "0.1em" }}>
-                  STREAK ×{drainStreak}{drainStreak >= 2 ? " — 無双 soon" : ""}
-                </div>
-              )}
-              {/* Penalty breakdown: how the machine is racking up your time */}
-              {(penaltyBumper > 0 || penaltyTrigger > 0) && (
-                <div style={{ marginTop: 6 }}>
-                  <div style={{ fontSize: 10, opacity: 0.6, marginBottom: 3, letterSpacing: "0.15em" }}>TIME TAX</div>
-                  <div style={{ fontSize: 11, lineHeight: 1.6 }}>
-                    {penaltyBumper > 0 && (
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                        <span style={{ opacity: 0.7 }}>番兵 bumpers ×{penaltyBumper}</span>
-                        <span style={{ color: "#f87171" }}>+{formatGameScore(penaltyBumper * KAMIKAZE_BUMPER_PENALTY_MS, true)}</span>
-                      </div>
-                    )}
-                    {penaltyTrigger > 0 && (
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                        <span style={{ opacity: 0.7 }}>門 trigger groups ×{penaltyTrigger}</span>
-                        <span style={{ color: "#f87171" }}>+{formatGameScore(penaltyTrigger * KAMIKAZE_TRIGGER_PENALTY_MS, true)}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-              <div style={{ marginTop: 6 }}>
-                <StabilityMeter value={stability} machineSaving={machineSaving} />
-              </div>
-              {/* Momentum tug-of-war: player (green, left) vs machine (red, right).
-                  Read positionally rather than by colour alone, and labelled for
-                  screen readers instead of with a second row of text. */}
-              <div style={{ marginTop: 6 }}>
-                <div style={{ fontSize: 10, opacity: 0.6, marginBottom: 3, letterSpacing: "0.15em" }}>MOMENTUM</div>
-                <div
-                  role="img"
-                  aria-label={`Momentum: ${Math.round(momentum * 100)}% yours, ${Math.round((1 - momentum) * 100)}% the machine's`}
-                  style={{ position: "relative", height: 8, borderRadius: 4, overflow: "hidden", background: "rgba(255,255,255,0.12)" }}
-                >
-                  <div style={{
-                    position: "absolute", left: 0, top: 0, bottom: 0,
-                    width: `${momentum * 100}%`,
-                    background: "linear-gradient(90deg, #22c55e, #4ade80)",
-                    transition: "width 500ms ease",
-                    boxShadow: "0 0 8px rgba(34,197,94,0.6)",
-                  }} />
-                  <div style={{
-                    position: "absolute", right: 0, top: 0, bottom: 0,
-                    width: `${(1 - momentum) * 100}%`,
-                    background: "linear-gradient(90deg, #f87171, #ef4444)",
-                    transition: "width 500ms ease",
-                    boxShadow: "0 0 8px rgba(239,68,68,0.6)",
-                  }} />
-                </div>
-              </div>
-              {/* Banked munition: shown only when you actually have one. */}
-              {storedMunition && (
-                <div style={{ marginTop: 6 }}>
-                  <div style={{ fontSize: 10, opacity: 0.6, marginBottom: 3, letterSpacing: "0.15em" }}>MUNITION</div>
-                  <div style={{
-                    display: "inline-block", padding: "2px 8px", borderRadius: 6,
-                    background: "rgba(34,197,94,0.18)", border: "1px solid rgba(34,197,94,0.6)",
-                    color: "#4ade80", fontSize: 11, fontWeight: 700,
-                  }}>
-                    {storedMunition} · tap×2
-                  </div>
-                </div>
-              )}
-              {/* Underworld charge meter: hidden until it is actually charging. */}
-              {underworldCharge > 0 && (
-              <div style={{ marginTop: 6 }}>
-                <div style={{ fontSize: 10, opacity: 0.6, marginBottom: 3, letterSpacing: "0.15em" }}>
-                  UNDERWORLD {underworldCharge >= 1 ? "· READY" : ""}
-                </div>
-                <div style={{ position: "relative", height: 6, borderRadius: 3, overflow: "hidden", background: "rgba(255,255,255,0.12)" }}>
-                  <div style={{
-                    position: "absolute", left: 0, top: 0, bottom: 0,
-                    width: `${underworldCharge * 100}%`,
-                    background: underworldCharge >= 1
-                      ? "linear-gradient(90deg, #a855f7, #f0abfc)"
-                      : "linear-gradient(90deg, #7c3aed, #a855f7)",
-                    transition: "width 400ms ease",
-                    boxShadow: underworldCharge >= 1 ? "0 0 8px rgba(168,85,247,0.8)" : "none",
-                  }} />
-                </div>
-              </div>
-              )}
-              {/* Live action feedback — transient, shown only while it applies. */}
-              {storedMunition ? (
-                <div style={{ fontSize: 11, opacity: 0.95, marginTop: 6, lineHeight: 1.5, color: "#4ade80", fontWeight: 700 }}>
-                  {storedMunition} banked — double-tap to deploy
-                </div>
-              ) : underworldCharge >= 1 ? (
-                <div style={{ fontSize: 11, opacity: 0.95, marginTop: 6, lineHeight: 1.5, color: "#c084fc", fontWeight: 700 }}>
-                  UNDERWORLD READY — swipe up to tilt-lock
-                </div>
-              ) : chargePower !== null && chargePower > 1.05 ? (
-                <div style={{ fontSize: 11, opacity: 0.95, marginTop: 6, lineHeight: 1.5, color: "#4ade80", fontWeight: 700 }}>
-                  Release to fire your nudge
-                </div>
-              ) : null}
-              {/* Persistent cheat-sheet: first ball only, and never while the
-                  first-run coach is on the table saying the same thing. Later
-                  balls leave it out — a four-second run cannot afford reading. */}
-              {!props.coach && hud.balls === BALLS_PER_GAME && !storedMunition && underworldCharge < 1 && (
-                <div style={{ fontSize: 10, opacity: 0.55, marginTop: 6, lineHeight: 1.5 }}>
-                  {shotHud.active ? "tap a side to aim · RELEASE to fire" : "HOLD charge · SWIPE↓ dive · SWIPE↑ tilt-lock"}
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              <div>Score: {hud.score}</div>
-              <div>Balls: {hud.balls}</div>
-              <div>Multiplier: {hud.multiplier}x</div>
-            </>
-          )}
-          {props.paused ? <div style={{ opacity: 0.85 }}>Paused</div> : null}
-        </div>
+        {!hudCompact && runHud}
 
-        {/* Kamikaze power-up bar: player munitions (green) vs machine countermeasures (red) */}
-        {kamikazeActive && activePowerUps.length > 0 && (
+        {/* Kamikaze power-up bar: player munitions (green) vs machine
+            countermeasures (red). Phones show these inline in the readout strip
+            instead — the top-right column would land on top of it. */}
+        {kamikazeActive && activePowerUps.length > 0 && !hudCompact && (
           <div
             style={{
               position: "absolute",

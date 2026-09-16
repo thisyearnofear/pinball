@@ -37,6 +37,8 @@ Build produces static `out/index.html` for Netlify/any CDN. Game runs entirely c
 - **Observability**: `@sentry/nextjs` v10 with instrumentation.ts, global-error.tsx boundary, and source map upload (gated behind `SENTRY_ORG`/`SENTRY_PROJECT` env vars).
 - **Dev speed**: Turbopack (400% faster startup claim).
 - **Styling**: 4 core CSS modules (Button, Modal, AppHeader, PinballHUD) + 4 newly migrated (ArcadeLobby, WorldLoadingOverlay, ScoreSubmissionOverlay, SettingsModal) + design tokens via CSS custom properties. Remaining inline styles are mostly dynamic (glow colors, particle positions).
+- **In-run render budget**: the playfield already runs three render loops (matter-js step, zcanvas worker, 3D splat world), so the React tree around it stays off the critical path. `GameMount` samples the engine for the readout at ~20Hz (`HUD_SAMPLE_MS`) rather than 60, and every write still compares against its previous value — so a table that is not changing costs no render at all. The readout is its own memoised component (`src/game/ui/RunHud.tsx`), which bounds a sample to the panel. Two things deliberately keep the full frame rate: the shot-calling timing meter (a gameplay input, not a readout) and all camera/audio work, which is imperative and never routed through state. `AmbientBackground` takes `paused` and is paused while a run is live.
+- **Two readout layouts**: desktop floats the panel over the playfield; phones get a slim strip above it, because the overlay is ~200×300 and a phone table is ~358×477. `tests/unit/game/run-hud.spec.ts` guards both, including that the strip does not grow back into the overlay's full row list.
 
 ### Backend
 - `backend/` — Node.js Express server for score signing API.
@@ -114,7 +116,7 @@ Disallowed:
 
 ## Test coverage
 
-- **65 frontend tests** (Vitest + jsdom): model/game, actors, trigger groups, math utils
+- **388 frontend tests** (Vitest + jsdom): model/game, actors, trigger groups, math utils, HUD layout
 - **54 backend tests**: API endpoints, rate limiter, nonce tracker
 - **10 contract tests**: `finalizeWithSignedWinners` signature validation, winner claims, legacy compat
 - All passing. Run: `pnpm run test:all`
