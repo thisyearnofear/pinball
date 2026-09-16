@@ -65,11 +65,17 @@ run is identified by workflow + job — "Sim Gate / sim" is a stable thing to re
   `master`. With the branch fixed, the first commit carrying a `backend/**` file fired it — that
   was `backend/pnpm-lock.yaml`, committed alongside the trigger fix itself. A deploy on a
   lockfile-only change is intended: a dependency bump changes what the server should be running.
-- **That first run stopped before touching anything.** It failed in `Add host to known_hosts`
-  (`ssh-keyscan` could not reach `DEPLOY_HOST` from the runner), so `Rsync backend to server` and
-  `Build and restart service` are both recorded as **skipped**. No production change. The cause is
-  outside this repo — the secret's host, or SSH reachability to it from GitHub's runners — and the
-  step now prints that diagnosis instead of a bare `exit code 1`.
+- **What was actually wrong (found 2026-09-16): the port.** Failures were in
+  `Add host to known_hosts`, but the cause was not the host, the key or the firewall — **every
+  command assumed port 22 and this VPS runs sshd on 49152.** `ssh-keyscan` therefore reached
+  nothing and `Rsync backend to server` / `Build and restart service` are recorded as **skipped**:
+  no production change has ever been made by this workflow. The port now lives in one place
+  (`env.DEPLOY_PORT`) instead of five, which is how the call sites drifted apart in the first place.
+- **The host was verified rather than assumed** (from the runner's own egress): 49152 answers,
+  sshd is OpenSSH 9.6p1 with `PasswordAuthentication no` and `PermitRootLogin no`, and UFW allows
+  49152 and 80/443 from anywhere while **not** allowing the backend's own `0.0.0.0:8081` — so the
+  signer is reachable only through nginx on 443. The non-standard port is scaffolding, not a
+  security control; key-only auth is what protects the host.
 - **An edit to *only* this file cannot deploy production code**, but that is weaker than "editing
   it is safe in any commit": the `paths` filter is evaluated against the whole push, so a commit
   that edits this file *and* touches `backend/**` does deploy. Use `workflow_dispatch` to exercise
@@ -82,27 +88,49 @@ run is identified by workflow + job — "Sim Gate / sim" is a stable thing to re
   `true`: it probes the SSH path (`BatchMode`, 10s connect timeout), prints the server's node/npm
   versions, and runs `rsync --dry-run --itemize-changes` so you can see what a real deploy would
   upload — with nothing written to the server. Untick it to deploy.
-- Steps: Checkout → SSH setup (repo secrets) → rsync `backend/` to `/opt/pinball/backend` →
-  `npm ci --no-audit --no-fund --ignore-scripts`, `npm run build`, restart systemd `pinball-backend`
+- Steps: Checkout → SSH setup (repo secrets) → `known_hosts` → rsync `backend/` to
+  `/opt/pinball/backend` → `npm ci --no-audit --no-fund --ignore-scripts`, `npm run build`,
+  `sudo -n systemctl restart pinball-backend` → **verify** `systemctl is-active` and
+  `curl http://127.0.0.1:8081/health`. That last step exists because the restart is the part that
+  had never once run: a crash-looping unit reads as `activating`, so without it a half-applied
+  deploy would be a quiet one.
+- **Ports are configuration here, not code.** `DEPLOY_PORT` (default `49152`) and
+  `BACKEND_LOCAL_PORT` (default `8081`) are set once in the workflow's `env:` block, and every
+  `ssh`, `ssh-keyscan` and `rsync` call reads them. Override either with a repository variable of
+  the same name — no edit needed. `-p` on `ssh-keyscan` is load-bearing, not cosmetic: on a
+  non-default port ssh looks up `[host]:port` in `known_hosts`, so a keyscan without it writes
+  entries ssh will never match.
 - **The deployed tree is a pinned tree.** `npm ci` (not `install`) resolves exactly from
   `backend/package-lock.json` and fails if that lockfile has drifted from `backend/package.json`,
   so a deploy can no longer silently install a tree that CI never ran. That is why the backend
   keeps one lockfile: `pnpm run ci` now runs `npm ci --prefix backend` rather than a pnpm install.
-- **Diagnosing a host-key failure:** the step prints ssh-keyscan's own stderr. Expect one of three
-  causes — the `DEPLOY_HOST` secret naming a host that no longer answers, the VPS firewall not
-  allowing GitHub's runner IPs, or SSH listening on a non-standard port. That last case needs the
-  workflow extended rather than the secret fixed: none of these commands passes a port, and this
-  deployment has never worked over one.
+- **Diagnosing a host-key failure:** the step prints ssh-keyscan's own stderr and names the port it
+  tried, so the message says which of three it is — `DEPLOY_HOST` naming a host that no longer
+  answers, that port not matching sshd's `Port`, or UFW not allowing it from GitHub's runners.
+  Note that GitHub publishes ~6,980 runner CIDRs, so "allowlist GitHub's IPs" is not a workable
+  fix for a firewall; the reachability of this port from runners is a deliberate, documented
+  choice.
 
 ## Required Secrets (Repository Settings → Secrets and variables → Actions)
-- `DEPLOY_HOST` – VPS IP (e.g., 157.180.36.156)
-- `DEPLOY_USER` – SSH user (e.g., root)
+- `DEPLOY_HOST` – VPS IP (`157.180.36.156` for production)
+- `DEPLOY_USER` – SSH user (`deploy`)
 - `DEPLOY_KEY` – OpenSSH private key for the above user
 
+## Optional Variables (Settings → Secrets and variables → Actions → Variables)
+- `DEPLOY_PORT` – sshd port on the VPS; defaults to `49152`
+- `BACKEND_LOCAL_PORT` – local port used by the post-deploy health check; defaults to `8081`
+
 ## Server prerequisites
-- Systemd unit named `pinball-backend` (already configured)
-- Env file at `/etc/pinball-backend/.env` with the signer keys
-- Node.js installed
+- Systemd unit named `pinball-backend` (already configured; it runs as **root** — pre-existing)
+- Env file at `/etc/pinball-backend/.env` with the signer keys. `SCORE_SIGNER_PK` and `CHAIN_ID`
+  are the only required variables; everything else has a default, so a deploy cannot crash-loop on
+  a newly-introduced variable
+- Node.js installed (22.22.1 at the last check) and `curl` available for the health check
+- `sshd` reachable from GitHub's runners on `DEPLOY_PORT`, and UFW allowing that port
+- `/opt/pinball/backend` writable by `DEPLOY_USER` — it is owned `deploy:deploy` today
+- `DEPLOY_USER` must be able to restart the unit. A bare `systemctl restart` depends on polkit, so
+  the workflow uses `sudo -n` (fail fast rather than hang on a password prompt); this account has
+  `NOPASSWD: ALL`
 
 ## Optional: Frontend
 - Netlify auto-deploys on push: it runs `pnpm run build` on the Node version pinned by

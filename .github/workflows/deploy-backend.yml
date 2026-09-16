@@ -8,18 +8,28 @@ name: Deploy Backend
 # dry run: connectivity, versions and the rsync plan, with nothing written to the
 # server. Untick `dry_run` to deploy for real.
 #
-# Two things to know before touching this file:
+# Three things to know before touching this file:
 #
 #   1. It triggered on `main` while the default branch is `master`, so it had
 #      never run and the deploy path had never been exercised.
-#   2. Its first real run (2026-09-16) got as far as `Add host to known_hosts`
-#      and no further: the runner could not reach DEPLOY_HOST, so rsync and the
-#      build were skipped and the server was never touched. Note which commit
-#      fired it — a `backend/**` file was in it (backend/pnpm-lock.yaml), because
-#      the `paths` filter cannot see that a commit also edits a workflow. An
-#      edit to *only* this file cannot deploy; a commit that carries one
-#      alongside backend changes can. The deploy stays broken until the runner
-#      can reach the host.
+#   2. Its first runs (2026-09-16) failed in `Add host to known_hosts`, because
+#      every command assumed port 22 and this VPS runs sshd on **49152**. The
+#      runner reached nothing, so rsync and the build were skipped and the
+#      server was never touched. The port now lives in one place — DEPLOY_PORT
+#      in the `env:` block below — and every ssh/rsync call reads it, so the
+#      five call sites cannot drift apart again. Override it with a DEPLOY_PORT
+#      repository variable, no edit needed here.
+#   3. Note which commit fires a push run: a `backend/**` file must be in it
+#      (backend/pnpm-lock.yaml counts), because the `paths` filter cannot see
+#      that a commit also edits a workflow. An edit to *only* this file cannot
+#      deploy; a commit that carries one alongside backend changes can.
+#
+# Verified 2026-09-16 from the runner's own egress: the host answers on 49152,
+# sshd is OpenSSH 9.6p1 with `PasswordAuthentication no` and
+# `PermitRootLogin no`, and UFW allows 49152 (and 80/443) from anywhere. So the
+# port is not a secret and not a security control — key-only auth is. The
+# backend itself listens on 0.0.0.0:8081, which UFW does *not* allow: it is
+# reachable only through nginx on 443.
 #
 # The server installs with `npm ci` from backend/package-lock.json, which is the
 # backend's single lockfile: it is an npm package, and that is the file the
@@ -39,6 +49,14 @@ on:
         type: boolean
         default: true
 
+# Environment facts for this VPS, stated once. Both can be overridden with a
+# repository variable of the same name (Settings → Variables), so a change needs
+# no edit here — and the ssh/rsync call sites cannot drift apart, which is how
+# this workflow was broken in the first place.
+env:
+  DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '49152' }}
+  BACKEND_LOCAL_PORT: ${{ vars.BACKEND_LOCAL_PORT || '8081' }}
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -55,30 +73,35 @@ jobs:
       # host, which is how this step's first run failed: a bare "exit code 1" and
       # no rsync attempted. -T 10 gives a slow VPS a fair chance, and the failure
       # path names the cause rather than leaving it to be inferred.
+      #
+      # `-p` is load-bearing, not cosmetic: on a non-default port ssh looks up
+      # `[host]:port` in known_hosts, so a keyscan without `-p` writes entries
+      # that ssh will never match.
       - name: Add host to known_hosts
         run: |
           mkdir -p ~/.ssh
-          if ! ssh-keyscan -T 10 -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/tmp/keyscan.err; then
-            echo "::error::Could not read an SSH host key for DEPLOY_HOST from the runner, so the deploy stopped before rsync and the server was not touched. Check that the DEPLOY_HOST secret names a reachable host and that the VPS accepts SSH from GitHub's runners."
+          if ! ssh-keyscan -T 10 -p "$DEPLOY_PORT" -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/tmp/keyscan.err; then
+            echo "::error::Could not read an SSH host key from DEPLOY_HOST:$DEPLOY_PORT, so the deploy stopped before rsync and the server was not touched. Check that DEPLOY_HOST names a host that answers and that DEPLOY_PORT matches sshd's Port on it."
             sed 's/^/  ssh-keyscan: /' /tmp/keyscan.err
             exit 1
           fi
 
-      # A dry run still exercises the parts that have never worked — the key, the
-      # host, the user — and prints the file list rsync would send, so that a real
-      # deploy is not also the first test of all of it. Read-only: one ssh probe
-      # and rsync --dry-run.
+      # A dry run exercises the whole path — the key, the host, the user, the port
+      # — and prints the file list rsync would send, so that a real deploy is not
+      # also the first test of all of it. Read-only: one ssh probe and
+      # rsync --dry-run.
       - name: Dry run (connectivity and rsync plan)
         if: ${{ inputs.dry_run == true }}
         run: |
           set -euo pipefail
-          ssh -o BatchMode=yes -o ConnectTimeout=10 \
+          echo "--- ssh port $DEPLOY_PORT · backend on 127.0.0.1:$BACKEND_LOCAL_PORT ---"
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -p "$DEPLOY_PORT" \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
             'echo "connected as $(whoami)@$(hostname)"; \
              command -v node >/dev/null 2>&1 && node -v || echo "WARNING: node is not on PATH"; \
              command -v npm  >/dev/null 2>&1 && npm -v  || echo "WARNING: npm is not on PATH"'
           echo "--- changes a real run would make under /opt/pinball/backend ---"
-          rsync -az --delete --dry-run --itemize-changes \
+          rsync -az --delete --dry-run --itemize-changes -e "ssh -p $DEPLOY_PORT" \
             --exclude='node_modules' \
             --exclude='dist' \
             --exclude='.env*' \
@@ -94,7 +117,7 @@ jobs:
       - name: Rsync backend to server
         if: ${{ inputs.dry_run != true }}
         run: |
-          rsync -az --delete \
+          rsync -az --delete -e "ssh -p $DEPLOY_PORT" \
             --exclude='node_modules' \
             --exclude='dist' \
             --exclude='.env*' \
@@ -103,13 +126,26 @@ jobs:
       - name: Build and restart service
         if: ${{ inputs.dry_run != true }}
         run: |
-          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} <<'EOF'
+          ssh -p "$DEPLOY_PORT" ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} <<'EOF'
           set -euo pipefail
           cd /opt/pinball/backend
           node -v
           npm -v
           npm ci --no-audit --no-fund --ignore-scripts
           npm run build
-          systemctl restart pinball-backend
+          sudo -n systemctl restart pinball-backend
           systemctl status pinball-backend --no-pager --full | sed -n '1,80p'
           EOF
+
+      # The restart is the step that has never run, so do not take the script's
+      # word for it. `is-active` catches a crash-loop (which otherwise reads as
+      # "activating"), and the health call proves the port actually answers — a
+      # half-applied deploy is then a red run rather than a quiet one. `sudo -n`
+      # fails fast instead of hanging on a password prompt.
+      - name: Verify the service came back
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -p "$DEPLOY_PORT" \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "systemctl is-active pinball-backend && curl -fsS -m 5 http://127.0.0.1:$BACKEND_LOCAL_PORT/health"
