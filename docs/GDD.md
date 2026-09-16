@@ -93,6 +93,24 @@ middle boundary is the mechanic's own `holdAccuracy`, so re-tuning the skill gat
 re-tunes the feel with it, and Feint (no meter, accuracy always 1) gets a neutral
 confirm rather than a verdict it did not earn.
 
+#### The visual echo
+
+Haptics are the narrowest of the three channels: iOS Safari has no Vibration API
+at all, and a desktop browser exposes one that drives no hardware. So the events
+above also carry a **weight** for a visual echo — a rim flash drawn across the
+table (`src/utils/screen-pulse.ts`), 1 for a verb and 2 for a beat — and the
+events where an echo would be noise carry none: a flipper already animates, and
+at a 45ms gap it is the one event frequent enough to strobe.
+
+The echo rides the same vocabulary *because* it rides the same engine, and so
+inherits the gaps and holds: it can no more strobe the screen than the motor can
+buzz continuously. It is a **separate channel** from the haptics switch — muting
+the buzz is not a request for a silent screen — and it is switched off by
+`prefers-reduced-motion`, where the audio still carries the beat. Colour is left
+to the existing world-reaction flash, so the two systems do not both claim the
+same effect. It is drawn as opacity on one overlay (clear centre, bright rim) so
+the playfield stays readable and the cost stays on the compositor.
+
 ### Control scheme: Shot-calling (守) — the serve-based duel
 
 The six verbs above are the **Steer** scheme. Playtesting showed continuous

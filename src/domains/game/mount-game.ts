@@ -9,6 +9,7 @@ import { init, scaleCanvas, setFlipperState, bumpTable, getBumpLevel, update, pa
 import SpriteCache from "@/utils/sprite-cache";
 import { createInputController, attachKamikazeGestures } from "@/utils/input-controller";
 import * as haptics from "@/utils/haptics";
+import { createScreenPulse } from "@/utils/screen-pulse";
 import { playVerbNudge, playVerbDive, playVerbDeploy, playVerbTiltLock, playVerbChargeTick } from "@/services/audio-service";
 
 export type MountGameOptions = {
@@ -298,6 +299,12 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
   }
 
   let detachGestures: (() => void) | null = null;
+  /**
+   * The visual echo of the haptic vocabulary. Registered from here — the layer
+   * that owns the DOM — rather than imported by the haptics engine, because the
+   * model drives those events too and must not pull DOM code into its graph.
+   */
+  let visualEcho: ((weight: number) => void) | null = null;
 
   function handleKamikazeKey(e: KeyboardEvent) {
     if (!isKamikazeMode() || opts.attract) return;
@@ -420,6 +427,15 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
           shouldHandle: () => isKamikazeMode() && !gameRef.paused,
         });
       }
+      // Deliberately not in attract mode: the lobby's machine plays itself, and
+      // flashing the demo for every save the bot makes is noise nobody asked for.
+      if (!visualEcho) {
+        const pulse = createScreenPulse(root);
+        if (pulse) {
+          visualEcho = pulse;
+          haptics.setVisualEcho(pulse);
+        }
+      }
     }
     window.addEventListener("resize", resize);
     resize();
@@ -439,6 +455,8 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     window.removeEventListener("keydown", handleKamikazeKey);
     detachGestures?.();
     detachGestures = null;
+    haptics.clearVisualEcho(visualEcho);
+    visualEcho = null;
 
     try {
       canvas.pause(true);

@@ -40,6 +40,12 @@ type HapticEvent = {
   gap: number;
   /** ms for which lower-ranked events are dropped after this one fires. */
   hold?: number;
+  /**
+   * Weight of the visual echo (utils/screen-pulse), 1 subtle or 2 strong.
+   * Omitted where an echo would be noise: a flipper already animates, and at a
+   * 45ms gap is the one event frequent enough to strobe.
+   */
+  visual?: 1 | 2;
 };
 
 /**
@@ -51,21 +57,24 @@ type HapticEvent = {
 export const MAX_CHARGE_POWER = 3;
 
 const FLIP: HapticEvent = { pattern: 15, rank: 0, gap: 45 };
-const BUMP: HapticEvent = { pattern: 35, rank: 1, gap: 90 };
-const NUDGE: HapticEvent = { pattern: 22, rank: 1, gap: 60 };
-const POWER_UP: HapticEvent = { pattern: [15, 30, 15], rank: 2, gap: 200, hold: 90 };
+const BUMP: HapticEvent = { pattern: 35, rank: 1, gap: 90, visual: 1 };
+const NUDGE: HapticEvent = { pattern: 22, rank: 1, gap: 60, visual: 1 };
+const POWER_UP: HapticEvent = { pattern: [15, 30, 15], rank: 2, gap: 200, hold: 90, visual: 2 };
 /** MAMORU reading your lane and taking the ball away. Hits harder than a nudge. */
-const AI_SAVE: HapticEvent = { pattern: 25, rank: 2, gap: 150, hold: 80 };
-const DRAIN_VICTORY: HapticEvent = { pattern: [40, 60, 90], rank: 3, gap: 400, hold: 200 };
-const TILT_DENIED: HapticEvent = { pattern: [20, 40, 20], rank: 1, gap: 400 };
+const AI_SAVE: HapticEvent = { pattern: 25, rank: 2, gap: 150, hold: 80, visual: 2 };
+const DRAIN_VICTORY: HapticEvent = { pattern: [40, 60, 90], rank: 3, gap: 400, hold: 200, visual: 2 };
+const TILT_DENIED: HapticEvent = { pattern: [20, 40, 20], rank: 1, gap: 400, visual: 1 };
 /** The table gave up on you. The one buzz in the game that ends a round. */
-const TILT: HapticEvent = { pattern: [50, 60, 140], rank: 2, gap: 800, hold: 220 };
+const TILT: HapticEvent = { pattern: [50, 60, 140], rank: 2, gap: 800, hold: 220, visual: 2 };
 
 /** One short buzz per charge notch, deepening as the charge builds. */
 const chargeTickPattern = (notch: number): HapticEvent => ({
   pattern: 4 + notch * 4,
   rank: 0,
   gap: 40,
+  // Echoed even though it is texture-ranked: on a device with no motor this is
+  // the only way to feel the notch you just crossed.
+  visual: 1,
 });
 
 /**
@@ -78,7 +87,13 @@ const chargeTickPattern = (notch: number): HapticEvent => ({
 const chargeReleasePattern = (power: number): HapticEvent => {
   const clamped = Math.max(1, Math.min(MAX_CHARGE_POWER, power));
   const fraction = (clamped - 1) / (MAX_CHARGE_POWER - 1);
-  return { pattern: Math.round(22 + fraction * 30), rank: 1, gap: 120 };
+  return {
+    pattern: Math.round(22 + fraction * 30),
+    rank: 1,
+    gap: 120,
+    // A shove flashes; a tap only confirms.
+    visual: fraction >= 0.6 ? 2 : 1,
+  };
 };
 
 /** Escalating: each bump that brings the tilt closer lands harder. */
@@ -87,18 +102,18 @@ const tiltWarningPattern = (level: number): HapticEvent => {
   const pattern: number[] = [];
   for (let i = 0; i < pulses; i += 1) pattern.push(16, 28);
   pattern.push(30);
-  return { pattern, rank: 1, gap: 150 };
+  return { pattern, rank: 1, gap: 150, visual: level >= 3 ? 2 : 1 };
 };
 
 const SHOT_RELEASE: Record<ShotReleaseQuality, HapticEvent> = {
   // Timing is the entire skill in precision, so the verdict is felt at release:
   // two confirming taps and a landing. Protected, because it is the player's
   // own skill being reported back to them.
-  perfect: { pattern: [18, 26, 42], rank: 2, gap: 250, hold: 130 },
-  good: { pattern: 24, rank: 1, gap: 150 },
+  perfect: { pattern: [18, 26, 42], rank: 2, gap: 250, hold: 130, visual: 2 },
+  good: { pattern: 24, rank: 1, gap: 150, visual: 1 },
   // A miss gets a shape rather than a thud: buzz, pause, buzz.
-  poor: { pattern: [12, 34, 12], rank: 1, gap: 150 },
-  neutral: { pattern: 16, rank: 1, gap: 120 },
+  poor: { pattern: [12, 34, 12], rank: 1, gap: 150, visual: 1 },
+  neutral: { pattern: 16, rank: 1, gap: 120, visual: 1 },
 };
 
 export function createHaptics(options: {
@@ -115,21 +130,27 @@ export function createHaptics(options: {
   let lastFiredAt: Record<string, number> = {};
   let holdUntil = 0;
   let holdRank = -1;
+  let visualEcho: ((weight: number) => void) | null = null;
 
   function fire(name: string, event: HapticEvent): boolean {
-    if (!enabled || !options.vibrate) return false;
+    // Two channels, one vocabulary — and they are not the same channel. A device
+    // with no vibration motor still gets the visual echo, and muting haptics
+    // does not mute the echo (it is gated by reduced-motion instead). So an
+    // event is only dead when both channels are unavailable.
+    if (!options.vibrate && !visualEcho) return false;
     const at = now();
     // A bigger beat is still ringing out: drop this rather than truncate it.
     if (at < holdUntil && event.rank < holdRank) return false;
     const last = lastFiredAt[name];
     if (last !== undefined && at - last < event.gap) return false;
 
-    options.vibrate(event.pattern);
     lastFiredAt[name] = at;
     if (event.hold) {
       holdUntil = at + event.hold;
       holdRank = event.rank;
     }
+    if (enabled && options.vibrate) options.vibrate(event.pattern);
+    if (event.visual && visualEcho) visualEcho(event.visual);
     return true;
   }
 
@@ -146,6 +167,14 @@ export function createHaptics(options: {
     isSupported: () => options.vibrate !== null,
     isEnabled: () => enabled,
     cancel,
+    setVisualEcho(sink: ((weight: number) => void) | null) {
+      visualEcho = sink;
+    },
+    /** Clears only if `sink` is still the registered one, so a mount tearing
+     *  down late cannot silence the mount that replaced it. */
+    clearVisualEcho(sink?: ((weight: number) => void) | null) {
+      if (!sink || visualEcho === sink) visualEcho = null;
+    },
     setEnabled(value: boolean) {
       enabled = value;
       if (!value) cancel();
@@ -194,6 +223,16 @@ export const isSupported = engine.isSupported;
 export const setEnabled = (value: boolean) => engine.setEnabled(value);
 export const isEnabled = () => engine.isEnabled();
 export const cancel = () => engine.cancel();
+
+/**
+ * Registers the visual echo for this vocabulary. Injected by the view layer
+ * rather than imported, because the model imports this module too and must not
+ * pull a DOM module into its graph.
+ */
+export const setVisualEcho = (sink: ((weight: number) => void) | null) =>
+  engine.setVisualEcho(sink);
+export const clearVisualEcho = (sink?: ((weight: number) => void) | null) =>
+  engine.clearVisualEcho(sink);
 
 export const flip = () => engine.flip();
 export const bump = () => engine.bump();

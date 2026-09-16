@@ -7,17 +7,20 @@ import { MAX_POWER } from "@/utils/input-controller";
  * A haptics engine with no navigator and no real clock, so the ranking rules can
  * be tested as rules rather than by timing a real device.
  */
-function setup(options: { enabled?: boolean; supported?: boolean } = {}) {
+function setup(options: { enabled?: boolean; supported?: boolean; visual?: boolean } = {}) {
   const calls: (number | number[])[] = [];
+  const echoes: number[] = [];
   let clock = 0;
   const engine = createHaptics({
     vibrate: options.supported === false ? null : (pattern) => calls.push(pattern),
     now: () => clock,
     enabled: options.enabled ?? true,
   });
+  if (options.visual) engine.setVisualEcho((weight) => echoes.push(weight));
   return {
     engine,
     calls,
+    echoes,
     advance: (ms: number) => {
       clock += ms;
     },
@@ -173,5 +176,87 @@ describe("haptics engine", () => {
     // Two modules, one number: the release feedback is scaled against it and the
     // charge curve is built from it, so a drift here would misreport the shove.
     expect(MAX_CHARGE_POWER).toBe(MAX_POWER);
+  });
+});
+
+describe("haptics engine: visual echo", () => {
+  it("echoes where there is no vibration API at all (iOS Safari)", () => {
+    const { engine, calls, echoes } = setup({ supported: false, visual: true });
+    expect(engine.isSupported()).toBe(false);
+    // The device cannot buzz, but the event still happened and is still drawn.
+    expect(engine.drainVictory()).toBe(true);
+    expect(calls).toHaveLength(0);
+    expect(echoes).toEqual([2]);
+  });
+
+  it("echoes every charge notch without a motor", () => {
+    const { engine, echoes, advance } = setup({ supported: false, visual: true });
+    engine.chargeTick(1);
+    advance(60);
+    engine.chargeTick(2);
+    advance(60);
+    engine.chargeTick(3);
+    expect(echoes).toEqual([1, 1, 1]);
+  });
+
+  it("weights the ceremony harder than a tap", () => {
+    const { engine, echoes, advance } = setup({ visual: true });
+    engine.nudge();
+    advance(250);
+    engine.aiSave();
+    advance(250);
+    engine.chargeRelease(1);
+    advance(250);
+    engine.chargeRelease(3);
+    expect(echoes).toEqual([1, 2, 1, 2]);
+  });
+
+  it("never echoes a flipper", () => {
+    const { engine, calls, echoes } = setup({ visual: true });
+    engine.flip();
+    // The flipper animates itself, and at a 45ms gap it is the one event
+    // frequent enough to strobe the screen.
+    expect(calls).toEqual([15]);
+    expect(echoes).toEqual([]);
+  });
+
+  it("applies the same gaps and holds to the echo", () => {
+    const { engine, echoes, advance } = setup({ visual: true });
+    engine.bump();
+    advance(10);
+    engine.bump(); // inside BUMP's 90ms gap
+    expect(echoes).toEqual([1]);
+
+    advance(200);
+    engine.aiSave(); // rank 2, holds 80ms
+    engine.bump(); // dropped: lower rank under a hold
+    expect(echoes).toEqual([1, 2]);
+  });
+
+  it("keeps the echo when haptics are muted", () => {
+    const { engine, calls, echoes, advance } = setup({ visual: true });
+    engine.setEnabled(false);
+    advance(500);
+    engine.nudge();
+    // Two channels: muting the buzz is not a request for a silent screen.
+    expect(echoes).toEqual([1]);
+    expect(calls).toEqual([0]); // the cancel, and nothing after it
+  });
+
+  it("does not echo an event the ranking dropped", () => {
+    const { engine, echoes } = setup({ visual: true });
+    engine.drainVictory();
+    engine.bump();
+    expect(echoes).toEqual([2]);
+  });
+
+  it("survives a late teardown from a replaced mount", () => {
+    const { engine, echoes, advance } = setup({ visual: true });
+    const replacement = () => echoes.push(99);
+    engine.setVisualEcho(replacement);
+    engine.clearVisualEcho(() => echoes.push(-1)); // stale sink: must not win
+    advance(500);
+    engine.nudge();
+    expect(echoes).toEqual([99]);
   });
 });
