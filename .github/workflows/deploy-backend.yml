@@ -2,33 +2,42 @@ name: Deploy Backend
 
 # Deploys backend/ to the Hetzner VPS and restarts systemd's pinball-backend.
 #
-# Triggers on any change under backend/**, a lockfile-only change included — that
-# is deliberate, because a dependency bump changes what the server should be
-# running. workflow_dispatch is there for a deliberate run, and it defaults to a
-# dry run: connectivity, versions and the rsync plan, with nothing written to the
-# server. Untick `dry_run` to deploy for real.
+# It does NOT trigger on `push`. A `paths: backend/**` filter cannot say "and CI
+# was green", so the previous version would have deployed a commit that failed
+# its own tests. This one follows the gate instead: it runs when `Checks`
+# finishes on master, deploys only if that run succeeded, and checks out exactly
+# the commit Checks tested rather than whatever is on master by then.
+# `workflow_dispatch` is the deliberate escape hatch and still defaults to a dry
+# run.
 #
-# Three things to know before touching this file:
+# A run where the backend tree has not changed is a no-op: rsync compares file
+# content (--checksum, not mtimes — a fresh checkout stamps every file with the
+# checkout time, so an mtime compare would see the whole tree as new and restart
+# the signer for nothing), and the build, restart and verify steps are skipped
+# when nothing was transferred. That is what makes it cheap to sit behind every
+# green Checks run.
+#
+# Four things to know before touching this file:
 #
 #   1. It triggered on `main` while the default branch is `master`, so it had
 #      never run and the deploy path had never been exercised.
 #   2. Its first runs (2026-09-16) failed in `Add host to known_hosts`, because
 #      every command assumed port 22 and this VPS runs sshd on **49152**. The
-#      runner reached nothing, so rsync and the build were skipped and the
-#      server was never touched. The port now lives in one place — DEPLOY_PORT
-#      in the `env:` block below — and every ssh/rsync call reads it, so the
-#      five call sites cannot drift apart again. Override it with a DEPLOY_PORT
-#      repository variable, no edit needed here.
-#   3. Note which commit fires a push run: a `backend/**` file must be in it
-#      (backend/pnpm-lock.yaml counts), because the `paths` filter cannot see
-#      that a commit also edits a workflow. An edit to *only* this file cannot
-#      deploy; a commit that carries one alongside backend changes can.
-#
-# DEPLOY_USER must be `deploy`: the box sets `AllowUsers deploy` with
-# `PermitRootLogin no`, so `root` is rejected before any key is considered and
-# ssh reports it as `Permission denied (publickey)` — a key-shaped message for a
-# user-shaped cause. (It was `root` when this workflow was written, and that,
-# together with the port, is why it had never deployed anything.)
+#      runner reached nothing, so rsync and the build were skipped and the server
+#      was never touched. The port now lives in one place — DEPLOY_PORT in the
+#      `env:` block below — and every ssh/rsync call reads it, so the five call
+#      sites cannot drift apart. Override it with a DEPLOY_PORT repository
+#      variable, no edit needed here.
+#   3. DEPLOY_USER must be `deploy`: the box sets `AllowUsers deploy` with
+#      `PermitRootLogin no`, so `root` is rejected before any key is considered
+#      and ssh reports it as `Permission denied (publickey)` — a key-shaped
+#      message for a user-shaped cause. (It was `root` when this workflow was
+#      written, and that, together with the port, is why it had never deployed.)
+#   4. fail2ban runs on that box with a 5-tries-then-1-hour ban, so a credential
+#      that is *wrong* gets GitHub's runner IP banned, and correcting the
+#      credential alone will not restore deploys until the ban expires (or is
+#      lifted with `fail2ban-client set sshd unbanip <ip>`). Worth remembering
+#      before assuming a deploy failure is the deploy's fault.
 #
 # Verified 2026-09-16 from the runner's own egress: the host answers on 49152,
 # sshd is OpenSSH 9.6p1 with `PasswordAuthentication no` and
@@ -43,11 +52,11 @@ name: Deploy Backend
 # within semver ranges; `ci` installs exactly the pinned tree and fails if the
 # lockfile has drifted from package.json.
 on:
-  push:
+  workflow_run:
+    workflows: ['Checks']
+    types: [completed]
     branches:
       - master
-    paths:
-      - 'backend/**'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -65,10 +74,19 @@ env:
 
 jobs:
   deploy:
+    # A failed or cancelled Checks run must never reach production. A manual
+    # dispatch is allowed regardless, and still defaults to a dry run.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
+    # Two pushes in quick succession must not race two rsync-and-restart pairs.
+    concurrency:
+      group: deploy-backend
+      cancel-in-progress: false
     steps:
-      - name: Checkout
+      - name: Checkout the commit Checks tested
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set up SSH
         uses: webfactory/ssh-agent@v0.10.0
@@ -107,7 +125,7 @@ jobs:
              command -v node >/dev/null 2>&1 && node -v || echo "WARNING: node is not on PATH"; \
              command -v npm  >/dev/null 2>&1 && npm -v  || echo "WARNING: npm is not on PATH"'
           echo "--- changes a real run would make under /opt/pinball/backend ---"
-          rsync -az --delete --dry-run --itemize-changes -e "ssh -p $DEPLOY_PORT" \
+          rsync -az --delete --checksum --dry-run --itemize-changes -e "ssh -p $DEPLOY_PORT" \
             --exclude='node_modules' \
             --exclude='dist' \
             --exclude='.env*' \
@@ -120,17 +138,30 @@ jobs:
       # can never remove server-side config. (The signer keys live at
       # /etc/pinball-backend/.env, outside this tree, so that is belt and
       # braces rather than the only protection.)
+      #
+      # --checksum is what makes the "changed" answer meaningful; see the note at
+      # the top of this file. `--itemize-changes` prints a line per changed path,
+      # so an empty result means the tree already matches this commit.
       - name: Rsync backend to server
+        id: rsync
         if: ${{ inputs.dry_run != true }}
         run: |
-          rsync -az --delete -e "ssh -p $DEPLOY_PORT" \
+          set -euo pipefail
+          changes=$(rsync -az --delete --checksum --itemize-changes -e "ssh -p $DEPLOY_PORT" \
             --exclude='node_modules' \
             --exclude='dist' \
             --exclude='.env*' \
-            backend/ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/pinball/backend/
+            backend/ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/pinball/backend/)
+          if [ -n "$changes" ]; then
+            printf '%s\n' "$changes"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "The backend tree on the server already matches this commit — nothing to build or restart."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build and restart service
-        if: ${{ inputs.dry_run != true }}
+        if: ${{ inputs.dry_run != true && steps.rsync.outputs.changed == 'true' }}
         run: |
           ssh -p "$DEPLOY_PORT" ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} <<'EOF'
           set -euo pipefail
@@ -149,7 +180,7 @@ jobs:
       # half-applied deploy is then a red run rather than a quiet one. `sudo -n`
       # fails fast instead of hanging on a password prompt.
       - name: Verify the service came back
-        if: ${{ inputs.dry_run != true }}
+        if: ${{ inputs.dry_run != true && steps.rsync.outputs.changed == 'true' }}
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes -o ConnectTimeout=10 -p "$DEPLOY_PORT" \

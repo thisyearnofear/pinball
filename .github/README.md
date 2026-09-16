@@ -8,16 +8,30 @@ run is identified by workflow + job — "Sim Gate / sim" is a stable thing to re
 
 ### Checks — `.github/workflows/checks.yml`
 - **Triggers:** every pull request, pushes to `master`, and manual `workflow_dispatch`
-- **Runs:** frozen `pnpm install`, then `pnpm run typecheck` and `pnpm test` (the Vitest + jsdom
-  suite), on the Node version in `.nvmrc`
+- **Runs three jobs**, each on the Node version in `.nvmrc`:
+  - `frontend` — frozen `pnpm install`, `pnpm run typecheck`, `pnpm test` (Vitest + jsdom)
+  - `backend` — `npm ci --prefix backend`, `npm --prefix backend run build` (the same `tsc` the
+    deploy runs on the server), then the backend suite. Installs from the npm lockfile because the
+    backend *is* an npm package; that is the tree the server resolves
+  - `contracts` — frozen pnpm install, then the Hardhat suite
+- **The backend and contract jobs exist because Deploy Backend now waits for a green Checks run.**
+  A gate that never tested the tree it deploys would be worse than no gate — but the flip side is
+  real: **a red or flaky job here is now a deploy outage, not just a red tick.**
+- **None of these jobs needs a secret.** The backend suite does not import
+  `backend/src/lib/env.ts` (the only thing that reads the signer env), and
+  `contracts/hardhat.config.ts` falls back to `accounts: []` when `PRIVATE_KEY` is unset.
+- **The contracts suite was broken before this**, and only under pnpm: the tests import `chai` and
+  `@nomicfoundation/hardhat-ethers` directly, both of which `hardhat-toolbox@5` supplies as
+  *peers*. npm's flat `node_modules` hid that; pnpm's strict layout does not, so `hardhat test`
+  died with `ERR_MODULE_NOT_FOUND`. They are now direct devDependencies, at the versions the
+  lockfile had already resolved, which also un-breaks `pnpm run ci`.
 - **Why it is not a job inside Sim Gate:** "a type does not check" and "the physics invariants
   moved" are different signals, and these take seconds rather than the sim's ~50s. Two jobs in one
   workflow would each install dependencies on their own runner anyway, so separating them costs
   nothing.
 - **`master` has no branch protection**, so these report as check runs; they do not by themselves
   block a merge until that is switched on in repository settings.
-- **Deliberately not included:** `pnpm run build` and the backend/contract suites — see "Not gated
-  in CI" below.
+- **Deliberately not included:** `pnpm run build` (the Next export) — see "Not gated in CI" below.
 
 ### Sim Gate — `.github/workflows/sim-gate.yml`
 - **Triggers:** every pull request, pushes to `master`, and manual `workflow_dispatch`
@@ -60,7 +74,21 @@ run is identified by workflow + job — "Sim Gate / sim" is a stable thing to re
   how long it takes, never whether it passes.
 
 ### Deploy Backend — `.github/workflows/deploy-backend.yml`
-- **Triggers:** push to `master` affecting `backend/**`, or manual `workflow_dispatch`
+- **Triggers:** a **green `Checks` run on `master`** (`workflow_run`), or manual `workflow_dispatch`.
+  It deliberately no longer triggers on `push`: a `paths: backend/**` filter cannot express "and CI
+  was green", so the old form would have deployed a commit that failed its own tests. The checkout
+  is pinned to `workflow_run.head_sha` — the commit Checks actually tested — rather than whatever
+  `master` points at by the time the job starts.
+- **A run where the backend has not changed is a no-op.** rsync compares *content*
+  (`--checksum`), not mtimes: a fresh checkout stamps every file with the checkout time, so an
+  mtime compare would see the whole tree as new and restart the signer for nothing. When
+  `--itemize-changes` prints nothing, the build, restart and verify steps are skipped. That is what
+  makes it affordable to sit behind every green Checks run instead of filtering on paths.
+- **A wrong credential can now cost you an hour of deploys.** fail2ban runs on the VPS with
+  5-tries-then-1-hour bans, so a runner authenticating with a bad key or user gets its IP banned —
+  and correcting the credential alone will not restore deploys until the ban expires. If deploys
+  fail immediately after a credential change, check `fail2ban-client status sshd` on the box before
+  debugging the workflow.
 - **It had never run until 2026-09-16.** It triggered on `main`, and the default branch is
   `master`. With the branch fixed, the first commit carrying a `backend/**` file fired it — that
   was `backend/pnpm-lock.yaml`, committed alongside the trigger fix itself. A deploy on a
@@ -141,6 +169,11 @@ run is identified by workflow + job — "Sim Gate / sim" is a stable thing to re
 - `DEPLOY_USER` must be able to restart the unit. A bare `systemctl restart` depends on polkit, so
   the workflow uses `sudo -n` (fail fast rather than hang on a password prompt); this account has
   `NOPASSWD: ALL`
+- `fail2ban` is enabled with an `[sshd]` jail bound to **49152**, 5 tries then a 1 hour ban
+  (`/etc/fail2ban/jail.local`). Two things it fixed: the jail previously targeted `port = ssh`, so
+  a ban inserted a rule for port 22 and protected nothing; and the service was disabled, so nothing
+  was reading failures at all. A ban names one IP and one port — it cannot affect the other services
+  on this box
 
 ## Optional: Frontend
 - Netlify auto-deploys on push: it runs `pnpm run build` on the Node version pinned by
@@ -149,10 +182,12 @@ run is identified by workflow + job — "Sim Gate / sim" is a stable thing to re
   applies to it too — rather than because Netlify happens to export `CI`. It runs no tests.
 - If desired, a Netlify deploy workflow can be added using `NETLIFY_AUTH_TOKEN` and `NETLIFY_SITE_ID` secrets
 
+## Gated in CI
+- `checks.yml`: frontend typecheck + unit suite, backend build + suite, contract suite
+- `sim-gate.yml`: the physics invariants (`pnpm run sim:kamikaze`)
+- `deploy-backend.yml`: runs after a green `checks.yml`, and is a no-op unless `backend/` changed
+
 ## Not gated in CI
 - **`pnpm run build` (the Next export).** Netlify builds the site on push, so a broken build does
   surface there — after it has already been pushed to `master`, rather than on the pull request.
-- **The backend and contract suites.** `pnpm run ci` and `pnpm run test:all` run them locally;
-  nothing in Actions does. A `backend` job in `checks.yml` is the obvious home.
-- Typecheck and the unit suite are gated as of `checks.yml`; the physics invariants stay in
-  `sim-gate.yml`.
+  This is now the only suite that runs nowhere before `master`.

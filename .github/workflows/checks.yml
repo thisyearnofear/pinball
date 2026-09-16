@@ -1,6 +1,6 @@
 name: Checks
 
-# Static analysis and the unit suite. Separate from Sim Gate on purpose: each
+# Static analysis and the unit suites. Separate from Sim Gate on purpose: each
 # workflow is one signal with a name that says what it is, and a check run is
 # identified by workflow + job, so "Sim Gate / sim" stays a stable thing to
 # require.
@@ -10,11 +10,20 @@ name: Checks
 # broken. Both are cheap next to the ~50s sim, which is why they were worth
 # gating rather than leaving to `pnpm run test:frontend` locally.
 #
+# The backend and contract suites are here because Deploy Backend now waits for a
+# green Checks run: a gate that never tested the tree it deploys would be worse
+# than no gate. Note the consequence — **a red job here blocks deploys**, so a
+# flaky test in this workflow is now a deploy outage, not just a red tick.
+#
+# None of these jobs needs a secret: the backend suite does not read the signer
+# env (only backend/src/lib/env.ts does, and the tests do not import it), and
+# contracts/hardhat.config.ts falls back to an empty account list when
+# PRIVATE_KEY is unset.
+#
+# Deliberately not here: `pnpm run build` (the Next export). See .github/README.md.
+#
 # Note that master has no branch protection configured, so these report as check
 # runs; they do not by themselves block a merge until that is switched on.
-#
-# Deliberately not here: `pnpm run build` (the Next export) and the backend and
-# contract suites. See .github/README.md.
 
 on:
   pull_request:
@@ -60,3 +69,56 @@ jobs:
 
       - name: Unit tests
         run: pnpm test
+
+  # The backend is an npm package — that is the lockfile the server and the
+  # deploy resolve from — so it installs with `npm ci` and gets cached on its own
+  # lockfile rather than pnpm's.
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --prefix backend --no-audit --no-fund
+
+      # Mirrors the build the deploy runs on the server, so a type error is a red
+      # check here rather than a failed restart there.
+      - name: Build
+        run: npm --prefix backend run build
+
+      - name: Unit tests
+        run: npm --prefix backend test
+
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: contracts/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm --dir contracts install --frozen-lockfile
+
+      # `hardhat test` compiles first, against the in-process network — no RPC and
+      # no signer key involved.
+      - name: Tests
+        run: pnpm --dir contracts test
