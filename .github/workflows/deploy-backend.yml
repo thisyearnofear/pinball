@@ -24,6 +24,12 @@ name: Deploy Backend
 #      that a commit also edits a workflow. An edit to *only* this file cannot
 #      deploy; a commit that carries one alongside backend changes can.
 #
+# DEPLOY_USER must be `deploy`: the box sets `AllowUsers deploy` with
+# `PermitRootLogin no`, so `root` is rejected before any key is considered and
+# ssh reports it as `Permission denied (publickey)` — a key-shaped message for a
+# user-shaped cause. (It was `root` when this workflow was written, and that,
+# together with the port, is why it had never deployed anything.)
+#
 # Verified 2026-09-16 from the runner's own egress: the host answers on 49152,
 # sshd is OpenSSH 9.6p1 with `PasswordAuthentication no` and
 # `PermitRootLogin no`, and UFW allows 49152 (and 80/443) from anywhere. So the

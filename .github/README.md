@@ -65,12 +65,19 @@ run is identified by workflow + job — "Sim Gate / sim" is a stable thing to re
   `master`. With the branch fixed, the first commit carrying a `backend/**` file fired it — that
   was `backend/pnpm-lock.yaml`, committed alongside the trigger fix itself. A deploy on a
   lockfile-only change is intended: a dependency bump changes what the server should be running.
-- **What was actually wrong (found 2026-09-16): the port.** Failures were in
-  `Add host to known_hosts`, but the cause was not the host, the key or the firewall — **every
-  command assumed port 22 and this VPS runs sshd on 49152.** `ssh-keyscan` therefore reached
-  nothing and `Rsync backend to server` / `Build and restart service` are recorded as **skipped**:
-  no production change has ever been made by this workflow. The port now lives in one place
-  (`env.DEPLOY_PORT`) instead of five, which is how the call sites drifted apart in the first place.
+- **What was actually wrong (found 2026-09-16): two independent faults.** Failures were in
+  `Add host to known_hosts`, but neither cause was the host, the key or the firewall:
+  1. **The port.** Every command assumed 22 and this VPS runs sshd on 49152, so `ssh-keyscan`
+     reached nothing. `Rsync backend to server` / `Build and restart service` are recorded as
+     **skipped** on every run before this — no production change had ever been made by this
+     workflow.
+  2. **The user.** `DEPLOY_USER` was `root`, and the box has `AllowUsers deploy` with
+     `PermitRootLogin no`, so root cannot authenticate at all. It surfaces as
+     `Permission denied (publickey)`, which reads like a key problem and is not one.
+  With both corrected the first fully green run was 2026-09-16 22:18 UTC, which deployed a backend
+  that had been stale since ~Jul 29 (the client's `quantum-seed.ts` calls had been silently
+  falling back to a local CSPRNG because `/api/quantum/seed` 404'd). The port now lives in one
+  place (`env.DEPLOY_PORT`) instead of five, which is how those call sites drifted in the first place.
 - **The host was verified rather than assumed** (from the runner's own egress): 49152 answers,
   sshd is OpenSSH 9.6p1 with `PasswordAuthentication no` and `PermitRootLogin no`, and UFW allows
   49152 and 80/443 from anywhere while **not** allowing the backend's own `0.0.0.0:8081` — so the
@@ -113,8 +120,11 @@ run is identified by workflow + job — "Sim Gate / sim" is a stable thing to re
 
 ## Required Secrets (Repository Settings → Secrets and variables → Actions)
 - `DEPLOY_HOST` – VPS IP (`157.180.36.156` for production)
-- `DEPLOY_USER` – SSH user (`deploy`)
-- `DEPLOY_KEY` – OpenSSH private key for the above user
+- `DEPLOY_USER` – SSH user; must be **`deploy`**. This box sets `AllowUsers deploy` and
+  `PermitRootLogin no`, so `root` fails with `Permission denied (publickey)` — which looks like a
+  bad key and is actually a bad user
+- `DEPLOY_KEY` – OpenSSH private key for the above user. The matching public key must be in
+  `/home/deploy/.ssh/authorized_keys` on the box, not merely set as a secret
 
 ## Optional Variables (Settings → Secrets and variables → Actions → Variables)
 - `DEPLOY_PORT` – sshd port on the VPS; defaults to `49152`
