@@ -2,17 +2,22 @@ name: Deploy Backend
 
 # Deploys backend/ to the Hetzner VPS and restarts systemd's pinball-backend.
 #
-# This workflow had never run: it triggered on `main`, and the default branch is
-# `master`. Fixing the branch arms a production deploy, so two things keep that
-# a deliberate act rather than a side effect:
+# Triggers on any change under backend/**, a lockfile-only change included — that
+# is deliberate, because a dependency bump changes what the server should be
+# running. workflow_dispatch is there for a deliberate run.
 #
-#   1. the `paths` filter covers `backend/**` only. A commit that edits this file
-#      therefore does not itself deploy production code — which is what makes it
-#      safe to land the fix. Use workflow_dispatch for a deliberate run,
-#      including the first one.
-#   2. the rsync excludes everything that is built on the server, so --delete
-#      cannot remove it and a local node_modules cannot be shipped over the
-#      server's.
+# Two things to know before touching this file:
+#
+#   1. It triggered on `main` while the default branch is `master`, so it had
+#      never run and the deploy path had never been exercised.
+#   2. Its first real run (2026-09-16) got as far as `Add host to known_hosts`
+#      and no further: the runner could not reach DEPLOY_HOST, so rsync and the
+#      build were skipped and the server was never touched. Note which commit
+#      fired it — a `backend/**` file was in it (backend/pnpm-lock.yaml), because
+#      the `paths` filter cannot see that a commit also edits a workflow. An
+#      edit to *only* this file cannot deploy; a commit that carries one
+#      alongside backend changes can. The deploy stays broken until the runner
+#      can reach the host.
 on:
   push:
     branches:
@@ -33,10 +38,18 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.DEPLOY_KEY }}
 
+      # ssh-keyscan exits nonzero having written nothing when it cannot reach the
+      # host, which is how this step's first run failed: a bare "exit code 1" and
+      # no rsync attempted. -T 10 gives a slow VPS a fair chance, and the failure
+      # path names the cause rather than leaving it to be inferred.
       - name: Add host to known_hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+          if ! ssh-keyscan -T 10 -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/tmp/keyscan.err; then
+            echo "::error::Could not read an SSH host key for DEPLOY_HOST from the runner, so the deploy stopped before rsync and the server was not touched. Check that the DEPLOY_HOST secret names a reachable host and that the VPS accepts SSH from GitHub's runners."
+            sed 's/^/  ssh-keyscan: /' /tmp/keyscan.err
+            exit 1
+          fi
 
       # Excludes are load-bearing. `node_modules` and `dist` are built on the
       # server: without them this uploads the local tree — including macOS
