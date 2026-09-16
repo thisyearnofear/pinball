@@ -7,7 +7,14 @@ Hetzner VPS.
 
 ### Sim Gate — `.github/workflows/sim-gate.yml`
 - **Triggers:** every pull request, pushes to `master`, and manual `workflow_dispatch`
-- **Runs:** `pnpm install`, then `pnpm run sim:kamikaze`
+- **Runs:** `pnpm install`, then `pnpm run sim:kamikaze`, on the Node version in `.nvmrc` — read
+  from that file rather than repeated in the workflow, so CI and local dev cannot drift apart.
+  (Netlify is pinned separately by `NODE_VERSION` in `netlify.toml`, which takes precedence over
+  `.nvmrc` there.)
+- **Node is enforced, not just documented:** `engines.node` in `package.json` plus
+  `engine-strict=true` in `.npmrc` makes an install on the wrong Node fail with
+  `ERR_PNPM_UNSUPPORTED_ENGINE`. The root `.npmrc` is not inherited by `backend/` or `contracts/`,
+  so those still install on whatever Node they have.
 - **Guards two things only the real engine can catch:** skill discrimination collapsing (passive
   play grading as well as active play, or the precision meter ceasing to gate), and an unseeded
   draw reaching the physics path — which would make a run unreproducible from the seed it

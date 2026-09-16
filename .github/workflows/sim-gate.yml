@@ -34,17 +34,19 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # Reads the pnpm version from package.json's `packageManager` field, so
       # the local and CI versions cannot drift apart.
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
+      # Read the version from .nvmrc rather than repeating it, so local dev, CI
+      # and the `engines` field cannot drift apart.
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: pnpm
           # pnpm-lock.yaml is gitignored in this repo, so key the store cache on
           # package.json — setup-node needs a tracked path here.

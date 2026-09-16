@@ -145,7 +145,9 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full domain-driven desi
 ## Frontend Setup
 
 ### Prerequisites
-- Node.js 18+
+- Node.js 24+ — pinned in `.nvmrc` (`nvm use`) and enforced at install time by
+  `engines` in `package.json` plus `engine-strict` in `.npmrc`, so the wrong Node fails
+  with `ERR_PNPM_UNSUPPORTED_ENGINE` instead of warning and carrying on
 - pnpm
 
 ### Installation
@@ -184,7 +186,7 @@ pnpm run test:all       # All three suites
 The backend provides a secure API for signing tournament scores.
 
 ### Prerequisites
-- Node.js 18+
+- Node.js 24+
 - A private key for score signing (generate with contracts/scripts/generate-key.js)
 
 ### Installation
@@ -225,7 +227,7 @@ npm start
 Smart contracts handle tournament logic on Mezo. Uses Hardhat (not Foundry).
 
 ### Prerequisites
-- Node.js 18+
+- Node.js 24+
 - Hardhat
 
 ### Installation
