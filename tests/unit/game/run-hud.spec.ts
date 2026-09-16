@@ -1,8 +1,24 @@
-import { describe, it, expect } from "vitest";
-import React from "react";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import React, { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { RunHud, type RunHudProps } from "@/game/ui/RunHud";
 import { describeMood } from "@/utils/mood-display";
+
+/** RunHud's render body is observed through work it cannot skip: formatting the
+ *  drain time. The counters live in a hoisted object because vi.mock's factory
+ *  is lifted above the imports. */
+const counters = vi.hoisted(() => ({ formats: 0 }));
+vi.mock("@/utils/score-format", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@/utils/score-format")>();
+    return {
+        ...actual,
+        formatGameScore: (score: number, kamikaze: boolean) => {
+            counters.formats++;
+            return actual.formatGameScore(score, kamikaze);
+        },
+    };
+});
 
 /**
  * The readout has two layouts: an overlay panel on desktop and a slim strip on
@@ -125,5 +141,71 @@ describe("RunHud", () => {
     it("surfaces a paused run without losing the readout", () => {
         expect(html({ paused: true })).toContain("Paused");
         expect(html({ paused: false })).not.toContain("Paused");
+    });
+
+    /**
+     * The readout is sampled ~20 times a second, so a sample that changes
+     * nothing must not reconcile the panel. React.memo is what buys that, and
+     * it is shallow: every non-primitive prop has to keep its identity while
+     * its contents are unchanged, which is why GameMount memoises the mood and
+     * why its state writes compare against the previous value first.
+     */
+    describe("re-render behaviour", () => {
+        let container: HTMLDivElement;
+        let root: Root;
+        let rendered: RunHudProps;
+
+        // A stand-in for GameMount: re-renders on its own schedule and hands
+        // RunHud the props it currently holds.
+        const Harness = ( props: RunHudProps ) => React.createElement( RunHud, props );
+
+        const rerenderWith = ( over: Partial<RunHudProps> ) => {
+            rendered = { ...rendered, ...over };
+            act(() => {
+                root.render( React.createElement( Harness, rendered ));
+            });
+        };
+
+        beforeEach(() => {
+            // Tells React that act() is legitimate here, so updates flush
+            // synchronously and the format counters are deterministic.
+            ( globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean } ).IS_REACT_ACT_ENVIRONMENT = true;
+            container = document.createElement( "div" );
+            document.body.appendChild( container );
+            root = createRoot( container );
+            counters.formats = 0;
+            rendered = runHudProps();
+            act(() => {
+                root.render( React.createElement( Harness, rendered ));
+            });
+        });
+
+        afterEach(() => {
+            act(() => root.unmount());
+            container.remove();
+            ( globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean } ).IS_REACT_ACT_ENVIRONMENT = false;
+        });
+
+        it("should not re-render when a sample changes nothing", () => {
+            const before = counters.formats;
+            rerenderWith({}); // a fresh props object with equal contents
+            rerenderWith({}); // ...and again on the next sampled frame
+            expect(counters.formats).toBe(before);
+        });
+
+        it("should re-render when a sampled value actually moves", () => {
+            const before = counters.formats;
+            rerenderWith({ stability: 0.8 });
+            expect(counters.formats).toBeGreaterThan(before);
+        });
+
+        it("should re-render when the mood object is rebuilt instead of memoised", () => {
+            // Documents the hazard the GameMount-side useMemo exists to avoid:
+            // describeMood() returns a fresh object every call, so passing it
+            // straight through would defeat the memo on every single sample.
+            const before = counters.formats;
+            rerenderWith({ mood: describeMood("wary") });
+            expect(counters.formats).toBeGreaterThan(before);
+        });
     });
 });
