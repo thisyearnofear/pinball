@@ -72,6 +72,7 @@ flowchart LR
 | Adaptive MAMORU guard policy (feint hold vs chase) | ✅ live | `src/model/shot-calling.ts` |
 | Skill-discrimination bot harness (null/random/rote/optimal) | ✅ live | `tests/sim/shot-calling-skill.sim.ts` |
 | Physics gate in CI (skill discrimination + unseeded-draw detection) | ✅ live | `.github/workflows/sim-gate.yml` |
+| Typecheck + unit-suite gate in CI | ✅ live | `.github/workflows/checks.yml` |
 | Quantum-seeded runs (QRNG seed, replay-verifiable) | ✅ live | `src/services/quantum-seed.ts` |
 | Seed audit readout in ghost race + replay viewer (provenance, seed + replay hashes, tap-to-copy) | ✅ live | `src/game/ui/SeedAudit.tsx` |
 | Replay-hash ↔ signed score-metadata check in the replay viewer + ghost race (with metadata copy) | ✅ live | `src/utils/replay-verify.ts` |
@@ -176,7 +177,8 @@ Statically exports to `out/` — deploy to Netlify, Cloudflare Pages, or any CDN
 
 ```bash
 pnpm test               # Frontend unit tests (403 tests, Vitest + jsdom)
-pnpm run sim:kamikaze   # Headless physics + skill-discrimination sim (~1 min; gates PRs)
+pnpm run sim:kamikaze   # Headless physics + skill-discrimination sim (~1 min)
+# typecheck, unit tests and the sim all run in Actions: checks.yml and sim-gate.yml
 pnpm run test:backend   # Backend API tests
 pnpm run test:contracts # Contract tests (Hardhat)
 pnpm run test:all       # All three suites

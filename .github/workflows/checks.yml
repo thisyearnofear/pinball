@@ -1,0 +1,62 @@
+name: Checks
+
+# Static analysis and the unit suite. Separate from Sim Gate on purpose: each
+# workflow is one signal with a name that says what it is, and a check run is
+# identified by workflow + job, so "Sim Gate / sim" stays a stable thing to
+# require.
+#
+# Until this existed, nothing in Actions ran the typecheck or the unit suite —
+# the physics gate ran only `sim:kamikaze` — so a change could land with either
+# broken. Both are cheap next to the ~50s sim, which is why they were worth
+# gating rather than leaving to `pnpm run test:frontend` locally.
+#
+# Note that master has no branch protection configured, so these report as check
+# runs; they do not by themselves block a merge until that is switched on.
+#
+# Deliberately not here: `pnpm run build` (the Next export) and the backend and
+# contract suites. See .github/README.md.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Reads the pnpm version from package.json's `packageManager` field, so
+      # the local and CI versions cannot drift apart.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      # Read the version from .nvmrc rather than repeating it, so local dev, CI
+      # and the `engines` field cannot drift apart.
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      # Frozen: pnpm-lock.yaml is committed, so this installs exactly the tree
+      # that produced the local numbers, and fails loudly if the lockfile and
+      # package.json ever disagree.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Unit tests
+        run: pnpm test

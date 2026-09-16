@@ -4,7 +4,9 @@ name: Deploy Backend
 #
 # Triggers on any change under backend/**, a lockfile-only change included — that
 # is deliberate, because a dependency bump changes what the server should be
-# running. workflow_dispatch is there for a deliberate run.
+# running. workflow_dispatch is there for a deliberate run, and it defaults to a
+# dry run: connectivity, versions and the rsync plan, with nothing written to the
+# server. Untick `dry_run` to deploy for real.
 #
 # Two things to know before touching this file:
 #
@@ -18,6 +20,12 @@ name: Deploy Backend
 #      edit to *only* this file cannot deploy; a commit that carries one
 #      alongside backend changes can. The deploy stays broken until the runner
 #      can reach the host.
+#
+# The server installs with `npm ci` from backend/package-lock.json, which is the
+# backend's single lockfile: it is an npm package, and that is the file the
+# deploy, CI and `pnpm run ci` all resolve from. `npm install` would resolve
+# within semver ranges; `ci` installs exactly the pinned tree and fails if the
+# lockfile has drifted from package.json.
 on:
   push:
     branches:
@@ -25,6 +33,11 @@ on:
     paths:
       - 'backend/**'
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Check SSH connectivity and the rsync plan without changing the server'
+        type: boolean
+        default: true
 
 jobs:
   deploy:
@@ -51,6 +64,27 @@ jobs:
             exit 1
           fi
 
+      # A dry run still exercises the parts that have never worked — the key, the
+      # host, the user — and prints the file list rsync would send, so that a real
+      # deploy is not also the first test of all of it. Read-only: one ssh probe
+      # and rsync --dry-run.
+      - name: Dry run (connectivity and rsync plan)
+        if: ${{ inputs.dry_run == true }}
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -o ConnectTimeout=10 \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            'echo "connected as $(whoami)@$(hostname)"; \
+             command -v node >/dev/null 2>&1 && node -v || echo "WARNING: node is not on PATH"; \
+             command -v npm  >/dev/null 2>&1 && npm -v  || echo "WARNING: npm is not on PATH"'
+          echo "--- changes a real run would make under /opt/pinball/backend ---"
+          rsync -az --delete --dry-run --itemize-changes \
+            --exclude='node_modules' \
+            --exclude='dist' \
+            --exclude='.env*' \
+            backend/ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/pinball/backend/ | sed -n '1,40p'
+          echo "--- dry run: nothing on the server was changed ---"
+
       # Excludes are load-bearing. `node_modules` and `dist` are built on the
       # server: without them this uploads the local tree — including macOS
       # native binaries — over the server's. `.env*` is excluded so `--delete`
@@ -58,6 +92,7 @@ jobs:
       # /etc/pinball-backend/.env, outside this tree, so that is belt and
       # braces rather than the only protection.)
       - name: Rsync backend to server
+        if: ${{ inputs.dry_run != true }}
         run: |
           rsync -az --delete \
             --exclude='node_modules' \
@@ -66,11 +101,14 @@ jobs:
             backend/ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/pinball/backend/
 
       - name: Build and restart service
+        if: ${{ inputs.dry_run != true }}
         run: |
           ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} <<'EOF'
           set -euo pipefail
           cd /opt/pinball/backend
-          npm install --no-audit --no-fund --ignore-scripts
+          node -v
+          npm -v
+          npm ci --no-audit --no-fund --ignore-scripts
           npm run build
           systemctl restart pinball-backend
           systemctl status pinball-backend --no-pager --full | sed -n '1,80p'

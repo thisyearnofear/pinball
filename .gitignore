@@ -9,10 +9,17 @@ node_modules
 *.tsbuildinfo
 build.sh
 
-# Lockfiles — pnpm's is committed, being the single source of truth for installs.
-# npm's is ignored so a stray `npm install` cannot quietly introduce a second,
-# divergent resolution of the same dependency tree.
+# Lockfiles — exactly one resolution per package, and it is committed.
+#
+# The frontend is a pnpm project (pnpm-lock.yaml, the root's only lockfile).
+# backend/ is an npm package: package-lock.json is what the deploy server
+# installs from with `npm ci`, so it is tracked and must not be ignored — a
+# deletion there would silently drop the pin the deployment resolves from.
 *-lock.json
+!backend/package-lock.json
+# contracts/ keeps the rule: it resolves through the tracked
+# contracts/pnpm-lock.yaml, so an npm lockfile there is only a stray second
+# resolution.
 
 # Hardhat/Contracts
 contracts/artifacts/
