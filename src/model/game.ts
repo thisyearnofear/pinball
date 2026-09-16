@@ -532,6 +532,7 @@ export const bumpTable = (game: GameDef): void => {
     recordReplayEvent(tickCount, "bump");
     if (++bumpAmount >= MAX_BUMPS) {
         tilt = true;
+        haptics.tilt();
         messageHandler(GameMessages.TILT, 5000);
         endRound(game, 5000);
     }
@@ -541,6 +542,12 @@ export const bumpTable = (game: GameDef): void => {
 
     playSoundEffect(GameSounds.BUMP);
 };
+
+/**
+ * How close the table is to tilting. Exposed so the feedback can escalate with
+ * it: the penalty lands harder when the player can feel it coming.
+ */
+export const getBumpLevel = (): number => bumpAmount;
 
 /**
  * Should be called when zCanvas invokes update() prior to rendering
@@ -1245,6 +1252,18 @@ export const shotRelease = (): void => {
     shotState.releaseTick = tickCount;
     shotState.accuracy = accuracy;
     shotState.releaseOffset = offset;
+    // Timing is the whole skill here, so the verdict is felt at the release
+    // rather than inferred seconds later from where the ball ended up. The
+    // middle boundary is the mechanic's own gate (holdAccuracy: at or above it
+    // a release HOLDS its called lane), so re-tuning the gate re-tunes the
+    // feedback with it. Feint has no meter — accuracy is always 1 — so it gets
+    // a neutral confirm instead of a verdict it did not earn.
+    const holdGate = IMMERSION.shotCalling.holdAccuracy;
+    haptics.shotReleased(
+        shotState.variant === "feint" || shotState.aimedLane === null
+            ? "neutral"
+            : accuracy >= 0.85 ? "perfect" : accuracy >= holdGate ? "good" : "poor"
+    );
     // The landing lane is a deterministic consequence of the SHOT (intent +
     // signed meter error), not of the chaotic descent — the table's reflectors
     // and bottom funnel can mirror or erase the launch direction entirely. The

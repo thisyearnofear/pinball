@@ -42,12 +42,56 @@ practice.
 
 | Verb | Input | Effect |
 |---|---|---|
-| Nudge | Tap / drag | Blended impulse toward touch point |
-| Dive | Swipe down | Hard downward impulse |
-| Deploy | Swipe left/right | Lateral shove |
-| Tilt-Lock | Shift / swipe up | Freezes AI flippers 1.2s (6s cooldown) |
-| Charge | Hold | Aim guide + charged launch |
+| Nudge | Tap / click | Blended impulse toward the touch point |
+| Dive | Swipe down / ↓ | Hard downward impulse |
+| Deploy | Double-tap / D | Lateral shove |
+| Tilt-Lock | Swipe up / Shift | Freezes AI flippers 1.2s (6s cooldown) |
+| Charge | Hold (pointer **or Space**) | Aim guide + charged nudge, up to 3× |
 | Power-ups | Automatic | Crates on table; roulette picks munition or countermeasure |
+
+A charge is *felt* as it builds: each notch (1×, 2×, 3×) lands a charge-tick
+sound and a deepening haptic, so the power reads without watching the bar. This
+is the verb the whole mode rests on, and before this pass a hold gave no sound
+and no tactile read at all — you could charge to full and only see it.
+
+Space charges the same nudge for keyboard players, who otherwise had no nudge
+verb in this mode (only flippers, dive, deploy, tilt-lock). With no pointer to
+aim by, it resolves to a **save nudge** — up-table and away from the nearer wall
+— which is the nudge you actually want when you cannot point.
+
+### Feel — the haptic vocabulary
+
+Haptics carry the verbs, so they are ranked rather than fire-and-forget. Two
+properties of the Vibration API force that (both from MDN):
+
+- **A new pattern halts the one in progress.** Played naively, a 15 ms flipper
+tap truncates the 190 ms drain fanfare, and a bumper run re-triggers itself every
+35 ms until it reads as one continuous buzz.
+- **iOS Safari has no Vibration API at all.** On an iPhone every call is a no-op,
+so the settings screen says so rather than offering a switch that does nothing.
+It is the main reason the same beats also carry audio and a visual reaction.
+
+| Event | Pattern (ms) | Rank | Hold |
+|---|---|---|---|
+| Flipper | 15 | 0 | — |
+| Charge notch 1 / 2 / 3 | 8 / 12 / 16 | 0 | — |
+| Nudge (tap) | 22 | 1 | — |
+| Charge release, 1× → 3× | 22 → 52 | 1 | — |
+| Dive, and the tap nudge in Classic | 35 | 1 | — |
+| Tilt warning, level 1 → 3 | 16-runs, one more run per level | 1 | — |
+| Tilt-lock on cooldown | 20·40·20 | 1 | — |
+| Shot release: poor · good · perfect | 12·34·12 · 24 · 18·26·42 | 1 · 1 · 2 | perfect 130 |
+| MAMORU save | 25 | 2 | 80 |
+| Power-up | 15·30·15 | 2 | 90 |
+| Tilt — the table gives up | 50·60·140 | 2 | 220 |
+| Drain victory | 40·60·90 | 3 | 200 |
+
+Within its gap the same event cannot re-fire; a higher rank always plays, and
+may cut a lower one short; a lower rank is **dropped, never queued** — a flipper
+tap swallowed by the fanfare does not surface as a late buzz. The shot verdict's
+middle boundary is the mechanic's own `holdAccuracy`, so re-tuning the skill gate
+re-tunes the feel with it, and Feint (no meter, accuracy always 1) gets a neutral
+confirm rather than a verdict it did not earn.
 
 ### Control scheme: Shot-calling (守) — the serve-based duel
 

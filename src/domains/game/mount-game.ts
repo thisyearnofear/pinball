@@ -5,11 +5,11 @@ import type { Size } from "zcanvas";
 import type { GameDef, GameMessages } from "@/definitions/game";
 import { ActorTypes, FRAME_RATE, GameSounds } from "@/definitions/game";
 
-import { init, scaleCanvas, setFlipperState, bumpTable, update, panViewport, setPaused, getBallPosition, getBallCount, nudgeBallToward, isKamikazeMode, queueDive, deployStoredMunition, triggerTiltLock, hasStoredMunition, isShotCallMode, shotAim, shotRelease, getShotLanes } from "@/model/game";
+import { init, scaleCanvas, setFlipperState, bumpTable, getBumpLevel, update, panViewport, setPaused, getBallPosition, getBallCount, nudgeBallToward, isKamikazeMode, queueDive, deployStoredMunition, triggerTiltLock, hasStoredMunition, isShotCallMode, shotAim, shotRelease, getShotLanes } from "@/model/game";
 import SpriteCache from "@/utils/sprite-cache";
 import { createInputController, attachKamikazeGestures } from "@/utils/input-controller";
 import * as haptics from "@/utils/haptics";
-import { playVerbNudge, playVerbDive, playVerbDeploy, playVerbTiltLock } from "@/services/audio-service";
+import { playVerbNudge, playVerbDive, playVerbDeploy, playVerbTiltLock, playVerbChargeTick } from "@/services/audio-service";
 
 export type MountGameOptions = {
   /**
@@ -86,6 +86,12 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     overflow: "hidden",
     background: "#000",
     touchAction: "none",
+    // A held nudge is a long press, which iOS answers with a text-selection
+    // callout and Android with a context menu — both of which steal the input
+    // mid-charge. Suppress them at the surface rather than per element.
+    userSelect: "none",
+    WebkitUserSelect: "none",
+    WebkitTouchCallout: "none",
   });
 
   const canvasContainer = document.createElement("div");
@@ -168,7 +174,9 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
 
   const bumpHandler = throttle(() => {
     bumpTable(gameRef);
-    haptics.bump();
+    // Escalating: the buzz deepens as the tilt gets closer, so the penalty is
+    // something the player feels coming rather than something done to them.
+    haptics.tiltWarning(getBumpLevel());
   }, 150);
 
   const inputController = createInputController({
@@ -180,7 +188,14 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
       setFlipperState(ActorTypes.RIGHT_FLIPPER, isDown);
       if (isDown) haptics.flip();
     },
-    onBump: () => bumpHandler(),
+    // Kamikaze owns nudging through the gesture controller, and bumpTable is a
+    // no-op there — so Space used to buzz the phone for an action that did
+    // nothing, while a keyboard player had no nudge verb at all. Space is the
+    // charge-nudge key in this mode instead.
+    onBump: () => {
+      if (isKamikazeMode()) return;
+      bumpHandler();
+    },
     onPan: (delta: number) => panViewport(delta),
     onTogglePause: () => {
       gameRef.paused = !gameRef.paused;
@@ -207,16 +222,33 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     firstActionFired = true;
     opts.onFirstAction?.();
   }
-  function nudgeAt(clientX: number, clientY: number, power = 1) {
+  /**
+   * Aim for a nudge that has no pointer behind it (a keyboard release). A save
+   * nudge: up-table and away from the nearer wall. Straight up would leave the
+   * ball where it came from, and a keyboard player has no way to point.
+   */
+  function keyboardAim(): { x: number; y: number } | null {
+    const ball = getBallPosition();
+    if (!ball) return null;
+    const width = tableSize?.width ?? 600;
+    const away = ball.x < width / 2 ? 1 : -1;
+    return { x: ball.x + away * width * 0.18, y: ball.y - width * 0.3 };
+  }
+
+  function nudgeAt(clientX: number | null, clientY: number | null, power = 1) {
     // Shot-calling: a tap calls your shot — bucket the tap into a target lane.
     if (isShotCallMode()) {
-      shotAimAtClient(clientX);
+      if (clientX !== null) shotAimAtClient(clientX);
       return;
     }
-    const world = clientToWorld(clientX, clientY);
+    const world =
+      clientX === null || clientY === null ? keyboardAim() : clientToWorld(clientX, clientY);
     if (!world) return;
     nudgeBallToward(world.x, world.y, power);
-    haptics.bump();
+    // A held nudge lands heavier the longer it was held; a tap stays a tap. The
+    // difference is felt rather than read off the power readout.
+    if (power > 1) haptics.chargeRelease(power);
+    else haptics.nudge();
     playVerbNudge(power);
     markFirstAction();
     if (power > 1.3) opts.onNudge?.(power);
@@ -259,6 +291,8 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
       markFirstAction();
       opts.onTiltLock?.();
     } else {
+      // A distinct "no" is what teaches the cooldown. Silence reads as a bug.
+      haptics.tiltDenied();
       opts.onTiltLockCooldown?.();
     }
   }
@@ -371,8 +405,18 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
           onDeploy: deploy,
           onTiltLock: tiltLock,
           hasMunition: hasStoredMunition,
+          // The charge has a sound (playVerbChargeTick) that nothing ever
+          // called, and no tactile read at all: you could hold to 3x and only
+          // see the power bar. Both now land on the notch crossings.
+          onChargeNotch: (notch, power) => {
+            playVerbChargeTick(power);
+            haptics.chargeTick(notch);
+          },
           onChargeTick: (power) => opts.onCharge?.(power),
           onChargeEnd: () => opts.onCharge?.(null),
+          // In shot-calling, Space releases the shot (handleKamikazeKey); a
+          // charge starting on the same key would swallow the release.
+          canKeyboardCharge: () => !isShotCallMode(),
           shouldHandle: () => isKamikazeMode() && !gameRef.paused,
         });
       }

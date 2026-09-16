@@ -65,22 +65,19 @@ export function createInputController(cb: Callbacks, nudgeTarget?: HTMLElement) 
 
   function handleTouchStart(isLeft: boolean, event: TouchEvent) {
     isLeft ? cb.onLeftFlip(true) : cb.onRightFlip(true);
-    for (let i = 0; i < event.touches.length; i++) {
-      const t = event.touches.item(i);
-      if (!t) continue;
-      touchStart.y = t.pageY;
-      touchStart.time = window.performance.now();
-    }
+    const t = event.touches.item(0);
+    if (!t) return;
+    touchStart.y = t.pageY;
+    touchStart.time = window.performance.now();
   }
 
   function handleTouchEnd(isLeft: boolean, event: TouchEvent) {
     isLeft ? cb.onLeftFlip(false) : cb.onRightFlip(false);
-    if (event.type === "touchend" && window.performance.now() - touchStart.time < SWIPE_TIME) {
-      const movedBy = event.changedTouches[0]?.pageY - touchStart.y;
-      if (movedBy < -SWIPE_THRESHOLD) {
-        cb.onBump();
-      }
-    }
+    const endY = event.changedTouches.item(0)?.pageY;
+    if (event.type !== "touchend" || endY === null || endY === undefined) return;
+    if (window.performance.now() - touchStart.time >= SWIPE_TIME) return;
+    // Swipe up = bump the table.
+    if (endY - touchStart.y < -SWIPE_THRESHOLD) cb.onBump();
   }
 
   function addListeners() {
@@ -111,13 +108,20 @@ export function createInputController(cb: Callbacks, nudgeTarget?: HTMLElement) 
  * mode stops being "tap and hope":
  *   - HOLD then release: charged nudge toward the release point (up to 3x).
  *   - SWIPE DOWN: deliberate dive (bypass the machine's emergency save).
+ *   - SWIPE UP: tilt-lock.
  *   - DOUBLE-TAP: deploy the banked munition.
  * A quick tap still performs a normal nudge.
+ *
+ * Holding Space charges the same nudge for keyboard players, who otherwise had
+ * no nudge verb at all in this mode — only flippers, dive, deploy and tilt-lock.
+ * The released power is identical; only the aim differs, because a keyboard has
+ * no pointer to aim with, so the mount resolves a fallback direction.
  *
  * `shouldHandle` gates input (e.g. false when paused / not in kamikaze mode).
  */
 export type KamikazeGestures = {
-  onNudge: (x: number, y: number, power: number) => void;
+  /** `x`/`y` are null for a keyboard release, where there is no pointer to aim by. */
+  onNudge: (x: number | null, y: number | null, power: number) => void;
   onDive: () => void;
   onDeploy: () => void;
   onTiltLock: () => void;
@@ -128,18 +132,32 @@ export type KamikazeGestures = {
    */
   hasMunition?: () => boolean;
   onChargeTick?: (power: number) => void;
+  /** Fires once per notch crossed (1, 2, 3) so charge can be felt, not just read. */
+  onChargeNotch?: (notch: number, power: number) => void;
   onChargeEnd?: () => void;
   /** Reports the pointer's screen position while charging (null when released). */
   onAim?: (pointerX: number | null, pointerY: number | null) => void;
+  /** Space-hold charging. Omit or return false to disable it (e.g. shot-calling). */
+  canKeyboardCharge?: () => boolean;
   shouldHandle: () => boolean;
 };
 
 const HOLD_TO_CHARGE_MS = 160;
 const CHARGE_FULL_MS = 900; // time from hold-start to max power
-const MAX_POWER = 3;
+/** The charge ceiling. Kept in step with MAX_CHARGE_POWER in utils/haptics,
+ *  which scales its release feedback against it (pinned by haptics.spec.ts). */
+export const MAX_POWER = 3;
 const SWIPE_DOWN_PX = 60;
 const SWIPE_UP_PX = 60;
 const DOUBLE_TAP_MS = 280;
+
+/** Which charge notch a power value sits in: 0 below 2x, then 1, 2, 3. */
+export function chargeNotchFor(power: number): number {
+  if (power >= 3) return 3;
+  if (power >= 2) return 2;
+  if (power > 1) return 1;
+  return 0;
+}
 
 export function attachKamikazeGestures(target: HTMLElement, g: KamikazeGestures): () => void {
   let downX = 0;
@@ -151,6 +169,11 @@ export function attachKamikazeGestures(target: HTMLElement, g: KamikazeGestures)
   let swiped = false;
   let curX = 0;
   let curY = 0;
+  /** The pointer that owns the current charge; other fingers are ignored. */
+  let activePointerId: number | null = null;
+  let captured = false;
+  let keyboardCharging = false;
+  let notch = 0;
 
   function powerFor(elapsed: number): number {
     if (elapsed < HOLD_TO_CHARGE_MS) return 1;
@@ -158,12 +181,25 @@ export function attachKamikazeGestures(target: HTMLElement, g: KamikazeGestures)
     return 1 + Math.min(1, charged) * (MAX_POWER - 1);
   }
 
+  /** Emits the charge tick, and a one-shot notch crossing so the mount can
+   *  tick the audio and the haptics at the same boundaries. */
+  function reportCharge(power: number, aimX: number | null, aimY: number | null) {
+    g.onChargeTick?.(power);
+    const next = chargeNotchFor(power);
+    if (next > notch) {
+      notch = next;
+      g.onChargeNotch?.(next, power);
+    }
+    g.onAim?.(aimX, aimY);
+  }
+
   function startCharge() {
+    if (charging) return;
     charging = true;
+    notch = 0;
     const loop = () => {
       if (!charging) return;
-      g.onChargeTick?.(powerFor(window.performance.now() - downAt));
-      g.onAim?.(curX, curY);
+      reportCharge(powerFor(window.performance.now() - downAt), curX, curY);
       chargeRaf = requestAnimationFrame(loop);
     };
     chargeRaf = requestAnimationFrame(loop);
@@ -176,18 +212,43 @@ export function attachKamikazeGestures(target: HTMLElement, g: KamikazeGestures)
     g.onAim?.(null, null);
   }
 
+  function releaseCapture() {
+    if (!captured || activePointerId === null) return;
+    captured = false;
+    try {
+      target.releasePointerCapture?.(activePointerId);
+    } catch {
+      /* the pointer is already gone */
+    }
+  }
+
   function onDown(e: PointerEvent) {
     if (!g.shouldHandle()) return;
+    // A second finger must not reset the charge already in flight: on a
+    // two-handed grip the other thumb used to silently restart the timer.
+    if (charging && activePointerId !== null && e.pointerId !== activePointerId) return;
+    activePointerId = e.pointerId;
     downX = e.clientX;
     downY = e.clientY;
     curX = e.clientX;
     curY = e.clientY;
     downAt = window.performance.now();
     swiped = false;
+    // Capture so a finger that drifts off the edge keeps its charge. Without
+    // this, pointerleave cancelled the charge the moment the thumb slid.
+    if (typeof target.setPointerCapture === "function") {
+      try {
+        target.setPointerCapture(e.pointerId);
+        captured = true;
+      } catch {
+        captured = false;
+      }
+    }
     startCharge();
   }
 
   function onMove(e: PointerEvent) {
+    if (activePointerId !== null && e.pointerId !== activePointerId) return;
     curX = e.clientX;
     curY = e.clientY;
     if (!charging || swiped) return;
@@ -203,10 +264,16 @@ export function attachKamikazeGestures(target: HTMLElement, g: KamikazeGestures)
   }
 
   function onUp(e: PointerEvent) {
+    if (activePointerId !== null && e.pointerId !== activePointerId) return;
+    activePointerId = null;
+    releaseCapture();
     if (!g.shouldHandle()) return;
     const wasCharging = charging;
     stopCharge();
-    if (swiped) { swiped = false; return; }
+    if (swiped) {
+      swiped = false;
+      return;
+    }
 
     const now = window.performance.now();
     const held = now - downAt;
@@ -226,23 +293,74 @@ export function attachKamikazeGestures(target: HTMLElement, g: KamikazeGestures)
     g.onNudge(e.clientX, e.clientY, power);
   }
 
-  function onCancel() {
+  function onCancel(e: PointerEvent) {
+    if (activePointerId !== null && e.pointerId !== activePointerId) return;
+    activePointerId = null;
+    releaseCapture();
     if (charging) stopCharge();
     swiped = false;
+  }
+
+  /**
+   * Only reached when the pointer is NOT captured (some browsers, and any
+   * environment without pointer capture). With capture the element keeps
+   * receiving move/up even outside its bounds, which is the point.
+   */
+  function onLeave(e: PointerEvent) {
+    if (captured) return;
+    onCancel(e);
+  }
+
+  function onKeyDown(e: KeyboardEvent) {
+    if (e.code !== "Space" || e.repeat) return;
+    if (!g.shouldHandle()) return;
+    if (g.canKeyboardCharge && !g.canKeyboardCharge()) return;
+    if (keyboardCharging || charging) return;
+    keyboardCharging = true;
+    downAt = window.performance.now();
+    notch = 0;
+    const loop = () => {
+      if (!keyboardCharging) return;
+      reportCharge(powerFor(window.performance.now() - downAt), null, null);
+      chargeRaf = requestAnimationFrame(loop);
+    };
+    // No `charging` flag here: keyboard and pointer charges are exclusive, and
+    // sharing the flag let a Space release cancel a touch charge mid-swipe.
+    chargeRaf = requestAnimationFrame(loop);
+    e.preventDefault();
+  }
+
+  function onKeyUp(e: KeyboardEvent) {
+    if (e.code !== "Space" || !keyboardCharging) return;
+    keyboardCharging = false;
+    cancelAnimationFrame(chargeRaf);
+    const held = window.performance.now() - downAt;
+    g.onChargeEnd?.();
+    notch = 0;
+    g.onNudge(null, null, powerFor(held));
+    e.preventDefault();
   }
 
   target.addEventListener("pointerdown", onDown);
   target.addEventListener("pointermove", onMove);
   target.addEventListener("pointerup", onUp);
   target.addEventListener("pointercancel", onCancel);
-  target.addEventListener("pointerleave", onCancel);
+  target.addEventListener("pointerleave", onLeave);
+  window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keyup", onKeyUp);
 
   return () => {
     stopCharge();
+    keyboardCharging = false;
+    cancelAnimationFrame(chargeRaf);
+    activePointerId = null;
+    captured = false;
     target.removeEventListener("pointerdown", onDown);
     target.removeEventListener("pointermove", onMove);
     target.removeEventListener("pointerup", onUp);
     target.removeEventListener("pointercancel", onCancel);
-    target.removeEventListener("pointerleave", onCancel);
+    target.removeEventListener("pointerleave", onLeave);
+    window.removeEventListener("keydown", onKeyDown);
+    window.removeEventListener("keyup", onKeyUp);
   };
 }

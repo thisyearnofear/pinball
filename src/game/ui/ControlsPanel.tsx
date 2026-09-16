@@ -18,7 +18,7 @@ type Verb = {
 
 const VERBS: Verb[] = [
   { key: "Click", touch: "Tap", label: "Nudge", desc: "Push the ball toward your cursor", color: "#60a5fa" },
-  { key: "Hold", touch: "Hold", label: "Power Nudge", desc: "Charge up, aim with the guide line", color: "#4ade80" },
+  { key: "Hold · Space", touch: "Hold", label: "Power Nudge", desc: "Charge up, aim with the guide line (Space auto-aims up-table)", color: "#4ade80" },
   { key: "↓", touch: "Swipe down", label: "Dive", desc: "Force a drain the machine can't save", color: "#fbbf24" },
   { key: "Shift", touch: "Swipe up", label: "Tilt-Lock", desc: "Freeze the machine's flippers briefly", color: "#f0abfc" },
   { key: "D", touch: "Double-tap", label: "Deploy", desc: "Fire a banked munition", color: "#f87171" },

@@ -5,7 +5,7 @@ import styles from "./SettingsModal.module.scss";
 
 import { getFxMuted, getMusicMuted, setFxMuted, setMusicMuted, init as initAudio } from "@/services/audio-service";
 import { isFullscreen, toggleFullscreen } from "@/utils/fullscreen-util";
-import { setEnabled as setHapticsEnabled } from "@/utils/haptics";
+import { isSupported as hapticsSupported, setEnabled as setHapticsEnabled } from "@/utils/haptics";
 import { getFromStorage, setInStorage } from "@/utils/local-storage";
 import { STORED_HAPTICS_ENABLED, STORED_FULLSCREEN, STORED_WORLD_ID } from "@/definitions/settings";
 import { MARBLE_WORLDS } from "@/config/worlds";
@@ -53,7 +53,15 @@ export function SettingsModal(props: { onClose: () => void }) {
       <div className={styles.content}>
         <ToggleRow label="Sound effects" checked={sound} onChange={(v) => { initAudio(); setSound(v); setFxMuted(!v); }} />
         <ToggleRow label="Music" checked={music} onChange={(v) => { initAudio(); setMusic(v); setMusicMuted(!v); }} />
-        <ToggleRow label="Haptics" checked={haptics} onChange={(v) => { setHaptics(v); setHapticsEnabled(v); setInStorage(STORED_HAPTICS_ENABLED, v.toString()); }} />
+        {hapticsSupported() ? (
+          <ToggleRow label="Haptics" checked={haptics} onChange={(v) => { setHaptics(v); setHapticsEnabled(v); setInStorage(STORED_HAPTICS_ENABLED, v.toString()); }} />
+        ) : (
+          // Every haptic call is a no-op without the Vibration API (iOS Safari),
+          // so say so rather than showing a switch that changes nothing.
+          <div className={styles.unsupported}>
+            Haptics are not supported by this browser.
+          </div>
+        )}
 
         {fullscreenSupported ? (
           <ToggleRow label="Fullscreen" checked={fullscreen} onChange={(v) => {

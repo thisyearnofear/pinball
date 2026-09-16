@@ -139,7 +139,9 @@ export function currentCue(
 export function extraControlLines(mode: GameMode | undefined, touchscreen: boolean): string[] {
   if (mode !== "kamikaze") return [];
   return [
-    "HOLD to charge a power nudge (up to 3×) — an aim line shows the direction.",
+    touchscreen
+      ? "HOLD to charge a power nudge (up to 3×) — an aim line shows the direction."
+      : "HOLD the pointer to charge a power nudge (up to 3×) — the aim line shows the direction. SPACE charges the same nudge, aimed up-table.",
     touchscreen ? "DOUBLE-TAP to deploy a banked munition." : "Press D (or double-click) to deploy a banked munition.",
     touchscreen ? "SWIPE UP to TILT-LOCK; the underworld meter fills as you play." : "Press SHIFT (or drag up) to TILT-LOCK; the underworld meter fills as you play.",
   ];
