@@ -10,12 +10,24 @@ name: Deploy Backend
 # `workflow_dispatch` is the deliberate escape hatch and still defaults to a dry
 # run.
 #
-# A run where the backend tree has not changed is a no-op: rsync compares file
-# content (--checksum, not mtimes — a fresh checkout stamps every file with the
-# checkout time, so an mtime compare would see the whole tree as new and restart
-# the signer for nothing), and the build, restart and verify steps are skipped
-# when nothing was transferred. That is what makes it cheap to sit behind every
-# green Checks run.
+# A run where the backend tree has not changed is a no-op, and that is what makes
+# it affordable to sit behind every green Checks run. Deciding that correctly took
+# two corrections, both found by watching a run report success while rebuilding
+# production anyway:
+#
+#   * mtimes are not a usable signal. `-a` preserves times, and a fresh checkout
+#     stamps every file with the checkout time, so rsync treats the whole tree as
+#     touched on every run and its per-file output (`--itemize-changes`) is never
+#     empty — those lines are timestamp-only updates. Content is compared instead
+#     (`--checksum`), and the decision uses rsync's own count of files actually
+#     *transferred* (`--stats`).
+#   * `backend/.DS_Store` is now excluded. A local working tree carries one — it
+#     is gitignored, so it is invisible to `git status`, and macOS recreates it
+#     whenever that folder is browsed — and it was not among the excludes, so a
+#     hand-run of this same rsync offers to upload macOS metadata to production.
+#     It never reaches a CI checkout, since that comes from git; the exclude is
+#     there so a human running this command and a runner running it cannot differ.
+#     AppleDouble `._*` files are excluded for the same reason.
 #
 # Four things to know before touching this file:
 #
@@ -125,11 +137,14 @@ jobs:
              command -v node >/dev/null 2>&1 && node -v || echo "WARNING: node is not on PATH"; \
              command -v npm  >/dev/null 2>&1 && npm -v  || echo "WARNING: npm is not on PATH"'
           echo "--- changes a real run would make under /opt/pinball/backend ---"
-          rsync -az --delete --checksum --dry-run --itemize-changes -e "ssh -p $DEPLOY_PORT" \
+          plan=$(rsync -az --delete --checksum --dry-run --itemize-changes --stats -e "ssh -p $DEPLOY_PORT" \
             --exclude='node_modules' \
             --exclude='dist' \
             --exclude='.env*' \
-            backend/ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/pinball/backend/ | sed -n '1,40p'
+            --exclude='.DS_Store' \
+            --exclude='._*' \
+            backend/ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/pinball/backend/)
+          printf '%s\n' "$plan" | grep -E '^[<>]|^\*deleting|^Number of (regular files transferred|deleted files)' | sed -n '1,40p' || true
           echo "--- dry run: nothing on the server was changed ---"
 
       # Excludes are load-bearing. `node_modules` and `dist` are built on the
@@ -139,21 +154,28 @@ jobs:
       # /etc/pinball-backend/.env, outside this tree, so that is belt and
       # braces rather than the only protection.)
       #
-      # --checksum is what makes the "changed" answer meaningful; see the note at
-      # the top of this file. `--itemize-changes` prints a line per changed path,
-      # so an empty result means the tree already matches this commit.
+      # The "did anything really change" answer comes from --stats, not from
+      # whether --itemize-changes printed anything: see the note at the top of this
+      # file. Only a transferred file or a deletion means new code is on the server.
       - name: Rsync backend to server
         id: rsync
         if: ${{ inputs.dry_run != true }}
         run: |
           set -euo pipefail
-          changes=$(rsync -az --delete --checksum --itemize-changes -e "ssh -p $DEPLOY_PORT" \
+          out=$(rsync -az --delete --checksum --itemize-changes --stats -e "ssh -p $DEPLOY_PORT" \
             --exclude='node_modules' \
             --exclude='dist' \
             --exclude='.env*' \
+            --exclude='.DS_Store' \
+            --exclude='._*' \
             backend/ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/pinball/backend/)
-          if [ -n "$changes" ]; then
-            printf '%s\n' "$changes"
+          printf '%s\n' "$out"
+          transferred=$(printf '%s\n' "$out" | awk -F': *' '/^Number of regular files transferred/{gsub(/,/,"",$2); print $2}')
+          deleted=$(printf '%s\n' "$out" | awk -F': *' '/^Number of deleted files/{gsub(/,/,"",$2); print $2}')
+          echo "content changes: transferred=${transferred:-0} deleted=${deleted:-0}"
+          echo "(a 't' in the lines above is a timestamp-only update — `-a` preserves times and a"
+          echo " fresh checkout changes all of them, so those are not rebuilds.)"
+          if [ "${transferred:-0}" -gt 0 ] || [ "${deleted:-0}" -gt 0 ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "The backend tree on the server already matches this commit — nothing to build or restart."
