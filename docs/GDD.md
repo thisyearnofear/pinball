@@ -167,6 +167,19 @@ preferences:
    one-line `AUDIT` status and an *Audit trail* toggle. The thing you came to
    watch comes first; the evidence is one tap away.
 
+5. **The lobby asks for nothing either.** The same rule one screen earlier: a
+   newcomer cannot evaluate two game modes, three machine difficulties and three
+   control schemes before playing any of them, so the lobby leads with a single
+   **PLAY NOW** and puts every picker behind one **Change setup** disclosure that
+   opens **closed**. The toggle carries a summary of what the run will actually
+   be (`Kamikaze 神風 · machine: medium · control: Steer`), so the setup is
+   *stated* rather than *asked for*, and never has to be opened just to check it.
+   Inside the panel all three control schemes sit side by side — the block is
+   already opt-in, so a second nested disclosure would only be one more thing to
+   open. The connect-a-wallet prompt stays, but **below** the run: "what is
+   this" is a better first question than "do you have a wallet".
+   (`tests/unit/game/arcade-lobby.spec.ts` guards the closed default.)
+
 **The cheat-sheet replaces itself.** The persistent one-line control cheat-sheet
 still appears on the first ball, but **not on a coached run** — the coach is
 saying the same thing better, and saying it twice is what makes a HUD read as a
@@ -245,6 +258,8 @@ Pacing: early wins (bonus XP on the very first touch, first grade after first ru
 - Synthesized WebAudio SFX (no asset downloads): per-verb sounds (nudge, dive, deploy, tilt-lock, charge tick)
 - Taiko drum on drain; furin (wind chime) on power-up pickup
 - Sakura storm SFX on multiball; machine taunt text overlays ("SAVED!", "PATHETIC", "NOOO")
+- Looping music tracks are local MP3s, and they are the largest thing the game sends. Encoded at 112 kbps (4.2 MB for both tables, down from 7.0 MB at ~190 kbps) and withheld entirely when the browser reports `saveData` or a `2g`/`slow-2g` link — a few megabytes of soundtrack is not worth the run it would degrade
+- The track is fetched at game init, which `GameMount` only reaches after the 3D world has loaded, so the music never races the assets that gate play
 - Reduced-motion setting disables CRT overlay and particles
 
 ---

@@ -354,6 +354,43 @@ export const playVerbTiltLock = (): void => {
 };
 
 /**
+ * What the browser knows about the connection, where it exposes anything at
+ * all: Chrome/Android only. iOS Safari has no Network Information API, so the
+ * checks below simply do not apply there.
+ */
+export type ConnectionHint = { saveData?: boolean; effectiveType?: string };
+
+/**
+ * Whether a music track is worth fetching right now. Pure.
+ *
+ * The music is the largest thing the game sends and the least necessary — a run
+ * is seconds long — so it is the first thing to withhold when the player has
+ * already told the browser they are on a metered or slow link. `saveData` is an
+ * explicit preference rather than a guess, and honouring it is the one case
+ * where spending the bytes is straightforwardly the wrong call.
+ *
+ * This is a withhold, not a delay: the fetch is already sequenced after the
+ * world has loaded (GameMount awaits mountWorld before mountGame, and the only
+ * enqueue lives in game init), so nothing critical is being raced here.
+ */
+export const shouldFetchMusic = ( connection?: ConnectionHint | null ): boolean => {
+    if ( !connection ) {
+        return true;
+    }
+    if ( connection.saveData === true ) {
+        return false;
+    }
+    return connection.effectiveType !== "slow-2g" && connection.effectiveType !== "2g";
+};
+
+function connectionHint(): ConnectionHint | null {
+    if ( typeof navigator === "undefined" ) {
+        return null;
+    }
+    return ( navigator as Navigator & { connection?: ConnectionHint } ).connection ?? null;
+}
+
+/**
  * enqueue a track from the available pool for playing
  */
 export const enqueueTrack = async( trackId: string ): Promise<void> => {
@@ -366,6 +403,14 @@ export const enqueueTrack = async( trackId: string ): Promise<void> => {
 
     if ( playingTrackId === trackId ) {
         setFrequency();
+        return;
+    }
+
+    // Hold the track rather than dropping it: the connection may improve, and
+    // every later trigger re-checks before fetching (unmuting music, a further
+    // enqueue). Nothing is fetched on a metered or slow link.
+    if ( !shouldFetchMusic( connectionHint() )) {
+        queuedTrackId = trackId;
         return;
     }
 
