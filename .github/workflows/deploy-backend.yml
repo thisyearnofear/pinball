@@ -1,12 +1,25 @@
 name: Deploy Backend
 
+# Deploys backend/ to the Hetzner VPS and restarts systemd's pinball-backend.
+#
+# This workflow had never run: it triggered on `main`, and the default branch is
+# `master`. Fixing the branch arms a production deploy, so two things keep that
+# a deliberate act rather than a side effect:
+#
+#   1. the `paths` filter covers `backend/**` only. A commit that edits this file
+#      therefore does not itself deploy production code — which is what makes it
+#      safe to land the fix. Use workflow_dispatch for a deliberate run,
+#      including the first one.
+#   2. the rsync excludes everything that is built on the server, so --delete
+#      cannot remove it and a local node_modules cannot be shipped over the
+#      server's.
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - 'backend/**'
-      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -25,9 +38,19 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
+      # Excludes are load-bearing. `node_modules` and `dist` are built on the
+      # server: without them this uploads the local tree — including macOS
+      # native binaries — over the server's. `.env*` is excluded so `--delete`
+      # can never remove server-side config. (The signer keys live at
+      # /etc/pinball-backend/.env, outside this tree, so that is belt and
+      # braces rather than the only protection.)
       - name: Rsync backend to server
         run: |
-          rsync -az --delete backend/ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/pinball/backend/
+          rsync -az --delete \
+            --exclude='node_modules' \
+            --exclude='dist' \
+            --exclude='.env*' \
+            backend/ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/pinball/backend/
 
       - name: Build and restart service
         run: |

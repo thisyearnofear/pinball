@@ -9,9 +9,10 @@ node_modules
 *.tsbuildinfo
 build.sh
 
-# Lockfiles
+# Lockfiles — pnpm's is committed, being the single source of truth for installs.
+# npm's is ignored so a stray `npm install` cannot quietly introduce a second,
+# divergent resolution of the same dependency tree.
 *-lock.json
-pnpm-lock.yaml
 
 # Hardhat/Contracts
 contracts/artifacts/

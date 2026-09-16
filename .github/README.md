@@ -21,26 +21,38 @@ Hetzner VPS.
   recorded (`tests/sim/unseeded-draws.ts`)
 - **Deliberately the full grid:** `SIM_DEBUG` narrows the sim to one seed, variant and difficulty,
   and the unseeded-draw watch can only vouch for paths a run actually walks
-- **Install note:** `pnpm-lock.yaml` is gitignored here, so CI has no committed lockfile to
-  install from — and `--frozen-lockfile` refuses to install when none exists — hence
-  `--no-frozen-lockfile`, the same flag the `ci` script uses for backend and contracts. A
-  no-lockfile resolve was checked against the local lockfile and picks **identical versions**, so
-  the sim's numbers match local runs. `pnpm install --lockfile-only` re-checks that after a
-  dependency change.
-- **Worth fixing separately:** because no lockfile is committed, CI installs whatever resolves
-  that day. Committing `pnpm-lock.yaml` (and dropping it from `.gitignore`) would make CI and
-  Netlify reproducible, and would let this step run frozen.
+- **Installs are frozen:** `pnpm-lock.yaml` is committed (root, `backend/` and `contracts/`), and
+  every install in CI and in the `ci` script runs `--frozen-lockfile`. That pins the tree the
+  numbers came from **and** turns a lockfile/`package.json` disagreement into a loud failure
+  instead of a silent resolve to something newer. The step cache is keyed on the lockfile too.
+- **This replaced a real hazard:** the lockfile used to be gitignored, so CI and Netlify installed
+  whatever resolved that day, and the repo's tracked `package-lock.json` had drifted to a
+  *different* resolution of the same tree (react 19.2.8 vs the 19.2.6 pnpm actually installed).
+  Two lockfiles for one `package.json` is the bug that was fixed, not a missing file.
+- **If a dependency changes:** run `pnpm install` and commit the updated `pnpm-lock.yaml` in the
+  same commit, or the frozen install fails. `pnpm install --lockfile-only` re-checks the lockfile
+  against `package.json` without touching `node_modules`.
 - **Runtime:** ~1 min locally, most of it the shot-calling grid. The suite is deterministic (seeded
   RNG + fake timers) and yields to the worker's event loop between runs, so a slower runner changes
   how long it takes, never whether it passes.
 
 ### Deploy Backend — `.github/workflows/deploy-backend.yml`
-- Triggers: push to `main` affecting `backend/**`
-- Steps:
-  - Checkout
-  - SSH setup using repository secrets
-  - Rsync backend/ to `/opt/pinball/backend` on the server
-  - Install deps, build, restart systemd `pinball-backend`
+- **Triggers:** push to `master` affecting `backend/**`, or manual `workflow_dispatch`
+- **It had never run.** It triggered on `main`, and the default branch is `master`. The branch is
+  fixed, so the next `backend/**` push deploys — or dispatch it manually to make the first run
+  deliberate.
+- **Editing this file cannot deploy production code:** the `paths` filter covers `backend/**`
+  only. Use `workflow_dispatch` to exercise the workflow itself.
+- **The rsync excludes what the server builds.** `node_modules` and `dist` are excluded so
+  `--delete` cannot remove them and a local (macOS) `node_modules` is never uploaded over the
+  server's; `.env*` is excluded so `--delete` can never remove server-side config. The signer keys
+  live at `/etc/pinball-backend/.env`, outside the synced tree.
+- Steps: Checkout → SSH setup (repo secrets) → rsync `backend/` to `/opt/pinball/backend` →
+  `npm install`, `npm run build`, restart systemd `pinball-backend`
+- **Open inconsistency:** the server installs with **npm** from the tracked
+  `backend/package-lock.json`, while CI and local dev install with **pnpm** from
+  `backend/pnpm-lock.yaml`. Both files are committed and current, so neither is wrong — but they
+  are two resolutions of one tree, and moving the server to pnpm is the way to collapse them.
 
 ## Required Secrets (Repository Settings → Secrets and variables → Actions)
 - `DEPLOY_HOST` – VPS IP (e.g., 157.180.36.156)

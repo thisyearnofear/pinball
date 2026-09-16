@@ -48,18 +48,16 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
-          # pnpm-lock.yaml is gitignored in this repo, so key the store cache on
-          # package.json — setup-node needs a tracked path here.
-          cache-dependency-path: package.json
+          # Keyed on the committed lockfile, which is both what makes the cache
+          # hit meaningful and what the install below actually resolves from.
+          cache-dependency-path: pnpm-lock.yaml
 
-      # Not frozen, deliberately: pnpm-lock.yaml is gitignored here, so CI has
-      # no committed lockfile to install from — and `--frozen-lockfile` refuses
-      # to install when none exists. Same flag the repo's own `ci` script uses
-      # for backend and contracts. A no-lockfile resolve was checked against the
-      # local lockfile and picks identical versions, so the sim's numbers match
-      # local runs (`pnpm install --lockfile-only` re-checks that).
+      # Frozen: pnpm-lock.yaml is committed, so this installs exactly the tree
+      # that produced the local numbers and fails loudly if the lockfile and
+      # package.json ever disagree — rather than silently resolving something
+      # newer and reporting a physics result nobody has seen.
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Run the kamikaze sim (physics + skill discrimination)
         run: pnpm run sim:kamikaze

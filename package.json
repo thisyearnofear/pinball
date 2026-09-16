@@ -18,7 +18,7 @@
     "test:backend": "pnpm --prefix backend test",
     "test:contracts": "pnpm --prefix contracts test",
     "test:all": "pnpm run test:frontend && pnpm run test:backend && pnpm run test:contracts",
-    "ci": "pnpm run test:frontend && pnpm --prefix backend install --no-frozen-lockfile && pnpm --prefix backend test && pnpm --prefix contracts install --no-frozen-lockfile && pnpm --prefix contracts test"
+    "ci": "pnpm run test:frontend && pnpm --prefix backend install --frozen-lockfile && pnpm --prefix backend test && pnpm --prefix contracts install --frozen-lockfile && pnpm --prefix contracts test"
   },
   "dependencies": {
     "@nimiq/mini-app-sdk": "0.1.0",
