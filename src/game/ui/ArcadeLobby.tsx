@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import Link from "next/link";
 import { getAllTournaments, type TournamentMeta, type GameMode } from "@/config/tournaments";
 import { getTournamentWorld } from "@/config/tournaments";
 import type { AIDifficulty } from "@/model/kamikaze";
@@ -77,6 +78,7 @@ export function ArcadeLobby(props: Props) {
             <div key={i} className={styles.loadingCard} />
           ))}
         </div>
+        <ChapterLink />
       </div>
     );
   }
@@ -140,6 +142,8 @@ export function ArcadeLobby(props: Props) {
             <span aria-hidden="true">{showSetup ? "▾" : "▸"}</span> Change setup · {setupSummary}
           </button>
         </div>
+
+        <ChapterLink />
 
         {showSetup && (
           <div id="run-setup" className={styles.setupPanel}>
@@ -263,6 +267,17 @@ export function ArcadeLobby(props: Props) {
         )}
       </div>
     </CRTOverlay>
+  );
+}
+
+function ChapterLink() {
+  return (
+    <Link href="/chapter" className={styles.chapterLink}>
+      <span>STORY PROTOTYPE · CHAPTER 01</span>
+      <strong>The Water Shrine</strong>
+      <span>Learn a blessing. Quench two seals. Earn passage through the torii.</span>
+      <b>Enter chapter →</b>
+    </Link>
   );
 }
 

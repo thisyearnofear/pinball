@@ -79,6 +79,16 @@ describe("ArcadeLobby", () => {
         expect(playIndex).toBeLessThan(markup.indexOf("Connect a wallet"));
     });
 
+    it("offers the free story chapter without a wallet gate, even while loading", () => {
+        const markup = html();
+        expect(markup).toContain('href="/chapter"');
+        expect(markup).toContain("The Water Shrine");
+        expect(markup.indexOf("PLAY NOW")).toBeLessThan(markup.indexOf("/chapter"));
+        const loading = html({ loading: true });
+        expect(loading).toContain('href="/chapter"');
+        expect(loading).toContain("The Water Shrine");
+    });
+
     it("summarises a non-default setup without opening it", () => {
         const markup = html({ aiDifficulty: "hard", controlScheme: "precision", gameMode: "classic" });
         expect(markup).toContain("Change setup · Classic");

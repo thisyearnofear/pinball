@@ -1,0 +1,425 @@
+$ink: #0a0a0f;
+$paper: #f5efe6;
+$vermilion: #e34234;
+$gold: #d4a017;
+$water: #67e8f9;
+$serif: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif;
+
+.page {
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse at 50% -10%, rgba(103, 232, 249, 0.06), transparent 55%),
+    $ink;
+  color: $paper;
+  padding: 20px 16px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.header {
+  text-align: center;
+  max-width: 640px;
+  margin-bottom: 16px;
+}
+
+.back {
+  display: inline-block;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: rgba(245, 239, 230, 0.6);
+  text-decoration: none;
+  border-bottom: 1px dashed rgba(245, 239, 230, 0.3);
+  padding-bottom: 2px;
+  margin-bottom: 12px;
+
+  &:hover { color: $paper; }
+}
+
+.eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: rgba(212, 160, 23, 0.8);
+  margin: 0 0 6px;
+}
+
+.title {
+  font-family: $serif;
+  font-size: clamp(26px, 6vw, 38px);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  margin: 0 0 6px;
+  color: $paper;
+
+  span { color: $water; font-size: 0.7em; }
+}
+
+.tagline {
+  font-size: 13px;
+  color: rgba(245, 239, 230, 0.6);
+  margin: 0;
+}
+
+.layout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+  max-width: 980px;
+}
+
+.tableWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  width: 100%;
+  max-width: 440px;
+}
+
+.canvas {
+  width: 100%;
+  aspect-ratio: 600 / 800;
+  max-height: min(62vh, 640px);
+  display: block;
+  border-radius: 6px;
+  background: $ink;
+  box-shadow: 0 0 0 1px rgba(212, 160, 23, 0.25), 0 12px 40px rgba(0, 0, 0, 0.6);
+  touch-action: none;
+}
+
+.meterRow {
+  width: 100%;
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.meter {
+  position: relative;
+  flex: 1;
+  height: 14px;
+  border: 1px solid rgba(245, 239, 230, 0.25);
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(245, 239, 230, 0.06);
+}
+
+.meterBand {
+  position: absolute;
+  left: 40%;
+  width: 20%;
+  top: 0; bottom: 0;
+  background: rgba(103, 232, 249, 0.25);
+  border-left: 1px solid $water;
+  border-right: 1px solid $water;
+}
+
+.meterFill {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 0%;
+  background: linear-gradient(90deg, rgba(103, 232, 249, 0.15), rgba(103, 232, 249, 0.5));
+  border-right: 2px solid $water;
+}
+
+.meterText {
+  font-size: 10px;
+  color: rgba(245, 239, 230, 0.45);
+  font-family: monospace;
+  min-width: 150px;
+  text-align: left;
+}
+
+.meterHint {
+  font-size: 10px;
+  color: rgba(245, 239, 230, 0.45);
+  margin: 4px 0 10px;
+  text-align: center;
+}
+
+.controls {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.aimRow {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.aimBtn {
+  min-height: 44px;
+  padding: 6px 4px;
+  font-size: 11px;
+  font-family: inherit;
+  letter-spacing: 0.03em;
+  color: $paper;
+  background: rgba(245, 239, 230, 0.05);
+  border: 1px solid rgba(245, 239, 230, 0.2);
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+
+  &:hover:not(:disabled) { border-color: $water; }
+  &:disabled { opacity: 0.4; cursor: default; }
+}
+
+.aimActive {
+  border-color: $water;
+  background: rgba(103, 232, 249, 0.12);
+}
+
+.aimKey {
+  font-size: 9px;
+  color: $gold;
+}
+
+.actionRow {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 0.8fr;
+  gap: 6px;
+}
+
+.armBtn, .launchBtn, .pauseBtn {
+  min-height: 44px;
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid rgba(245, 239, 230, 0.2);
+  color: $paper;
+  background: rgba(245, 239, 230, 0.06);
+
+  &:disabled { opacity: 0.35; cursor: default; }
+}
+
+.armBtn:not(:disabled) {
+  border-color: rgba(103, 232, 249, 0.6);
+  color: $water;
+  background: rgba(103, 232, 249, 0.08);
+}
+
+.launchBtn:not(:disabled) {
+  border-color: $vermilion;
+  background: linear-gradient(135deg, rgba(227, 66, 52, 0.25), rgba(227, 66, 52, 0.1));
+  font-weight: 700;
+}
+
+.flipperRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.flipBtn {
+  min-height: 56px;
+  font-family: inherit;
+  font-size: 14px;
+  letter-spacing: 0.12em;
+  color: $paper;
+  background: linear-gradient(180deg, rgba(212, 160, 23, 0.18), rgba(212, 160, 23, 0.06));
+  border: 1px solid rgba(212, 160, 23, 0.45);
+  border-radius: 6px;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+
+  &:active { background: rgba(212, 160, 23, 0.3); }
+}
+
+.journal {
+  flex: 0 1 320px;
+  min-width: 240px;
+  padding: 16px;
+  border: 1px solid rgba(212, 160, 23, 0.3);
+  border-radius: 6px;
+  background: rgba(245, 239, 230, 0.03);
+}
+
+.objective {
+  font-family: $serif;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  color: $gold;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(212, 160, 23, 0.25);
+  margin-bottom: 12px;
+}
+
+.stats {
+  margin: 0 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+
+  div { display: flex; gap: 8px; }
+  dt { color: rgba(245, 239, 230, 0.5); min-width: 64px; }
+  dd { margin: 0; }
+}
+
+.critical { color: $vermilion; }
+
+.sealDone { color: $water; margin-right: 8px; }
+.sealOpen { color: rgba(227, 66, 52, 0.9); margin-right: 8px; }
+
+.notice {
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(245, 239, 230, 0.8);
+  border-left: 2px solid $water;
+  padding-left: 10px;
+  min-height: 36px;
+}
+
+.howto {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  font-size: 11px;
+  color: rgba(245, 239, 230, 0.5);
+  line-height: 1.7;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 5, 10, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 40;
+}
+
+.dialog {
+  max-width: 440px;
+  width: 100%;
+  background: linear-gradient(160deg, #171521, #0e0d14);
+  border: 1px solid rgba(212, 160, 23, 0.4);
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+}
+
+.dialogLost { border-color: rgba(227, 66, 52, 0.6); }
+
+.dialogEyebrow {
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: rgba(103, 232, 249, 0.7);
+  margin: 0 0 8px;
+}
+
+.dialogTitle {
+  font-family: $serif;
+  font-size: 22px;
+  letter-spacing: 0.06em;
+  margin: 0 0 12px;
+}
+
+.dialogText {
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(245, 239, 230, 0.75);
+  margin: 0 0 14px;
+}
+
+.dialogQuestion {
+  font-family: $serif;
+  font-size: 15px;
+  color: $paper;
+  margin: 0 0 14px;
+}
+
+.choiceRow {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.choiceBtn {
+  min-width: 96px;
+  min-height: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-family: inherit;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: $paper;
+  background: rgba(245, 239, 230, 0.05);
+  border: 1px solid rgba(245, 239, 230, 0.25);
+  border-radius: 6px;
+  cursor: pointer;
+
+  &:hover, &:focus-visible { border-color: $water; background: rgba(103, 232, 249, 0.1); }
+}
+
+.glyph {
+  font-family: $serif;
+  font-size: 22px;
+  color: $gold;
+}
+
+.continueBtn {
+  min-height: 44px;
+  padding: 10px 22px;
+  font-family: inherit;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: $ink;
+  background: $paper;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+
+  &:hover { background: #fff; }
+}
+
+.leaveBtn {
+  display: inline-block;
+  margin-top: 4px;
+  min-height: 44px;
+  padding: 10px 14px;
+  font-size: 11px;
+  font-family: inherit;
+  letter-spacing: 0.05em;
+  color: rgba(245, 239, 230, 0.55);
+  background: none;
+  border: none;
+  border-bottom: 1px dashed rgba(245, 239, 230, 0.3);
+  cursor: pointer;
+  text-decoration: none;
+
+  &:hover { color: $paper; }
+}
+
+@media (max-width: 720px) {
+  .layout { flex-direction: column; align-items: center; }
+  .journal { width: 100%; max-width: 440px; flex: none; }
+  .canvas { max-height: 52vh; }
+  .meterText { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meterFill { transition: none; }
+}

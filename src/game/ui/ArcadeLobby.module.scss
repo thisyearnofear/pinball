@@ -440,3 +440,49 @@
   background: #22c55e;
   box-shadow: 0 0 8px #22c55e;
 }
+
+.chapterLink {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-width: 720px;
+  margin: 0 auto var(--space-xl);
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid rgba(103, 232, 249, 0.35);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, rgba(103, 232, 249, 0.08), rgba(212, 160, 23, 0.06));
+  text-align: center;
+  text-decoration: none;
+  color: var(--text-primary);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.chapterLink:hover {
+  border-color: rgba(103, 232, 249, 0.7);
+  transform: translateY(-2px);
+}
+
+.chapterLink span:first-child {
+  font-size: var(--text-xs);
+  letter-spacing: 0.3em;
+  color: rgba(103, 232, 249, 0.8);
+}
+
+.chapterLink strong {
+  font-family: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif;
+  font-size: var(--text-lg);
+  letter-spacing: 0.06em;
+  color: var(--text-primary);
+}
+
+.chapterLink span:nth-of-type(2) {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.chapterLink b {
+  font-size: var(--text-sm);
+  color: #67e8f9;
+  letter-spacing: 0.05em;
+}
