@@ -398,12 +398,12 @@ If/when we move to Rapier 3D:
 1. ✅ `src/presentation/` created with:
    - `index.ts` - Public API (`mountWorld`, `WorldHandle`, `isSplatSupported`, `prefersReducedMotion`)
    - `world-host.ts` - Three.js + Spark lifecycle manager with FPS-based quality degradation
-   - `splat-loader.ts` - Splat caching + LOD support
+   - `splat-loader.ts` - Splat URL selection (Spark's SplatMesh handles fetching/decoding via internal worker)
    - `quality.ts` - Adaptive quality system with FPS monitor (runtime degradation wired)
    - `camera-rig.ts` - Camera rig with flyTo() and preset positions
    - `post-processing.ts` - CSS vignette, bloom, color grading
    - `world-ambience.ts` - Per-world ambient audio with ducking under game FX
-2. ✅ `src/config/worlds.ts` - 5 worlds with gradients, camera presets, ambience URLs
+2. ✅ `src/config/worlds.ts` - 6 worlds with gradients, camera presets, ambience URLs (including Sakura Shrine)
 3. ✅ `GameMount.tsx` - Integrated world rendering behind game canvas
    - Ball drain → flyToPreset('drain')
    - Ball start → flyToPreset('plunger')
@@ -412,16 +412,22 @@ If/when we move to Rapier 3D:
 4. ✅ `StartMenu.tsx` - World selector for practice mode
 5. ✅ Reduced-motion fallback via `prefersReducedMotion()` check
 6. ✅ Graceful fallback to world gradient when SparkJS unavailable
-7. ✅ SparkJS loaded via CDN in `index.html`
-8. ✅ Per-world camera presets (custom plunger/overview/drain per world)
-9. ✅ World selection persisted in localStorage
-10. ✅ Post-processing pipeline (vignette, bloom, color grading)
-11. ✅ Loading overlay component (WorldLoadingOverlay)
-12. ✅ Error recovery (getLoadError, fallback background)
-13. ✅ SparkJS lazy-loaded on demand (not in initial bundle)
-14. ✅ Accessibility: aria-label on world dropdown
+7. ✅ Spark 2.0 **bundled locally** (`src/spark/spark.module.js`) — avoids CDN import map, ensuring a single THREE instance
+8. ✅ `src/spark/spark.module.js` — Spark 2.0 renderer (42MB bundle, compiled against three@0.186.0)
+9. ✅ `src/types/spark.d.ts` — TypeScript declarations for Spark exports
+10. ✅ Per-world camera presets (custom plunger/overview/drain per world)
+11. ✅ World selection persisted in localStorage
+12. ✅ Post-processing pipeline (vignette, bloom, color grading)
+13. ✅ Loading overlay component (WorldLoadingOverlay)
+14. ✅ Error recovery (getLoadError, fallback background)
+15. ✅ `three@0.186.0` — pinned to version matching Spark's shader compilation
 
-**Status:** Tables render inside Marble worlds on desktop and mobile.
+**Status:** Tables render inside Marble worlds on desktop and mobile. Spark 2.0 is bundled locally so all THREE imports resolve to a single instance — no more `#include <splatDefines>` shader errors.
+
+### ✅ Milestone M3.5 — "Spark bundling fix"  *DONE*
+- 🔳 **Root cause**: Two THREE instances — one from CDN import map (Spark), one from `node_modules` (app). Different objects; CDN THREE had `splatDefines` in its ShaderChunk but the bundled copy didn't.
+- 🔳 **Fix**: Remove CDN import map, bundle Spark locally (`src/spark/spark.module.js`), install `three@0.186.0`, let webpack bundle everything. Single THREE instance.
+- 🔳 **Files changed**: `index.html` deleted, `app/layout.tsx` (import map removed), `next.config.ts` (externals removed), `src/presentation/world-host.ts` (dynamic CDN import → static local import), `src/types/spark.d.ts` (new), `src/spark/spark.module.js` (new, ~20K lines).
 
 ### ✅ Milestone M2 — "Themed Tournaments" (Tier 2)  *DONE*
 1. ✅ `src/config/tournaments.ts` - Tournament metadata registry with `worldId` binding

@@ -7,7 +7,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "test": "vitest --environment jsdom --no-watch",
@@ -30,6 +30,7 @@
     "next": "16.2.6",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "three": "0.186.0",
     "viem": "^2.21.53",
     "wagmi": "^2.14.6"
   },
@@ -37,6 +38,7 @@
     "@types/matter-js": "^0.18.5",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
+    "@types/three": "0.186.0",
     "@vitejs/plugin-react": "^4.3.4",
     "bowser": "^2.11.0",
     "eslint": "^8.44.0",

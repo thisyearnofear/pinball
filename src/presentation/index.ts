@@ -1,16 +1,15 @@
 /**
  * Presentation domain - public API for Marble world rendering.
- * 
+ *
  * This module provides the mountWorld() function that orchestrates
  * the Three.js + Spark renderer for Gaussian splat scenes.
- * 
- * Adheres to: DRY (single owner), MODULAR (imperative handle pattern), 
+ *
+ * Adheres to: DRY (single owner), MODULAR (imperative handle pattern),
  * PERFORMANT (adaptive quality), CLEAN (no outbound deps to game/tournament).
  */
 import { type MarbleWorld } from '@/config/worlds';
 import { WorldHost } from './world-host';
 import { detectQualityTier, type QualityTier } from './quality';
-import { getCachedSplat, cacheSplat } from './splat-loader';
 import { type CameraPreset } from './camera-rig';
 import { WorldAmbienceManager } from './world-ambience';
 import { type WorldReaction } from './world-reactor';
@@ -57,12 +56,11 @@ export async function mountWorld(
   options?: MountWorldOptions
 ): Promise<WorldHandle> {
   const qualityTier = detectQualityTier();
-  const cachedUrl = await getCachedSplat(world.id, world.spzUrl);
-  
+
   const host = new WorldHost();
   const ambience = new WorldAmbienceManager();
   let currentQuality: QualityTier = qualityTier;
-  
+
   const config: WorldHostConfig = {
     container,
     world,
@@ -73,14 +71,13 @@ export async function mountWorld(
       options?.onQualityChange?.(tier);
     },
   };
-  
+
   try {
     await host.initialize(config);
-    
-    if (!cachedUrl) {
-      cacheSplat(world.id, world.spzUrl).catch(console.warn);
-    }
-    
+
+    // SplatMesh handles its own fetching + decoding via an internal worker,
+    // so the previous Cache Storage pre-fetch dance is gone. Kick off
+    // ambience in parallel (independent of splat decode).
     if (world.ambienceUrl) {
       ambience.loadWorld(world.id, world.ambienceUrl).catch(console.warn);
     }
@@ -90,7 +87,7 @@ export async function mountWorld(
     ambience.dispose();
     throw initError;
   }
-  
+
   return {
     switchWorld: async (newWorldId: string) => {
       const newWorld = await host.loadWorldById(newWorldId);

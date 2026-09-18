@@ -146,6 +146,11 @@ export const MARBLE_WORLDS: Record<string, MarbleWorld> = {
   SAKURA_SHRINE: {
     id: 'sakura-shrine',
     name: 'Sakura Shrine',
+    // Mint only exports a single paged .rad runtime for this world (no legacy
+    // .spz); both fields point at it so the spzUrl-gated render check and the
+    // quality-tier selector in splat-loader.ts both resolve to it.
+    spzUrl: 'https://cdn.mint.gg/rad/kamikaze-mountain-shrine-19f82542af817900-lod.rad',
+    radUrl: 'https://cdn.mint.gg/rad/kamikaze-mountain-shrine-19f82542af817900-lod.rad',
     position: [0, 0, 0],
     rotation: [0, 0, 0],
     scale: [1, 1, 1],

@@ -1,123 +1,42 @@
 /**
- * Splat loader with caching support for Marble worlds.
- * 
- * Handles .spz and .rad (LOD) formats with Cache Storage API.
- * Implements DRY: single source of truth for splat loading.
+ * Splat URL selection for Marble worlds.
+ *
+ * SplatMesh (the Spark 2.0 loader primitive) handles its own fetching,
+ * decoding, and LOD-streaming via an internal worker; we don't pre-fetch or
+ * pre-cache. This module keeps just the single rule for picking the right
+ * URL for the requested quality tier — the rest of the loader API from the
+ * pre-rewrite codebase is dead.
  */
 
-import { type MarbleWorld } from '@/config/worlds';
-
-const CACHE_NAME = 'pinball-splats-v1';
+import { type MarbleWorld } from "@/config/worlds";
 
 /**
- * Get cached splat URL if available, otherwise return original URL
- */
-export async function getCachedSplat(
-  worldId: string,
-  url: string
-): Promise<string | null> {
-  if (!('caches' in window)) return null;
-  
-  try {
-    const cache = await caches.open(CACHE_NAME);
-    const response = await cache.match(url);
-    
-    if (response) {
-      console.log(`Splat cache hit for ${worldId}`);
-      return response.url;
-    }
-  } catch (e) {
-    console.warn('Cache not available:', e);
-  }
-  
-  return null;
-}
-
-/**
- * Cache a splat for future use
- */
-export async function cacheSplat(
-  worldId: string,
-  url: string
-): Promise<void> {
-  if (!('caches' in window)) return;
-  
-  try {
-    const cache = await caches.open(CACHE_NAME);
-    const response = await fetch(url);
-    
-    if (response.ok) {
-      await cache.put(url, response.clone());
-      console.log(`Cached splat for ${worldId}`);
-    }
-  } catch (e) {
-    console.warn('Failed to cache splat:', e);
-  }
-}
-
-/**
- * Load a splat file with progress tracking
- */
-export async function loadSplat(
-  url: string,
-  onProgress?: (progress: number) => void
-): Promise<ArrayBuffer> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    
-    xhr.open('GET', url, true);
-    xhr.responseType = 'arraybuffer';
-    
-    xhr.onprogress = (event) => {
-      if (event.lengthComputable && onProgress) {
-        const progress = event.loaded / event.total;
-        onProgress(progress);
-      }
-    };
-    
-    xhr.onload = () => {
-      if (xhr.status === 200) {
-        resolve(xhr.response);
-      } else {
-        reject(new Error(`Failed to load splat: ${xhr.statusText}`));
-      }
-    };
-    
-    xhr.onerror = () => {
-      reject(new Error('Network error loading splat'));
-    };
-    
-    xhr.send();
-  });
-}
-
-/**
- * Select optimal splat URL based on quality tier and world size
+ * Select optimal splat URL based on quality tier.
+ *
+ * High tier prefers `.rad` (LOD streaming, better detail on capable GPUs).
+ * Lower tiers fall back to `.spz` (single-buffer, lower VRAM peak).
  */
 export function getOptimalSplatUrl(
   world: MarbleWorld,
-  qualityTier: 'low' | 'medium' | 'high'
+  qualityTier: "low" | "medium" | "high",
 ): string {
-  // Prefer .rad (LOD) for high quality on large scenes
-  if (world.radUrl && qualityTier === 'high') {
+  if (world.radUrl && qualityTier === "high") {
     return world.radUrl;
   }
-  
-  // Default to .spz (optimized for web). The caller only invokes this when a
-  // 3D scene exists, so the fallback is purely for type safety.
-  return world.spzUrl ?? '';
+  return world.spzUrl ?? world.radUrl ?? "";
 }
 
 /**
- * Estimate splat download time based on URL and connection
+ * Estimate splat download time based on URL and connection.
+ *
+ * Kept for the lobby's "estimated download" UI; the actual loader is now
+ * SplatMesh (does not expose this signal yet, so the estimate is approximate).
  */
 export function estimateDownloadTime(url: string): number {
-  // Rough estimates based on typical splat sizes
-  if (url.includes('.rad')) {
-    // Large LOD files: 50-350 MB
-    return 120; // seconds
+  if (url.includes(".rad")) {
+    // Large LOD files: 50-350 MB.
+    return 120;
   }
-  
-  // .spz files: 30-350 MB
-  return 60; // seconds
+  // .spz files: 30-350 MB.
+  return 60;
 }
