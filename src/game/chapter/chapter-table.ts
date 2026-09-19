@@ -42,7 +42,7 @@ type Flipper = {
   body: Matter.Body;
 };
 
-export type ChapterTableSnapshot = { held: boolean; aim: ChapterTarget; meter: number; paused: boolean };
+export type ChapterTableSnapshot = { held: boolean; aim: ChapterTarget; meter: number; paused: boolean; aimReady: boolean };
 export type ChapterTable = {
   setState(state: ChapterState): void;
   setPaused(paused: boolean): void;
@@ -70,6 +70,7 @@ export function createChapterPhysics(
   engine.velocityIterations = 8;
 
   let current = state;
+  let destroyed = false;
   let paused = false;
   let held = true;
   let aimTarget: ChapterTarget = "shrine";
@@ -77,6 +78,8 @@ export function createChapterPhysics(
   let meterTick = 0;
   let drainSent = false;
   const fired = new Set<string>();
+  let stillTicks = 0;
+  let stillAnchor = { ...SERVE };
 
   const ball = Matter.Bodies.circle(SERVE.x, SERVE.y, BALL_R, {
     label: "ball",
@@ -98,8 +101,8 @@ export function createChapterPhysics(
   rect(15, 400, 14, 840, 0, "wall");
   rect(585, 400, 14, 840, 0, "wall");
   rect(300, 10, 600, 14, 0, "wall");
-  rect(95, 640, 150, 12, -0.62, "guide");
-  rect(505, 640, 150, 12, 0.62, "guide");
+  rect(95, 640, 150, 12, 0.62, "guide");
+  rect(505, 640, 150, 12, -0.62, "guide");
 
   const shrineBody = Matter.Bodies.circle(SHRINE.x, SHRINE.y, SHRINE.r, {
     isStatic: true, isSensor: true, label: "shrine",
@@ -111,7 +114,7 @@ export function createChapterPhysics(
     isStatic: true, isSensor: true, label: "seal-east",
   });
   const gateBody = Matter.Bodies.rectangle(GATE.x, GATE.y, GATE.w, GATE.h, {
-    isStatic: true, label: "gate",
+    isStatic: true, isSensor: state.seals.length === 2, label: "gate",
   });
 
   const bumpers = BUMPERS.map(b =>
@@ -147,7 +150,11 @@ export function createChapterPhysics(
     Matter.Body.setAngularVelocity(ball, 0);
     Matter.Body.setPosition(ball, { x: SERVE.x, y: SERVE.y });
     held = true;
+    aimChosen = false;
+    meterTick = 0;
     drainSent = false;
+    stillTicks = 0;
+    stillAnchor = { ...SERVE };
   }
 
   function emitOnce(key: string, event: ChapterEvent) {
@@ -228,6 +235,16 @@ export function createChapterPhysics(
         drainSent = true;
         onEvent({ type: "drain" });
         cradle();
+        return;
+      }
+      if (current.phase !== "playing") return;
+      const displacement = Math.hypot(p.x - stillAnchor.x, p.y - stillAnchor.y);
+      if (displacement > 3 || Math.hypot(ball.velocity.x, ball.velocity.y) > 0.2) {
+        stillAnchor = { x: p.x, y: p.y };
+        stillTicks = 0;
+      } else if (++stillTicks >= 180) {
+        cradle();
+        onEvent({ type: "ball-search" });
       }
     }
   }
@@ -236,35 +253,44 @@ export function createChapterPhysics(
     ball,
     engine,
     advance(steps = 1) {
-      if (paused || current.phase !== "playing") return;
-      meterTick += steps;
-      for (let i = 0; i < steps; i++) step();
+      for (let i = 0; i < steps; i++) {
+        if (destroyed || paused || current.phase !== "playing") break;
+        if (held && aimChosen) meterTick++;
+        step();
+      }
     },
     snapshot() {
-      return { held, aim: aimTarget, meter: meterValue(), paused };
+      return { held, aim: aimTarget, meter: meterValue(), paused, aimReady: aimChosen };
     },
     setState(next: ChapterState) {
       const wasUnlocked = current.seals.length === 2;
       current = next;
       const unlocked = next.seals.length === 2;
       if (unlocked !== wasUnlocked) gateBody.isSensor = unlocked;
-      if (next.phase !== "playing" && !ball.isStatic) cradle();
+      if (next.phase !== "playing") {
+        for (const f of flippers) f.held = false;
+        cradle();
+      }
     },
     setPaused(p: boolean) {
       paused = p;
       if (p) for (const f of flippers) f.held = false;
     },
     aim(target: ChapterTarget) {
+      if (destroyed || !held || paused || current.phase !== "playing") return;
       aimTarget = target;
       aimChosen = true;
+      meterTick = 0;
     },
     release() {
-      if (!held || paused || current.phase !== "playing" || !aimChosen) return;
+      if (destroyed || !held || paused || current.phase !== "playing" || !aimChosen) return;
       const meter = meterValue();
       const target = TARGETS[aimTarget];
       const error = meter < 0.4 ? (meter - 0.4) * 220 : meter > 0.6 ? (meter - 0.6) * 220 : 0;
       fired.clear();
       held = false;
+      stillTicks = 0;
+      stillAnchor = { ...ball.position };
       Matter.Body.setStatic(ball, false);
       Matter.Body.setVelocity(ball, {
         x: (target.x + error - ball.position.x) / N,
@@ -272,6 +298,7 @@ export function createChapterPhysics(
       });
     },
     flip(side: FlipperSide, down: boolean) {
+      if (destroyed || (down && (paused || current.phase !== "playing"))) return;
       const f = flippers.find(fl => fl.side === side);
       if (f) f.held = down;
     },
@@ -284,6 +311,8 @@ export function createChapterPhysics(
       cradle();
     },
     destroy() {
+      if (destroyed) return;
+      destroyed = true;
       Matter.Events.off(engine, "collisionStart", onCollision);
       Matter.Composite.clear(engine.world, false);
       Matter.Engine.clear(engine);
@@ -304,6 +333,7 @@ export function createChapterTable(
   let acc = 0;
   let last = 0;
   let frame = 0;
+  let animationFrame = 0;
   let destroyed = false;
   const trail: { x: number; y: number }[] = [];
   const sparks: { x: number; y: number; vx: number; vy: number; life: number; kind: "shard" | "ring" }[] = [];
@@ -401,7 +431,7 @@ export function createChapterTable(
       ctx.fillText("OPEN", GATE.x, GATE.y + GATE.h / 2 + 16);
     }
 
-    const t = frame;
+    const t = animationFrame;
     for (let i = 0; i < 3; i++) {
       const rr = SHRINE.r + ((t * 0.4 + i * 22) % 44) - 10;
       if (rr <= 4) continue;
@@ -494,7 +524,7 @@ export function createChapterTable(
       let vy = (target.y - py - GRAV_A * N * (N + 1) / 2) / N;
       ctx.moveTo(px, py);
       for (let i = 0; i < N + 8; i++) {
-        px += vx; py += vy; vy += GRAV_A;
+        vy += GRAV_A; px += vx; py += vy;
         ctx.lineTo(px, py);
       }
       ctx.stroke();
@@ -506,31 +536,44 @@ export function createChapterTable(
     }
 
     const bp = physics.ball.position;
-    trail.push({ x: bp.x, y: bp.y });
-    if (trail.length > 10) trail.shift();
-    for (let i = 0; i < trail.length - 1; i++) {
+    if (current.phase !== "lost" && current.phase !== "won") {
+      if (!snap.paused && !reduceMotion) {
+        trail.push({ x: bp.x, y: bp.y });
+        if (trail.length > 10) trail.shift();
+      }
+      for (let i = 0; i < trail.length - 1; i++) {
+        ctx.beginPath();
+        ctx.arc(trail[i].x, trail[i].y, BALL_R * (i / trail.length) * 0.7, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(245,239,230,${0.08 * (i / trail.length)})`;
+        ctx.fill();
+      }
       ctx.beginPath();
-      ctx.arc(trail[i].x, trail[i].y, BALL_R * (i / trail.length) * 0.7, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(245,239,230,${0.08 * (i / trail.length)})`;
+      ctx.arc(bp.x, bp.y, BALL_R, 0, Math.PI * 2);
+      ctx.fillStyle = "#f5efe6";
       ctx.fill();
-    }
-    ctx.beginPath();
-    ctx.arc(bp.x, bp.y, BALL_R, 0, Math.PI * 2);
-    ctx.fillStyle = "#f5efe6";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(0,0,0,0.4)";
-    ctx.stroke();
-    if (current.waterArmed) {
-      ctx.beginPath();
-      ctx.arc(bp.x, bp.y, BALL_R + 4, 0, Math.PI * 2);
-      ctx.strokeStyle = "#67e8f9";
-      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = "rgba(0,0,0,0.4)";
       ctx.stroke();
+      if (current.waterArmed) {
+        ctx.beginPath();
+        ctx.arc(bp.x, bp.y, BALL_R + 4, 0, Math.PI * 2);
+        ctx.strokeStyle = "#67e8f9";
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+      }
+    } else {
+      trail.length = 0;
+      if (current.phase === "lost" && reduceMotion) {
+        ctx.fillStyle = "#e34234";
+        for (let i = 0; i < 6; i++) {
+          const angle = i * Math.PI / 3;
+          ctx.fillRect(bp.x + Math.cos(angle) * 16, bp.y + Math.sin(angle) * 16, 5, 5);
+        }
+      }
     }
 
     if (!reduceMotion) {
       for (const r of rings) {
-        r.r += 4; r.life -= 0.03;
+        if (!snap.paused) { r.r += 4; r.life -= 0.03; }
         ctx.beginPath();
         ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2);
         ctx.strokeStyle = `rgba(227,66,52,${Math.max(0, r.life)})`;
@@ -539,7 +582,7 @@ export function createChapterTable(
       }
       rings = rings.filter(r => r.life > 0);
       for (const s of sparks) {
-        s.x += s.vx; s.y += s.vy; s.vy += 0.15; s.life -= 0.025;
+        if (!snap.paused) { s.x += s.vx; s.y += s.vy; s.vy += 0.15; s.life -= 0.025; }
         ctx.fillStyle = `rgba(227,66,52,${Math.max(0, s.life)})`;
         ctx.fillRect(s.x - 2, s.y - 2, 4, 4);
       }
@@ -558,6 +601,7 @@ export function createChapterTable(
       physics.advance(steps);
     }
     frame++;
+    if (!physics.snapshot().paused && !reduceMotion && current.phase === "playing") animationFrame++;
     draw();
     if (frame % 2 === 0) onSnapshot(physics.snapshot());
     raf = requestAnimationFrame(loop);

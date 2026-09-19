@@ -64,6 +64,9 @@ import {
 import { setKamikazeMode as setBumperKamikazeMode, setGhostMode as setBumperGhostMode, setFrenzyMode as setBumperFrenzyMode } from "@/renderers/bumper-renderer";
 import { setKamikazeMode as setFlipperKamikazeMode } from "@/renderers/flipper-renderer";
 import { recordReplayEvent, recordReplayTraceSample } from "@/model/replay-recorder";
+import { attachStoryTable, type StoryTable } from "@/model/story-table";
+import type { StoryEvent } from "@/model/story-run";
+import { saveLearnedBlessing } from "@/model/shrine-chapter";
 
 type IRoundEndHandler = (readyCallback: () => void, timeout: number) => void;
 type IMessageHandler = (message: GameMessages, optDuration?: number) => void;
@@ -93,6 +96,8 @@ let roundStart = 0;
 let bumpAmount = 0;
 let tilt = false;
 let paused = false;
+let storyFrozen = false; // encounter freeze: stops physics but keeps the table rendered
+let storyTable: StoryTable | null = null;
 let gameRef: GameDef | null = null; // reference to current game for external access
 let bumpers: Bumper[] = []; // quick access for Kamikaze Ghost Ball sensor toggling
 let ghostActive = false;
@@ -254,6 +259,10 @@ export const init = async (
 
     // 1. clean up previous instances, when existing
 
+    storyTable?.destroy();
+    storyTable = null;
+    storyFrozen = false;
+
     for (const actor of actorMap.values()) {
         actor.dispose(engine);
     }
@@ -313,6 +322,9 @@ export const init = async (
                     break;
                 }
                 case ActorLabels.TRIGGER:
+                    if (game.story) {
+                        break; // story keeps the table physical but skips legacy bonus groups
+                    }
                     const triggerGroup = actorMap.get(pair.bodyA.id) as TriggerGroup;
                     const groupCompleted = triggerGroup?.trigger(pair.bodyA.id);
 
@@ -446,6 +458,31 @@ export const init = async (
     // 5. and get the music goin'
     enqueueTrack(table.soundtrackId);
 
+    if (game.story && bumpers.length >= 2) {
+        storyTable = attachStoryTable({
+            engine: engine.engine,
+            state: game.story,
+            seals: [bumpers[0].body, bumpers[1].body],
+            onChange: (next) => {
+                if (!gameRef?.story) return;
+                const learnedNow = next.learned && !gameRef.story.learned;
+                gameRef.story = next;
+                gameRef.balls = next.integrity;
+                gameRef.active = next.phase !== "won" && next.phase !== "lost";
+                if (learnedNow) saveLearnedBlessing(true);
+                if (next.phase === "gate-opening" || next.phase === "won") playFurinChime();
+            },
+            onFreeze: (frozen) => {
+                storyFrozen = frozen;
+                if (frozen) {
+                    for (flipper of flippers) {
+                        flipper.trigger(false);
+                    }
+                }
+            },
+        });
+    }
+
     game.active = true;
 
     startRound(game);
@@ -483,6 +520,10 @@ export const setFlipperState = (type: FlipperType, isPointerDown: boolean): void
     if (tilt) {
         return;
     }
+    // Encounter freeze: ignore new presses but still let held flippers release.
+    if (storyFrozen && isPointerDown) {
+        return;
+    }
 
     // In Kamikaze Ball, flippers are AI-controlled. Player uses tap-to-nudge instead.
     // The global `game` reference is set in handleEngineUpdate via the game param.
@@ -516,6 +557,11 @@ export const setFlipperState = (type: FlipperType, isPointerDown: boolean): void
 
 export const bumpTable = (game: GameDef): void => {
     if (tilt || game.paused) {
+        return;
+    }
+    // Story: a held ball launches on the same verb (Space); a live ball bumps.
+    if (game.story && storyTable?.isHeld()) {
+        storyTable.launch();
         return;
     }
     // In Kamikaze Ball, the bump/tilt mechanic is disabled (player uses nudge instead)
@@ -555,7 +601,7 @@ export const getBumpLevel = (): number => bumpAmount;
 export const update = (timestamp: DOMHighResTimeStamp, framesSinceLastRender: number): void => {
     ball = balls[0];
 
-    if (!ball || paused) {
+    if (!ball || paused || storyFrozen) {
         return; // no ball means no game, keep last screen contents indefinitely
     }
 
@@ -607,6 +653,7 @@ export const update = (timestamp: DOMHighResTimeStamp, framesSinceLastRender: nu
         engine.update(ENGINE_INCREMENT);
         accumulator -= ENGINE_INCREMENT;
         ++tickCount;
+        if (paused || storyFrozen) break; // an encounter can freeze mid-frame
     }
 
     // update Actors
@@ -631,6 +678,11 @@ export const update = (timestamp: DOMHighResTimeStamp, framesSinceLastRender: nu
 
 export const setPaused = (isPaused: boolean): void => {
     paused = isPaused;
+    if (isPaused) {
+        for (flipper of flippers) {
+            flipper.trigger(false);
+        }
+    }
     canvas?.pause(isPaused);
 };
 
@@ -641,7 +693,7 @@ export const panViewport = (yDelta: number): void => {
 /* internal methods */
 
 function awardPoints(game: GameDef, points: number): void {
-    if (game.kamikaze?.enabled) {
+    if (game.kamikaze?.enabled || game.story) {
         return; // Kamikaze Ball score is time-based, computed in handleEngineUpdate
     }
     game.score += (points * game.multiplier);
@@ -658,6 +710,9 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
     // between runs with different worlds.
     engine.engine.gravity.x = worldGravityX(game.worldPhysics, tickCount);
     engine.engine.gravity.y = worldGravityY(game.worldPhysics);
+
+    storyTable?.step(tickCount);
+    if (storyFrozen) return;
 
     // Kamikaze Ball: update AI flippers, power-ups, and score
     if (game.kamikaze?.enabled) {
@@ -786,6 +841,12 @@ function handleEngineUpdate(engine: IPhysicsEngine, game: GameDef): void {
         }
 
         if (top > tableBottom) {
+            // Story mode: drain costs integrity through the shared reducer and
+            // re-serves the same ball; no legacy end-round or timers.
+            if (game.story) {
+                storyTable?.drain();
+                continue;
+            }
             // Kamikaze Ball: drain is the GOAL. Force Field blocks it.
             if (game.kamikaze?.enabled) {
                 // Shot-calling: deterministic, telegraphed drain resolution. The
@@ -1031,6 +1092,14 @@ function startKillCam(game: GameDef, ball: Ball, unstoppable: boolean): void {
 }
 
 function endRound(game: GameDef, timeout = 3500): void {
+    if (game.story) {
+        // Story runs never end rounds through the legacy path: a tilt costs the
+        // ball via the shared reducer and re-serves it, no sounds or timers.
+        tilt = false;
+        bumpAmount = 0;
+        storyTable?.drain();
+        return;
+    }
     playSoundEffect(GameSounds.BALL_OUT);
     setFrequency(1000);
     roundEndHandler(() => {
@@ -1047,6 +1116,7 @@ function endRound(game: GameDef, timeout = 3500): void {
 
 function startRound(game: GameDef): void {
     const newBall = createBall(table.poppers[0].left, table.poppers[0].top - BALL_HEIGHT);
+    storyTable?.setBall(newBall.body);
     setFrequency();
     // Shot-calling serve: hold the ball at the plunger and open the intent
     // moment. The player aims, MAMORU contests, a timed release launches it.
@@ -1143,6 +1213,10 @@ function maybeHabitTaunt(now: number): void {
 }
 
 export const nudgeBallToward = (tapX: number, tapY: number, power = 1): void => {
+    if (gameRef?.story) {
+        if (!gameRef.paused) storyTable?.nudge(tapX, tapY, power);
+        return;
+    }
     if (!gameRef?.kamikaze?.enabled || balls.length === 0) return;
     const ballBody = balls[0].body;
     lastNudgeAt = window.performance.now();
@@ -1294,4 +1368,19 @@ export const getShotGuardLane = (): number | null => {
     if (!shotState) return null;
     const at = shotState.phase === "aiming" ? tickCount : (shotState.releaseTick ?? tickCount);
     return guardLaneAt(shotState, at);
+};
+
+// ── Story mode (Water Shrine) facade ────────────────────────────
+export const isStoryMode = (): boolean => Boolean(gameRef?.story);
+export const isStoryFrozen = (): boolean => storyFrozen;
+export const getStoryState = () => gameRef?.story ?? null;
+export const getStoryTargets = () => storyTable?.getTargets() ?? [];
+export const isStoryBallHeld = (): boolean => storyTable?.isHeld() ?? false;
+export const storyAction = (e: StoryEvent, runId?: string | null): void => {
+    if (!storyTable || !gameRef?.story || (runId !== undefined && gameRef.id !== runId)) return;
+    if (gameRef.paused || paused) return;
+    storyTable.action(e);
+};
+export const launchStoryBall = (): void => {
+    if (!paused && !gameRef?.paused) storyTable?.launch();
 };

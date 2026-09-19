@@ -5,7 +5,7 @@ import type { Size } from "zcanvas";
 import type { GameDef, GameMessages } from "@/definitions/game";
 import { ActorTypes, FRAME_RATE, GameSounds } from "@/definitions/game";
 
-import { init, scaleCanvas, setFlipperState, bumpTable, getBumpLevel, update, panViewport, setPaused, getBallPosition, getBallCount, nudgeBallToward, isKamikazeMode, queueDive, deployStoredMunition, triggerTiltLock, hasStoredMunition, isShotCallMode, shotAim, shotRelease, getShotLanes } from "@/model/game";
+import { init, scaleCanvas, setFlipperState, bumpTable, getBumpLevel, update, panViewport, setPaused, getBallPosition, getBallCount, nudgeBallToward, isKamikazeMode, isStoryMode, storyAction, queueDive, deployStoredMunition, triggerTiltLock, hasStoredMunition, isShotCallMode, shotAim, shotRelease, getShotLanes } from "@/model/game";
 import SpriteCache from "@/utils/sprite-cache";
 import { createInputController, attachKamikazeGestures } from "@/utils/input-controller";
 import * as haptics from "@/utils/haptics";
@@ -49,6 +49,16 @@ export type MountGameOptions = {
   onTiltLockCooldown?: () => void;
   onAim?: (pointerX: number | null, pointerY: number | null) => void;
   /**
+   * Pause toggle owned by the parent (shared pause menu). When omitted the
+   * legacy inline pause flag is flipped directly.
+   */
+  onTogglePause?: () => void;
+  /**
+   * Gates global key/click handling so embedded encounters and menus are not
+   * pre-empted by the table's controls. Defaults to always enabled.
+   */
+  inputEnabled?: () => boolean;
+  /**
    * Fired exactly once, the first time the player performs any deliberate
    * in-run action (nudge / dive / deploy / tilt-lock). Used for the
    * "early win" micro-reward so the first dopamine hit lands before the
@@ -65,6 +75,8 @@ export type MountedGame = {
   getBallClientPosition: () => { x: number; y: number } | null;
   getBallCount: () => number;
   getTableHeight: () => number;
+  /** World (table) coordinates → client (screen) coordinates. */
+  getPointClientPosition: (x: number, y: number) => { x: number; y: number } | null;
 };
 
 /**
@@ -199,6 +211,10 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     },
     onPan: (delta: number) => panViewport(delta),
     onTogglePause: () => {
+      if (opts.onTogglePause) {
+        opts.onTogglePause();
+        return;
+      }
       gameRef.paused = !gameRef.paused;
       setPaused(gameRef.paused);
     },
@@ -212,7 +228,8 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
       haptics.bump();
       markFirstAction();
     },
-    isKamikaze: () => isKamikazeMode(),
+    isKamikaze: () => isKamikazeMode() || isStoryMode(),
+    shouldHandle: () => opts.inputEnabled?.() ?? true,
   }, root);
 
   // ── Kamikaze Ball agency gestures (Phase 2) ──────────────────────
@@ -306,6 +323,17 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
    */
   let visualEcho: ((weight: number) => void) | null = null;
 
+  function handleStoryKey(e: KeyboardEvent) {
+    if (!isStoryMode() || opts.attract) return;
+    if (e.type !== "keydown" || e.repeat) return;
+    if (!(opts.inputEnabled?.() ?? true)) return;
+    if (e.code === "KeyW") {
+      storyAction({ type: "arm-water" });
+      markFirstAction();
+      e.preventDefault();
+    }
+  }
+
   function handleKamikazeKey(e: KeyboardEvent) {
     if (!isKamikazeMode() || opts.attract) return;
     if (e.type !== "keydown" || e.repeat) return;
@@ -353,8 +381,8 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
 
     const bindTouch = (el: HTMLElement, isLeft: boolean) => {
       el.addEventListener("touchstart", (e) => {
-        if (isKamikazeMode()) {
-          // Kamikaze Ball: input is owned by the pointer gesture controller
+        if (isKamikazeMode() || isStoryMode()) {
+          // Kamikaze Ball / Story: input is owned by the pointer gesture controller
           // (charged nudge / dive / deploy). Let pointer events pass through.
           return;
         }
@@ -363,7 +391,7 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
         e.stopPropagation();
       });
       const end = (e: TouchEvent) => {
-        if (!isKamikazeMode()) {
+        if (!isKamikazeMode() && !isStoryMode()) {
           inputController.handleTouchEnd(isLeft, e);
         }
         e.preventDefault();
@@ -404,6 +432,7 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     if (!opts.attract) {
       inputController.addListeners();
       window.addEventListener("keydown", handleKamikazeKey);
+      window.addEventListener("keydown", handleStoryKey);
       // Kamikaze Ball agency gestures (charged nudge / dive / deploy).
       if (!detachGestures) {
         detachGestures = attachKamikazeGestures(root, {
@@ -423,8 +452,8 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
           onChargeEnd: () => opts.onCharge?.(null),
           // In shot-calling, Space releases the shot (handleKamikazeKey); a
           // charge starting on the same key would swallow the release.
-          canKeyboardCharge: () => !isShotCallMode(),
-          shouldHandle: () => isKamikazeMode() && !gameRef.paused,
+          canKeyboardCharge: () => !isShotCallMode() && !isStoryMode(),
+          shouldHandle: () => (isKamikazeMode() || isStoryMode()) && !gameRef.paused && (opts.inputEnabled?.() ?? true),
         });
       }
       // Deliberately not in attract mode: the lobby's machine plays itself, and
@@ -453,6 +482,7 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     window.removeEventListener("resize", resize);
     inputController.removeListeners();
     window.removeEventListener("keydown", handleKamikazeKey);
+    window.removeEventListener("keydown", handleStoryKey);
     detachGestures?.();
     detachGestures = null;
     haptics.clearVisualEcho(visualEcho);
@@ -482,5 +512,6 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     },
     getBallCount,
     getTableHeight: () => tableSize?.height ?? 0,
+    getPointClientPosition: worldToClient,
   };
 }

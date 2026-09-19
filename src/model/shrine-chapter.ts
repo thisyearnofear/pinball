@@ -23,6 +23,7 @@ export type ChapterEvent =
   | { type: "seal"; id: SealId }
   | { type: "gate" }
   | { type: "drain" }
+  | { type: "ball-search" }
   | { type: "retry" };
 export const CHAPTER_MEMORY_KEY = "pinball_water_shrine_blessing_v1";
 export function createChapter(learned = false): ChapterState {
@@ -56,7 +57,7 @@ export function chapterReducer(s: ChapterState, e: ChapterEvent): ChapterState {
   }
   if(s.phase !== "playing") return s;
   switch(e.type) {
-    case "shrine": return s.learned ? {...s,mana:3,notice:"The shrine restores your mana to 3. Your learned blessing remains."} : {...s,phase:"lesson",lessonStep:0,notice:"Water quenches flame; wind feeds it. First mistake is safe. Later mistakes cost 1 integrity. Which element quenches a fire seal?"};
+    case "shrine": return s.learned ? {...s,mana:3,notice:"The shrine restores your mana to 3. Your learned blessing remains."} : {...s,phase:"lesson",lessonStep:0,notice:`Water quenches flame; wind feeds it. ${s.lessonMistakes === 0 ? "First mistake is safe. Later mistakes cost 1 integrity." : "Practice attempt used. Every further mistake costs 1 integrity."} Which element quenches a fire seal?`};
     case "arm-water":
       if(!s.learned) return {...s,notice:"Learn the water blessing at the shrine first."};
       if(s.waterArmed) return s;
@@ -70,6 +71,7 @@ export function chapterReducer(s: ChapterState, e: ChapterEvent): ChapterState {
     }
     case "gate": return s.seals.length===2 ? {...s,phase:"won",notice:"You crossed the torii by learning water and quenching both seals. Chapter complete."} : {...s,notice:"The torii is sealed. Learn Water and quench both fire seals first."};
     case "drain": return damage({...s,waterArmed:false},"The ball fell between the flippers. Hold both as it returns to cradle it.");
+    case "ball-search": return {...s,notice:"MAMORU freed a trapped ball. No integrity or mana lost. Choose a target to relaunch."};
     default: return s;
   }
 }

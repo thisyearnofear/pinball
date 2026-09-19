@@ -62,15 +62,15 @@ function shortAddr(addr: string): string {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-export default function GameScreen() {
+export default function GameScreen({ initialStory = false }: { initialStory?: boolean } = {}) {
   return (
     <ActivityFeedProvider>
-      <GameScreenInner />
+      <GameScreenInner initialStory={initialStory} />
     </ActivityFeedProvider>
   );
 }
 
-function GameScreenInner() {
+function GameScreenInner({ initialStory = false }: { initialStory?: boolean }) {
   const { address, isConnected } = useWalletState();
   const toast = useToast();
   const activityFeed = useActivityFeed();
@@ -94,6 +94,9 @@ function GameScreenInner() {
     } catch { return "steer"; }
   });
   const [runKey, setRunKey] = useState(0);
+  // Story mode (Water Shrine): the same table runs the narrative encounter —
+  // a mode flag, not a ranked game mode, so it never reaches tournaments.
+  const [story, setStory] = useState<boolean>(Boolean(initialStory));
   const [selectedWorldId, setSelectedWorldId] = useState<string>(() => getFromStorage(STORED_WORLD_ID) || "hobbiton");
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [view, setView] = useState<View>("lobby");
@@ -148,11 +151,13 @@ function GameScreenInner() {
   // must never be part of the static export.
   const autoStartedRef = useRef(false);
   useEffect(() => {
-    if (isDemo || autoStartedRef.current || !coachEnabled) return;
+    if (isDemo || autoStartedRef.current) return;
+    if (!coachEnabled && !initialStory) return;
     autoStartedRef.current = true;
-    startPractice();
+    if (initialStory) startStory();
+    else startPractice();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coachEnabled, isDemo]);
+  }, [coachEnabled, isDemo, initialStory]);
 
   useEffect(() => {
     if (!isDemo || demoStartedRef.current) return;
@@ -188,8 +193,9 @@ function GameScreenInner() {
 
   const activeWorldId = useMemo(() => {
     if (mode === "tournament" && tournament.worldId) return tournament.worldId;
+    if (story && mode === "practice") return "sakura-shrine";
     return selectedWorldId;
-  }, [mode, tournament.worldId, selectedWorldId]);
+  }, [mode, tournament.worldId, selectedWorldId, story]);
 
   useWorldTheme(activeWorldId);
   const worldAccent = getWorldAccent(activeWorldId);
@@ -215,7 +221,16 @@ function GameScreenInner() {
     try { localStorage.setItem("pinball_control_scheme", next); } catch {}
   }
 
+  function startStory() {
+    setStory(true);
+    setMode("practice");
+    setShowCelebration(false);
+    setRunKey((k) => k + 1);
+    setView("game");
+  }
+
   function startPractice() {
+    setStory(false);
     setMode("practice");
     setShowCelebration(false);
     setRunKey((k) => k + 1);
@@ -225,6 +240,7 @@ function GameScreenInner() {
     setSelectedWorldId(challenge.worldId);
     setGameMode(challenge.mode);
     setAiDifficulty(challenge.aiDifficulty);
+    setStory(false);
     setMode("practice");
     setShowCelebration(false);
     setRunKey((k) => k + 1);
@@ -238,6 +254,7 @@ function GameScreenInner() {
     setSelectedWorldId(invite.worldId);
     setGameMode(invite.mode);
     setAiDifficulty(invite.aiDifficulty);
+    setStory(false);
     setMode("practice");
     setShowCelebration(false);
     setChallengeOutcome(null);
@@ -261,6 +278,7 @@ function GameScreenInner() {
     };
     setSelectedWorldId(invite.worldId);
     setGameMode(invite.mode);
+    setStory(false);
     setMode("practice");
     setShowCelebration(false);
     setChallengeOutcome(null);
@@ -273,6 +291,7 @@ function GameScreenInner() {
   }
 
   function proceedAfterEntry() {
+    setStory(false);
     setMode("tournament");
     setShowCelebration(false);
     setRunKey((k) => k + 1);
@@ -308,6 +327,7 @@ function GameScreenInner() {
   }
 
   function startTournament() {
+    setStory(false);
     setMode("tournament");
     if (!canStartTournamentRun) {
       if (!isConnected) {
@@ -341,15 +361,19 @@ function GameScreenInner() {
     if (mode === "tournament" && tournament.tournamentId) {
       return getTournamentMeta(tournament.tournamentId)?.mode ?? "classic";
     }
+    if (story && mode === "practice") return "classic";
     return gameMode;
-  }, [mode, tournament.tournamentId, gameMode]);
+  }, [mode, tournament.tournamentId, gameMode, story]);
 
   const pausedEffective = view === "paused" || activeModal !== null || showCelebration || showReplay || submissionStep !== null || showKamiTrials;
 
   // Ghost racing: fetch the tournament leader's replay for each run. Skip when
   // the leader's replay is for a different mode or the leader is the player.
   useEffect(() => {
-    if (view !== "game" || !tournament.tournamentId) return;
+    if (view !== "game" || !tournament.tournamentId || story) {
+      setGhost(null);
+      return;
+    }
     let cancelled = false;
     setGhost(null);
     fetchBestReplay(tournament.tournamentId)
@@ -374,7 +398,7 @@ function GameScreenInner() {
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [view, runKey, tournament.tournamentId, effectiveGameMode, address]);
+  }, [view, runKey, tournament.tournamentId, effectiveGameMode, address, story]);
 
   useEffect(() => {
     const cb = (step: LegacySubmissionStep, errorMessage?: string) => {
@@ -391,6 +415,7 @@ function GameScreenInner() {
   }, []);
 
   const handleFirstAction = useCallback(() => {
+    if (story) return; // Story runs are not ranked: no XP hooks or score paths.
     // Early win: reward the player's very first deliberate action so the
     // first dopamine hit lands before the first run ends (pacing hook).
     const result = grantEarlyWin();
@@ -400,9 +425,10 @@ function GameScreenInner() {
     burstAt(window.innerWidth / 2, window.innerHeight / 2, { count: 14, colors: ["#d4a017", "#e34234", "#fbbf24"] });
     toast.addToast(`風が吹いた · First touch! +${XP_FIRST_ACTION} XP`, "success");
     activityFeed.log("powerup", `The wind answers your first touch (+${XP_FIRST_ACTION} XP)`);
-  }, [toast, activityFeed]);
+  }, [toast, activityFeed, story]);
 
   const handleRunEnd = useCallback((score: number, replayHash?: string, details?: { seedSource?: string; metaData?: string }) => {
+    if (story) return; // defense: GameMount already suppresses run-end for Story
     setLastScore(score);
     setLastReplayHash(replayHash);
     setLastSeedSource(details?.seedSource);
@@ -450,7 +476,7 @@ function GameScreenInner() {
       markFirstRunSeen();
       setCoachEnabled(false);
     }
-  }, [mode, effectiveGameMode, activeWorldId, tournament.tournamentId, activeChallenge, recordRun, activityFeed, coachEnabled]);
+  }, [mode, effectiveGameMode, activeWorldId, tournament.tournamentId, activeChallenge, recordRun, activityFeed, coachEnabled, story]);
 
   return (
     <ScreenFxProvider>
@@ -464,7 +490,7 @@ function GameScreenInner() {
           <AppHeader
             view={view}
             gameActive={gameActive}
-            tournamentName={tournamentName}
+            tournamentName={tournamentName ?? (story && view !== "lobby" ? "Story · The Water Shrine" : null)}
             worldAccent={worldAccent}
             onOpenMenu={() => setView("paused")}
             onOpenModal={(m) => setActiveModal(m)}
@@ -524,12 +550,14 @@ function GameScreenInner() {
                 }}
                 onStartTournament={(id) => {
                   setTournament((prev) => ({ ...prev, tournamentId: id }));
+                  setStory(false);
                   setMode("tournament");
                   setShowCelebration(false);
                   setRunKey((k) => k + 1);
                   setView("game");
                 }}
                 onPractice={startPractice}
+                onStory={startStory}
                 onPlayDaily={startDailyChallenge}
                 progress={progress}
                 pendingChallenge={pendingChallenge}
@@ -548,11 +576,12 @@ function GameScreenInner() {
               <PauseMenu
                 score={lastScore}
                 kamikaze={effectiveGameMode === "kamikaze"}
+                summary={story ? "Story · The Water Shrine" : undefined}
                 onResume={() => setView("game")}
                 onRestart={() => { setRunKey((k) => k + 1); setView("game"); }}
                 onSettings={() => setActiveModal("settings")}
                 onQuitToLobby={() => setView("lobby")}
-                onKamiTrials={() => setShowKamiTrials(true)}
+                onKamiTrials={story ? undefined : () => setShowKamiTrials(true)}
               />
             )}
             {showKamiTrials && (
@@ -579,7 +608,9 @@ function GameScreenInner() {
               />
             )}
 
-            {view === "game" && (
+            {/* The mount stays alive while paused: unmounting it would destroy
+                the engine, the story encounter, and the rendered world. */}
+            {(view === "game" || view === "paused") && (
               <div style={{ display: "flex", gap: spacing.xl, alignItems: "flex-start", justifyContent: "center" }}>
                 <ErrorBoundary>
                   <CRTOverlay intensity={0.25}>
@@ -592,13 +623,17 @@ function GameScreenInner() {
                       coach={coachEnabled}
                       onOpenControls={() => setActiveModal("how")}
                       tournamentId={tournament.tournamentId}
-                      worldId={mode === "practice" ? selectedWorldId : tournament.worldId}
+                      worldId={mode === "practice" ? activeWorldId : tournament.worldId}
                       playerAddress={address ?? null}
                       walletPort={walletPort}
                       playerName={playerName}
                       tableIndex={tableIndex}
                       paused={pausedEffective}
-                      ghost={ghost}
+                      story={story && mode === "practice"}
+                      onTogglePause={() => setView((v) => (v === "game" ? "paused" : v === "paused" ? "game" : v))}
+                      onRestart={() => { setRunKey((k) => k + 1); setView("game"); }}
+                      onQuit={() => setView("lobby")}
+                      ghost={story ? null : ghost}
                       onActiveChange={setGameActive}
                       onRunEnd={handleRunEnd}
                       onFirstAction={handleFirstAction}
@@ -614,7 +649,7 @@ function GameScreenInner() {
                     />
                   </CRTOverlay>
                 </ErrorBoundary>
-                {isDesktop && (
+                {isDesktop && !story && (
                   <ControlsPanel
                     touchscreen={false}
                     onConsultKami={() => { setView("paused"); setShowKamiTrials(true); }}

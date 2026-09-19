@@ -16,6 +16,8 @@ import { type WorldReaction } from './world-reactor';
 
 export interface WorldHandle {
   switchWorld(worldId: string): Promise<void>;
+  /** Freeze the render loop but keep all resources; the last frame stays visible. */
+  setPaused(paused: boolean): void;
   dispose(): void;
   getWorldId(): string | null;
   flyToPreset(preset: CameraPreset, options?: { duration?: number; onComplete?: () => void }): void;
@@ -103,6 +105,10 @@ export async function mountWorld(
       ambience.dispose();
     },
     getWorldId: () => world.id,
+    setPaused: (paused) => {
+      host.setPaused(paused);
+      ambience.setMuted(paused);
+    },
     flyToPreset: (preset, options) => host.flyToPreset(preset, options),
     flyTo: (position, target, options) => host.flyTo(position, target, options),
     getLoadError: () => host.getLoadError(),

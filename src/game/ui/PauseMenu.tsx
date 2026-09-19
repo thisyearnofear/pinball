@@ -8,6 +8,8 @@ import { colors, spacing, typography, radius } from "@/theme/tokens";
 type Props = {
   score: number;
   kamikaze?: boolean;
+  /** Optional run summary shown instead of the score (e.g. Story mode). */
+  summary?: string;
   onResume: () => void;
   onRestart: () => void;
   onSettings?: () => void;
@@ -67,7 +69,7 @@ export function PauseMenu(props: Props) {
             Paused
           </h2>
           <div style={{ marginTop: spacing.sm, fontSize: typography.size.lg, color: colors.text.muted }}>
-            {props.kamikaze ? formatGameScore(props.score, true) : `${props.score.toLocaleString()} pts`}
+            {props.summary ?? (props.kamikaze ? formatGameScore(props.score, true) : `${props.score.toLocaleString()} pts`)}
           </div>
         </div>
 

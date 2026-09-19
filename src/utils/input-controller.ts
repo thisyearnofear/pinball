@@ -6,6 +6,9 @@ type Callbacks = {
   onTogglePause?: () => void;
   onNudge?: (x: number, y: number) => void;
   isKamikaze?: () => boolean;
+  /** When false, background key/click handling is suspended (e.g. while an
+   *  in-world encounter or menu owns input). Flipper keyups still release. */
+  shouldHandle?: () => boolean;
 };
 
 type TouchStartState = {
@@ -22,11 +25,19 @@ export function createInputController(cb: Callbacks, nudgeTarget?: HTMLElement) 
   // Kamikaze Ball: tap the play area to nudge ball toward tap location
   function handleClick(e: MouseEvent) {
     if (!cb.isKamikaze?.()) return;
+    if (cb.shouldHandle && !cb.shouldHandle()) return;
     cb.onNudge?.(e.clientX, e.clientY);
   }
 
   function handleKey(event: KeyboardEvent) {
     const { type, keyCode } = event;
+    if (cb.shouldHandle && !cb.shouldHandle()) {
+      // Let flipper keyups through so a held flipper always releases; swallow
+      // everything else while a dialog/encounter owns the keyboard.
+      if (type === "keyup" && keyCode === 37) cb.onLeftFlip(false);
+      if (type === "keyup" && keyCode === 39) cb.onRightFlip(false);
+      return;
+    }
     switch (keyCode) {
       default:
         if (process.env.NODE_ENV !== "production") {

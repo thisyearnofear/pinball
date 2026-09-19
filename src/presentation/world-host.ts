@@ -58,6 +58,7 @@ export class WorldHost {
   private currentSplatMesh: SplatMeshType | null = null;
   private qualityTier: QualityTier = "high";
   private initialized = false;
+  private loopStartedOnce = false;
   private onProgress: ((progress: number) => void) | null = null;
   private cameraRig: CameraRig | null = null;
   private rafId: number | null = null;
@@ -482,13 +483,26 @@ export class WorldHost {
 
     this.rafId = requestAnimationFrame(loop);
 
-    if (isMobile) {
+    if (isMobile && !this.loopStartedOnce) {
       // Land on the overview shot on mobile so the first frame isn't a
       // close-up of the plunger area. WorldHost calls this directly so the
       // rig has a moment to construct its first frame.
+      this.loopStartedOnce = true;
       setTimeout(() => {
         this.cameraRig?.setPreset("overview", { duration: 0 });
       }, 100);
+    }
+  }
+
+  /**
+   * Pause/resume the render loop while retaining all GPU resources and scene
+   * state. The last rendered frame stays on screen; resume continues the loop.
+   */
+  setPaused(paused: boolean): void {
+    if (paused) {
+      this.stopRenderLoop();
+    } else if (this.initialized && this.rafId === null) {
+      this.startRenderLoop();
     }
   }
 

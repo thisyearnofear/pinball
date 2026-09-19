@@ -81,9 +81,9 @@ $serif: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif;
 }
 
 .canvas {
-  width: 100%;
-  aspect-ratio: 600 / 800;
-  max-height: min(62vh, 640px);
+  width: min(100%, 46.5svh, 480px);
+  height: auto;
+  aspect-ratio: 3 / 4;
   display: block;
   border-radius: 6px;
   background: $ink;
@@ -131,7 +131,7 @@ $serif: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif;
   font-size: 10px;
   color: rgba(245, 239, 230, 0.45);
   font-family: monospace;
-  min-width: 150px;
+  min-width: 92px;
   text-align: left;
 }
 
@@ -306,6 +306,9 @@ $serif: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif;
 .dialog {
   max-width: 440px;
   width: 100%;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  box-sizing: border-box;
   background: linear-gradient(160deg, #171521, #0e0d14);
   border: 1px solid rgba(212, 160, 23, 0.4);
   border-radius: 8px;
@@ -413,13 +416,74 @@ $serif: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif;
   &:hover { color: $paper; }
 }
 
+.lessonFeedback {
+  padding: 10px;
+  border-left: 2px solid $water;
+  color: $water;
+  background: rgba(103, 232, 249, 0.05);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.help summary { cursor: pointer; min-height: 28px; font-size: 12px; color: $paper; }
+.page :is(button, a, canvas, summary):focus-visible { outline: 2px solid $water; outline-offset: 3px; }
+.flipBtn:disabled { opacity: 0.4; cursor: default; }
+
 @media (max-width: 720px) {
-  .layout { flex-direction: column; align-items: center; }
-  .journal { width: 100%; max-width: 440px; flex: none; }
-  .canvas { max-height: 52vh; }
+  .page { padding: 8px 12px 16px; }
+  .header { margin-bottom: 8px; }
+  .back { min-height: 36px; padding: 6px 0; margin-bottom: 4px; box-sizing: border-box; }
+  .title { font-size: 26px; margin-bottom: 4px; }
+  .eyebrow { font-size: 9px; letter-spacing: 0.18em; margin-bottom: 4px; }
+  .tagline { font-size: 11px; }
+  .layout { flex-direction: column; align-items: center; gap: 8px; }
+  .journal { order: -1; width: 100%; max-width: 440px; min-width: 0; flex: none; padding: 8px 10px; box-sizing: border-box; }
+  .objective { font-size: 12px; padding-bottom: 5px; margin-bottom: 5px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 6px; font-size: 10px; margin-bottom: 4px; }
+  .stats div { gap: 4px; min-width: 0; }
+  .stats dt { min-width: 0; }
+  .sealDone, .sealOpen { margin-right: 4px; }
+  .notice { font-size: 10px; min-height: 0; margin: 4px 0; padding-left: 6px; }
+  .help summary { font-size: 10px; min-height: 20px; }
+  .canvas { width: min(100%, max(150px, calc((100svh - 470px) * 0.75))); }
+  .meterRow { margin-top: 6px; }
   .meterText { display: none; }
+  .meterHint { margin: 3px 0 6px; }
+  .controls { gap: 6px; }
+  .flipBtn { min-height: 48px; }
+  .dialog { padding: 18px; }
+  .choiceBtn { min-width: 68px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .meterFill { transition: none; }
+}
+
+.embedded {
+  min-height: 0;
+  background: transparent;
+  padding: 8px 4px 12px;
+  width: 100%;
+}
+
+.headerEmbedded {
+  margin-bottom: 8px;
+}
+
+.titleSmall {
+  font-family: $serif;
+  font-size: clamp(18px, 4vw, 24px);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  margin: 0;
+  color: $paper;
+
+  span { color: $water; font-size: 0.7em; }
+}
+
+.trialNote {
+  font-size: 11px;
+  color: rgba(245, 239, 230, 0.55);
+  margin: 4px 0 0;
 }

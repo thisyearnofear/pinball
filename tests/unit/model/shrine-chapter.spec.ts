@@ -112,6 +112,16 @@ describe("shrine chapter reducer", () => {
     expect(unlearnedRetry.mana).toBe(0);
   });
 
+  it("reports a ball search without changing resources and ignores searches outside play", () => {
+    const playing = chapterReducer(createChapter(true), { type: "arm-water" });
+    const recovered = chapterReducer(playing, { type: "ball-search" });
+    expect(recovered).toEqual({ ...playing, notice: expect.stringContaining("No integrity or mana lost") });
+    for (const phase of ["lesson", "blessing", "gate-opening", "won", "lost"] as const) {
+      const blocked = { ...playing, phase };
+      expect(chapterReducer(blocked, { type: "ball-search" })).toBe(blocked);
+    }
+  });
+
   it("reports a readable objective at every stage", () => {
     const s = createChapter();
     expect(chapterObjective(s)).toContain("1 / 3");

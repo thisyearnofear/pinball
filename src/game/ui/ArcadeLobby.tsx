@@ -41,6 +41,8 @@ type Props = {
   onEnterTournament: (id: number) => void;
   onStartTournament: (id: number) => void;
   onPractice: () => void;
+  /** Story mode entry: starts the Water Shrine run on the same table. */
+  onStory?: () => void;
   onPlayDaily: (challenge: DailyChallenge) => void;
   /** Local meta-progression (rank, level, streak) shown without a wallet. */
   progress?: PlayerProgress;
@@ -78,7 +80,7 @@ export function ArcadeLobby(props: Props) {
             <div key={i} className={styles.loadingCard} />
           ))}
         </div>
-        <ChapterLink />
+        <ChapterLink onStory={props.onStory} />
       </div>
     );
   }
@@ -106,7 +108,7 @@ export function ArcadeLobby(props: Props) {
             color: "rgba(212, 160, 23, 0.75)",
           }} aria-hidden="true">神風</div>
           <p className={styles.marqueeSubtitle}>
-            Drain-to-win pinball — the machine fights back
+            Shrine story & drain-to-win duels — the machine fights back
           </p>
           {/* Proof-of-provenance: where the NEXT run's RNG seed comes from. */}
           <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
@@ -143,7 +145,7 @@ export function ArcadeLobby(props: Props) {
           </button>
         </div>
 
-        <ChapterLink />
+        <ChapterLink onStory={props.onStory} />
 
         {showSetup && (
           <div id="run-setup" className={styles.setupPanel}>
@@ -270,13 +272,25 @@ export function ArcadeLobby(props: Props) {
   );
 }
 
-function ChapterLink() {
-  return (
-    <Link href="/chapter" className={styles.chapterLink}>
-      <span>STORY PROTOTYPE · CHAPTER 01</span>
+function ChapterLink({ onStory }: { onStory?: () => void }) {
+  const inner = (
+    <>
+      <span>STORY · THE WATER SHRINE</span>
       <strong>The Water Shrine</strong>
       <span>Learn a blessing. Quench two seals. Earn passage through the torii.</span>
-      <b>Enter chapter →</b>
+      <b>Play Story →</b>
+    </>
+  );
+  if (onStory) {
+    return (
+      <button type="button" className={styles.chapterLink} onClick={onStory}>
+        {inner}
+      </button>
+    );
+  }
+  return (
+    <Link href="/chapter" className={styles.chapterLink}>
+      {inner}
     </Link>
   );
 }

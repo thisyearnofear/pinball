@@ -444,6 +444,8 @@
 .chapterLink {
   display: flex;
   flex-direction: column;
+  font: inherit;
+  cursor: pointer;
   align-items: center;
   gap: 4px;
   max-width: 720px;

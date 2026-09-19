@@ -220,6 +220,8 @@ export type GameDef = {
     controlScheme?: "steer" | "feint" | "precision";
     /** AI difficulty name (drives shot-calling's human-scale reaction windows). */
     aiDifficulty?: "easy" | "medium" | "hard";
+    /** Story mode (Water Shrine): non-ranked narrative progression state. */
+    story?: import("@/model/story-run").StoryState;
 };
 
 export type FlipperType = ActorTypes.LEFT_FLIPPER | ActorTypes.RIGHT_FLIPPER;

@@ -39,7 +39,7 @@ function releaseOnMeter(phys: ChapterPhysics, target: ChapterTarget, wanted: "ce
 }
 
 function shoot(r: Rig, target: ChapterTarget, wanted: "center" | "early" = "center", steps = 140) {
-  if (!r.phys.snapshot().held) r.phys.reset();
+  expect(r.phys.snapshot().held).toBe(true);
   // Play like a player: both flippers held, so a ball falling back off a
   // seal or the gate is caught in the catch zone and cradled instead of
   // draining. Without this every asserted seal hit would also cost a drain.
@@ -71,7 +71,9 @@ describe("chapter table physics", () => {
 
   it("keeps the torii physically shut until both seals are quenched", () => {
     const r = rig(createChapter(true));
+    expect(r.phys.engine.world.bodies.find(body => body.label === "gate")?.isSensor).toBe(false);
     shoot(r, "gate");
+    expect(eventsOf(r, "gate")).toHaveLength(1);
     expect(r.getState().phase).not.toBe("won");
     expect(r.getState().seals).toEqual([]);
     r.phys.destroy();
@@ -82,6 +84,10 @@ describe("chapter table physics", () => {
     shootUntil(r, "west", "seal");
     expect(r.getState().integrity).toBe(2);
     expect(r.getState().seals).toEqual([]);
+    r.phys.flip("left", true);
+    r.phys.flip("right", true);
+    r.phys.advance(100);
+    expect(r.phys.snapshot().held).toBe(true);
     r.send({ type: "arm-water" });
     shoot(r, "west");
     expect(r.getState().seals).toEqual(["west"]);
@@ -169,13 +175,17 @@ describe("chapter table physics", () => {
 
   it("counts a fire seal once per launch even if the ball re-enters it", () => {
     const r = rig(createChapter(true));
-    r.send({ type: "arm-water" });
-    shoot(r, "west");
+    shootUntil(r, "west", "seal");
     expect(eventsOf(r, "seal")).toHaveLength(1);
-    Matter.Body.setPosition(r.phys.ball, { x: 205, y: 130 });
-    Matter.Body.setVelocity(r.phys.ball, { x: 0, y: 4 });
+    expect(r.phys.ball.isStatic).toBe(false);
+    Matter.Body.setPosition(r.phys.ball, { x: 205, y: 230 });
+    Matter.Body.setVelocity(r.phys.ball, { x: 0, y: 0 });
+    r.phys.advance(2);
+    Matter.Body.setPosition(r.phys.ball, { x: 205, y: 190 });
+    Matter.Body.setVelocity(r.phys.ball, { x: 0, y: -4 });
     r.phys.advance(10);
     expect(eventsOf(r, "seal")).toHaveLength(1);
+    expect(r.getState().integrity).toBe(2);
     r.phys.destroy();
   });
 
@@ -183,13 +193,58 @@ describe("chapter table physics", () => {
     const r = rig(createChapter(true));
     shootUntil(r, "west", "seal");
     expect(r.getState().integrity).toBe(2);
-    r.phys.aim("shrine");
-    r.phys.release();
+    let bumperContacts = 0;
+    Matter.Events.on(r.phys.engine, "collisionStart", (e: Matter.IEventCollision<Matter.Engine>) => {
+      bumperContacts += e.pairs.filter(pair => pair.bodyA.label === "bumper" || pair.bodyB.label === "bumper").length;
+    });
     Matter.Body.setPosition(r.phys.ball, { x: 90, y: 400 });
-    Matter.Body.setVelocity(r.phys.ball, { x: 0, y: -8 });
-    r.phys.advance(30);
+    Matter.Body.setVelocity(r.phys.ball, { x: 0, y: 4 });
+    r.phys.advance(12);
+    expect(bumperContacts).toBeGreaterThan(0);
     expect(r.getState().integrity).toBe(2);
     r.phys.destroy();
+  });
+
+  it("starts the meter only after aiming and clears readiness on a catch", () => {
+    const r = rig();
+    r.phys.advance(30);
+    expect(r.phys.snapshot()).toMatchObject({ meter: 0, aimReady: false, held: true });
+    r.phys.release();
+    expect(r.phys.snapshot().held).toBe(true);
+    r.phys.aim("shrine");
+    expect(r.phys.snapshot().aimReady).toBe(true);
+    r.phys.advance(45);
+    r.phys.release();
+    r.phys.advance(200);
+    expect(r.phys.snapshot()).toMatchObject({ aimReady: false, held: true });
+    r.phys.destroy();
+  });
+
+  it("stops a batched update on the exact step an encounter begins", () => {
+    const batched = rig();
+    const single = rig();
+    releaseOnMeter(batched.phys, "shrine", "center");
+    releaseOnMeter(single.phys, "shrine", "center");
+    batched.phys.advance(200);
+    for (let i = 0; i < 200 && single.getState().phase === "playing"; i++) single.phys.advance();
+    expect(batched.getState().phase).toBe("lesson");
+    expect(batched.phys.engine.timing.timestamp).toBe(single.phys.engine.timing.timestamp);
+    expect(batched.phys.ball.position).toEqual(single.phys.ball.position);
+    const timestamp = batched.phys.engine.timing.timestamp;
+    batched.phys.advance(200);
+    expect(batched.phys.engine.timing.timestamp).toBe(timestamp);
+    batched.phys.destroy();
+    single.phys.destroy();
+  });
+
+  it("does not advance a destroyed active table", () => {
+    const r = rig();
+    releaseOnMeter(r.phys, "gate", "center");
+    const timestamp = r.phys.engine.timing.timestamp;
+    r.phys.destroy();
+    r.phys.advance(100);
+    expect(r.phys.engine.timing.timestamp).toBe(timestamp);
+    expect(r.events).toEqual([]);
   });
 
   it("resets cleanly and destroys without stale listeners", () => {

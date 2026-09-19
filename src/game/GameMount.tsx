@@ -20,7 +20,12 @@ import { RunHud } from "./ui/RunHud";
 import { useIsSmallScreen } from "@/hooks/use-media-query";
 import { KanjiWatermark } from "./ui/KanjiWatermark";
 import { type WorldReaction } from "@/presentation/world-reactor";
-import { isKamikazeMode, getLastTaunt, getTickCount, getTimeScale, consumeMomentumShift, getMachineMood, consumeKillCam, setKillCamEnabled, isShotCallMode, getShotVariant, getShotPhase, getShotAimedLane, getShotGuardLane, getShotMeterPosition, getShotLanes, getLastShotResult, getShotCanRelease, getShotFeintStage, shotRelease, type ShotResult } from "@/model/game";
+import { isKamikazeMode, getLastTaunt, getTickCount, getTimeScale, consumeMomentumShift, getMachineMood, consumeKillCam, setKillCamEnabled, isShotCallMode, getShotVariant, getShotPhase, getShotAimedLane, getShotGuardLane, getShotMeterPosition, getShotLanes, getLastShotResult, getShotCanRelease, getShotFeintStage, shotRelease, type ShotResult, isStoryMode, isStoryFrozen, getStoryState, getStoryTargets, isStoryBallHeld, storyAction, launchStoryBall, setFlipperState } from "@/model/game";
+import { ActorTypes } from "@/definitions/game";
+import { createStoryState, type StoryState } from "@/model/story-run";
+import type { StoryTarget } from "@/model/story-table";
+import { loadLearnedBlessing, chapterObjective } from "@/model/shrine-chapter";
+import ShrineChapter from "./chapter/ShrineChapter";
 import { createKamikazeState, POWERUP_NAMES, type AIDifficulty } from "@/model/kamikaze";
 import type { PowerUpSide } from "@/definitions/game";
 import { mulberry32 } from "@/utils/rng";
@@ -55,6 +60,7 @@ function createRunGame(opts: {
   aiDifficulty?: AIDifficulty;
   worldId?: string;
   controlScheme?: "steer" | "feint" | "precision";
+  story?: boolean;
 }): GameDef {
   // Quantum when available, local CSPRNG otherwise — both recorded in the
   // replay, so the run stays reproducible either way.
@@ -72,9 +78,12 @@ function createRunGame(opts: {
     rngSeed,
     seedSource: lastSeedSource(),
     rng: mulberry32(rngSeed),
-    worldPhysics: getWorldById(opts.worldId ?? "")?.physics,
+    // Story runs keep the physical table but skip world-physics wobble: the
+    // shrine encounter is a fixed learning loop, not a seeded marble drift.
+    worldPhysics: opts.story ? undefined : getWorldById(opts.worldId ?? "")?.physics,
     controlScheme: opts.controlScheme,
     aiDifficulty: opts.aiDifficulty,
+    story: opts.story ? createStoryState(loadLearnedBlessing()) : undefined,
   };
 }
 
@@ -192,6 +201,117 @@ function AimGuide(props: {
   );
 }
 
+/**
+ * Story mode target markers drawn over the live playfield: the water shrine
+ * ripples cyan, the two fire-seal bumpers burn red until quenched, and the
+ * torii beam fades once both seals are done. Positions follow the canvas
+ * viewport (zoom + pan) via the same world→client mapping the aim guide uses.
+ */
+function StoryMarkers(props: {
+  targets: StoryTarget[];
+  seals: string[];
+  gateOpen: boolean;
+  armed: boolean;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  getClient: (x: number, y: number) => { x: number; y: number } | null;
+  getBallClientPos: () => { x: number; y: number } | null;
+}) {
+  const [, force] = React.useState(0);
+  React.useEffect(() => {
+    let raf = 0;
+    const loop = () => { force((n) => (n + 1) % 1000); raf = requestAnimationFrame(loop); };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const container = props.containerRef.current;
+  if (!container) return null;
+  const rect = container.getBoundingClientRect();
+  const toLocal = (x: number, y: number) => {
+    const p = props.getClient(x, y);
+    return p ? { x: p.x - rect.left, y: p.y - rect.top } : null;
+  };
+  const px = (worldLen: number) => {
+    const a = props.getClient(0, 0);
+    const b = props.getClient(worldLen, 0);
+    return a && b ? Math.abs(b.x - a.x) : worldLen;
+  };
+
+  const label = (text: string, sub?: string) => (
+    <div style={{
+      position: "absolute", left: "50%", bottom: "100%", transform: "translate(-50%, -4px)",
+      padding: "2px 8px", borderRadius: 6, background: "rgba(0,0,0,0.7)",
+      fontSize: 10, fontWeight: 800, letterSpacing: "0.12em", whiteSpace: "nowrap",
+      color: "#f5efe6",
+    }}>{text}{sub ? <span style={{ opacity: 0.75, fontWeight: 600 }}> · {sub}</span> : null}</div>
+  );
+
+  const ball = props.getBallClientPos();
+  const ballLocal = ball ? { x: ball.x - rect.left, y: ball.y - rect.top } : null;
+
+  return (
+    <div aria-hidden style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 6 }}>
+      {props.targets.map((t) => {
+        const p = toLocal(t.x, t.y);
+        if (!p) return null;
+        if (t.id === "shrine") {
+          const r = Math.max(10, px(t.radius));
+          return (
+            <div key={t.id} style={{ position: "absolute", left: p.x - r, top: p.y - r, width: r * 2, height: r * 2 }}>
+              <div style={{
+                position: "absolute", inset: 0, borderRadius: "50%",
+                border: "2px solid #67e8f9", boxShadow: "0 0 14px rgba(103,232,249,0.7), inset 0 0 18px rgba(103,232,249,0.35)",
+              }} />
+              <div style={{
+                position: "absolute", inset: -8, borderRadius: "50%",
+                border: "1px solid rgba(103,232,249,0.45)",
+              }} />
+              {label("水 SHRINE")}
+            </div>
+          );
+        }
+        if (t.id === "west" || t.id === "east") {
+          const done = props.seals.includes(t.id);
+          const r = Math.max(10, px(t.radius) + 6);
+          const color = done ? "#67e8f9" : "#e34234";
+          return (
+            <div key={t.id} style={{ position: "absolute", left: p.x - r, top: p.y - r, width: r * 2, height: r * 2 }}>
+              <div style={{
+                position: "absolute", inset: 0, borderRadius: "50%",
+                border: `3px solid ${color}`,
+                boxShadow: `0 0 16px ${done ? "rgba(103,232,249,0.7)" : "rgba(227,66,52,0.7)"}`,
+                opacity: done ? 0.9 : 1,
+              }} />
+              {label(`${done ? "水" : "火"} SEAL ${t.id === "west" ? "I" : "II"}`, done ? "quenched" : "burning")}
+            </div>
+          );
+        }
+        // gate: horizontal beam across the torii passage
+        const halfW = Math.max(12, px(t.radius));
+        const h = Math.max(6, px(18));
+        return (
+          <div key={t.id} style={{ position: "absolute", left: p.x - halfW, top: p.y - h / 2, width: halfW * 2, height: h }}>
+            <div style={{
+              position: "absolute", inset: 0, borderRadius: 3,
+              background: props.gateOpen ? "rgba(103,232,249,0.15)" : "rgba(227,66,52,0.5)",
+              border: `2px solid ${props.gateOpen ? "#67e8f9" : "#e34234"}`,
+              boxShadow: props.gateOpen ? "none" : "0 0 14px rgba(227,66,52,0.6)",
+            }} />
+            {label(props.gateOpen ? "鳥居 OPEN" : "鳥居 SEALED", props.gateOpen ? "cross to finish" : "2 seals")}
+          </div>
+        );
+      })}
+      {props.armed && ballLocal && (
+        <div style={{
+          position: "absolute", left: ballLocal.x - 16, top: ballLocal.y - 16,
+          width: 32, height: 32, borderRadius: "50%",
+          border: "2.5px solid #67e8f9", boxShadow: "0 0 12px rgba(103,232,249,0.8)",
+        }} />
+      )}
+    </div>
+  );
+}
+
 type Props = {
   runKey: number;
   mode: "practice" | "tournament";
@@ -205,6 +325,13 @@ type Props = {
   worldId?: string; // Optional world override (for themed tournaments)
   controlScheme?: "steer" | "feint" | "precision"; // Kamikaze control: nudge vs the two shot-calling variants
   paused: boolean;
+  /** Story mode (Water Shrine): the same table runs the narrative encounter. */
+  story?: boolean;
+  /** Shared pause toggle owned by GameScreen (the pause menu lives there). */
+  onTogglePause?: () => void;
+  /** Story terminal panels reuse the parent's restart/quit flows. */
+  onRestart?: () => void;
+  onQuit?: () => void;
   /** First run: teach on the table itself instead of in an intro screen. */
   coach?: boolean;
   /** Opens the full control reference (How to Play) from the table's coach chip. */
@@ -281,6 +408,13 @@ export default function GameMount(props: Props) {
   const victoryClearRef = useRef(0);
   // Shake is applied imperatively: re-keying the wrapper would remount (and kill) the canvas.
   const shakeRef = useRef<HTMLDivElement | null>(null);
+
+  // ── Story mode (Water Shrine) ────────────────────────────────
+  const storyRun = Boolean(props.story) && props.gameMode === "classic";
+  const [storyHud, setStoryHud] = useState<StoryState | null>(null);
+  const [storyHeld, setStoryHeld] = useState(false);
+  const [storyTargets, setStoryTargets] = useState<StoryTarget[]>([]);
+  const [trialEncounter, setTrialEncounter] = useState<number | null>(null);
   // A1: mood drives the taunt overlay colour and the named state in the HUD.
   // Memoised so the memoised RunHud can bail out when nothing else changed.
   const moodDisplay = useMemo(() => describeMood(machineMood), [machineMood]);
@@ -393,8 +527,8 @@ export default function GameMount(props: Props) {
   const taxSeenRef = useRef(0);
 
   const initialGame = useMemo<GameDef>(
-    () => createRunGame({ id: "practice", table: START_TABLE_INDEX, paused: false, gameMode: props.gameMode, aiDifficulty: props.aiDifficulty, worldId: props.worldId, controlScheme: props.controlScheme }),
-    [props.gameMode, props.aiDifficulty],
+    () => createRunGame({ id: storyRun ? "story-initial" : "practice", table: START_TABLE_INDEX, paused: false, gameMode: props.gameMode, aiDifficulty: props.aiDifficulty, worldId: props.worldId, controlScheme: props.controlScheme, story: storyRun }),
+    [props.gameMode, props.aiDifficulty, storyRun],
   );
 
   useEffect(() => {
@@ -407,34 +541,47 @@ export default function GameMount(props: Props) {
       await preloadAssets();
       if (cancelled) return;
 
-      // Check if we should render a Marble world
+      // Check if we should render a Marble world. It loads in parallel with the
+      // table so a heavy splat download never blocks the run (or Story mode).
       const shouldRenderWorld = isSplatSupported() && !prefersReducedMotion() && Boolean((getWorldById(props.worldId || '') || MARBLE_WORLDS.HOBBITON).spzUrl);
-      
+
       if (shouldRenderWorld && worldContainerRef.current) {
         const worldKey = props.worldId || 'HOBBITON';
         const world = getWorldById(worldKey) || MARBLE_WORLDS.HOBBITON;
-        
-        try {
-          worldHandleRef.current = await mountWorld(worldContainerRef.current, world, {
-            onProgress: (progress) => setWorldLoadingProgress(progress),
-          });
 
-          // Set up world reaction handler
-          worldHandleRef.current.setOnWorldReaction((reaction) => {
+        mountWorld(worldContainerRef.current, world, {
+          onProgress: (progress) => setWorldLoadingProgress(progress),
+        }).then((handle) => {
+          // Async resolve after unmount: dispose immediately rather than leak.
+          if (cancelled) {
+            handle.dispose();
+            return;
+          }
+          worldHandleRef.current = handle;
+          handle.setOnWorldReaction((reaction) => {
             applyWorldReaction(reaction);
           });
-        } catch (e) {
+          handle.setBallTracking(true);
+        }).catch((e) => {
+          if (cancelled) return;
           console.warn('Failed to mount world, using fallback:', e);
           setWorldFallback(true);
-        }
+        });
       } else {
         setWorldFallback(true);
       }
 
-      mountedRef.current = await mountGame({
+      const mounted = await mountGame({
         container: containerRef.current,
         game: initialGame,
         touchscreen: true,
+        onTogglePause: props.onTogglePause,
+        inputEnabled: () => {
+          const g = gameRef.current;
+          if (!g) return true;
+          if (g.story) return g.story.phase === "playing" && !g.paused;
+          return !g.paused;
+        },
         onCharge: (power) => setChargePower(power),
         onDive: () => { observeCoach({ dived: true }); showAgencyBanner("突っ込む · DIVE!"); },
         onNudge: (power) => showAgencyBanner(power >= 2.9 ? "全力 · MAX NUDDGE!" : "突き · POWER NUDDGE!"),
@@ -489,6 +636,14 @@ export default function GameMount(props: Props) {
         },
       });
 
+      // Async resolve after unmount: destroy the mounted game rather than leak
+      // a second engine competing for the singleton table.
+      if (cancelled) {
+        mounted.destroy();
+        return;
+      }
+      mountedRef.current = mounted;
+
       gameRef.current = initialGame;
 
       // A2: the kill cam plays in live + attract modes but is suppressed while
@@ -497,11 +652,11 @@ export default function GameMount(props: Props) {
 
       // The runKey effect can't record the first run (it bails while the mount
       // is still in flight), so start recording for the initial game here.
-      beginRunRecording(initialGame, props.gameMode, props.aiDifficulty, props.worldId);
+      // Story runs are never recorded: they are not ranked and never upload.
+      if (!initialGame.story) {
+        beginRunRecording(initialGame, props.gameMode, props.aiDifficulty, props.worldId);
+      }
       runStartRef.current = performance.now();
-
-      // Enable ball-following camera when world is loaded
-      worldHandleRef.current?.setBallTracking(true);
 
       // B3: MAMORU's heartbeat — the machine pulse reads the live mood and
       // beats under the music (calm 60bpm → desperate 120bpm → grieving stops).
@@ -529,16 +684,21 @@ export default function GameMount(props: Props) {
     if (!mountedRef.current) return;
 
     const g = createRunGame({
-      id: props.mode === "tournament" && props.tournamentId ? String(props.tournamentId) : "practice",
+      id: storyRun ? `story-${props.runKey}` : (props.mode === "tournament" && props.tournamentId ? String(props.tournamentId) : "practice"),
       table: props.tableIndex,
       paused: props.paused,
       gameMode: props.gameMode,
       aiDifficulty: props.aiDifficulty,
       worldId: props.worldId,
       controlScheme: props.controlScheme,
+      story: storyRun,
     });
 
-    beginRunRecording(g, props.gameMode, props.aiDifficulty, props.worldId);
+    if (!g.story) {
+      beginRunRecording(g, props.gameMode, props.aiDifficulty, props.worldId);
+    }
+    setTrialEncounter(null);
+    setStoryHud(null);
     runStartRef.current = performance.now();
 
     multiballRef.current = false;
@@ -616,7 +776,19 @@ export default function GameMount(props: Props) {
         // A1: surface the machine's mood so the taunt overlay can color-shift.
         const mood = getMachineMood();
         setMachineMood((prev) => (prev === mood ? prev : mood));
+        if (g.story) {
+          const s = getStoryState();
+          setStoryHud((prev) => (prev === s ? prev : s));
+          setStoryHeld(isStoryBallHeld());
+          setStoryTargets((prev) => (prev.length ? prev : getStoryTargets()));
+        }
       }
+
+      // The presentation world freezes with the run: menu pause AND the story
+      // encounter (any non-playing phase). Resources stay mounted; the last
+      // rendered frame remains visible under the dialog.
+      const worldPaused = props.paused || Boolean(g.story && g.story.phase !== "playing");
+      worldHandleRef.current?.setPaused(worldPaused);
 
       // Slow-mo + momentum (Phase 1 immersion)
       if (sampleHud) {
@@ -754,7 +926,7 @@ export default function GameMount(props: Props) {
       }
       prevBallsRef.current = g.balls;
 
-      if (wasActive && !isActive && g.score > 0) {
+      if (!g.story && wasActive && !isActive && g.score > 0) {
         const replay = finishReplayRecording(g.score, getTickCount());
         if (replay) props.onReplayAvailable?.(replay);
         const replayJson = replay ? encodeReplay(replay) : null;
@@ -855,11 +1027,76 @@ export default function GameMount(props: Props) {
     };
   }, [props.mode, props.tournamentId, props.playerAddress, props.walletPort, props.playerName, props.onActiveChange]);
 
+  // An open trial unmounts as soon as the encounter phase ends for any reason —
+  // abandoned, resolved, or superseded by a new run.
+  useEffect(() => {
+    if (trialEncounter !== null && storyHud?.phase !== "lesson") {
+      setTrialEncounter(null);
+    }
+  }, [storyHud?.phase, trialEncounter]);
+
+  // Story mode readout: objective + resources + the Water verbs, as a strip
+  // above the playfield on all widths so it never occludes the ball's lane.
+  const storyStrip = storyRun && storyHud ? (
+    <div
+      data-testid="story-hud"
+      style={{
+        marginBottom: 8,
+        padding: "10px 14px",
+        borderRadius: 10,
+        background: "rgba(0,0,0,0.6)",
+        border: "1px solid rgba(103,232,249,0.35)",
+        color: "#f5efe6",
+        fontSize: 12,
+      }}
+    >
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", alignItems: "baseline", justifyContent: "space-between" }}>
+        <b style={{ fontSize: 13, letterSpacing: "0.06em" }}>{chapterObjective(storyHud)}</b>
+        <span>
+          Integrity {"●".repeat(storyHud.integrity)}{"○".repeat(Math.max(0, 3 - storyHud.integrity))}
+          {" · "}Mana {storyHud.mana}/3
+          {" · "}{storyHud.learned ? (storyHud.waterArmed ? "Water armed" : "Water learned") : "No blessing"}
+          {" · "}Seals {storyHud.seals.length}/2
+        </span>
+      </div>
+      <div aria-live="polite" style={{ opacity: 0.85, marginTop: 4 }}>{storyHud.notice}</div>
+      <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <button
+          type="button"
+          disabled={!storyHud.learned || storyHud.mana === 0 || storyHud.waterArmed || storyHud.phase !== "playing"}
+          onClick={() => storyAction({ type: "arm-water" })}
+          style={{
+            padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(103,232,249,0.5)",
+            background: storyHud.waterArmed ? "rgba(103,232,249,0.25)" : "rgba(103,232,249,0.12)",
+            color: "#bff3ff", fontWeight: 700, fontSize: 12, cursor: "pointer", minHeight: 36,
+          }}
+        >
+          {storyHud.waterArmed ? "Water armed" : "Arm Water (W)"}
+        </button>
+        <button
+          type="button"
+          disabled={!storyHeld || storyHud.phase !== "playing"}
+          onClick={() => launchStoryBall()}
+          style={{
+            padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(212,160,23,0.5)",
+            background: "rgba(212,160,23,0.15)", color: "#ffd98a",
+            fontWeight: 700, fontSize: 12, cursor: "pointer", minHeight: 36,
+          }}
+        >
+          Launch (Space)
+        </button>
+        <span style={{ fontSize: 11, opacity: 0.65 }}>
+          Tap/hold to guide · ← → flippers · Space launch/bump · W water
+        </span>
+      </div>
+    </div>
+  ) : null;
+
   // One readout, two placements: over the playfield on desktop, above it on
   // phones (see RunHud — the desktop panel is ~200×300, which on a 358px-wide
   // table would cover the corner the ball actually plays in). Exactly one of
   // the two spots below renders it.
-  const runHud = (
+  const runHud = storyRun ? storyStrip : (
     <RunHud
       kamikazeActive={kamikazeActive}
       hud={hud}
@@ -1085,6 +1322,17 @@ export default function GameMount(props: Props) {
           }}
         />
         )}
+        {storyRun && storyHud && (
+          <StoryMarkers
+            targets={storyTargets}
+            seals={storyHud.seals}
+            gateOpen={storyHud.seals.length === 2}
+            armed={storyHud.waterArmed}
+            containerRef={shakeRef}
+            getClient={(x, y) => mountedRef.current?.getPointClientPosition(x, y) ?? null}
+            getBallClientPos={() => mountedRef.current?.getBallClientPosition() ?? null}
+          />
+        )}
         {/* Slow-motion cinematic FX: vignette + letterbox bars */}
         <div
           aria-hidden
@@ -1306,7 +1554,169 @@ export default function GameMount(props: Props) {
             onRelease={() => shotRelease()}
           />
         )}
+        {/* ── Story encounter panels (shrine dialog / trial / results) ── */}
+        {storyRun && storyHud && (
+          <>
+            {storyHud.phase === "lesson" && (
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="Water shrine encounter"
+                style={{
+                  position: "absolute", inset: 0, zIndex: 20,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: "rgba(5,8,16,0.72)", overflowY: "auto",
+                }}
+              >
+                {trialEncounter !== null ? (
+                  <div style={{ width: "min(720px, 96%)", maxHeight: "100%", overflowY: "auto", borderRadius: 12, border: "1px solid rgba(103,232,249,0.4)", background: "#0a0a0f" }}>
+                    <ShrineChapter
+                      embedded
+                      paused={props.paused}
+                      onResult={(outcome) => {
+                        const encounterId = trialEncounter;
+                        setTrialEncounter(null);
+                        storyAction({ type: "trial-result", encounterId, outcome });
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div style={{
+                    width: "min(420px, 92%)", padding: "22px 24px", borderRadius: 14,
+                    background: "rgba(10,10,15,0.96)", border: "1px solid rgba(103,232,249,0.45)",
+                    color: "#f5efe6", textAlign: "center",
+                  }}>
+                    <p style={{ fontSize: 10, letterSpacing: "0.35em", textTransform: "uppercase", color: "rgba(103,232,249,0.8)", margin: "0 0 6px" }}>Shrine encounter</p>
+                    <h3 style={{ margin: "0 0 10px", fontSize: 22 }}>水 The Water Shrine</h3>
+                    <p style={{ fontSize: 13, opacity: 0.85, lineHeight: 1.5 }}>
+                      The main ball is safely held. {storyHud.learned
+                        ? "MAMORU can restore your mana — or you may practice the Water Trial again."
+                        : "MAMORU offers a contained Water Trial: a short lesson and one practice seal."}
+                    </p>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 14 }}>
+                      <button
+                        type="button"
+                        onClick={() => setTrialEncounter(storyHud.encounterId)}
+                        style={{ padding: "10px 16px", borderRadius: 8, border: "none", background: "rgba(103,232,249,0.85)", color: "#06202a", fontWeight: 800, fontSize: 13, cursor: "pointer", minHeight: 44 }}
+                      >
+                        {storyHud.learned ? "Practice the Water Trial" : "Begin the Water Trial"}
+                      </button>
+                      {storyHud.learned && (
+                        <button
+                          type="button"
+                          onClick={() => storyAction({ type: "refill", encounterId: storyHud.encounterId })}
+                          style={{ padding: "10px 16px", borderRadius: 8, border: "1px solid rgba(103,232,249,0.5)", background: "rgba(103,232,249,0.12)", color: "#bff3ff", fontWeight: 700, fontSize: 13, cursor: "pointer", minHeight: 44 }}
+                        >
+                          Refill mana & return
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => storyAction({ type: "trial-result", encounterId: storyHud.encounterId, outcome: "abandoned" })}
+                        style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(245,239,230,0.25)", background: "transparent", color: "rgba(245,239,230,0.75)", fontSize: 12, cursor: "pointer", minHeight: 40 }}
+                      >
+                        Leave the shrine — no penalty
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {(storyHud.phase === "blessing" || storyHud.phase === "gate-opening") && (
+              <div
+                role="dialog"
+                aria-modal="true"
+                style={{
+                  position: "absolute", inset: 0, zIndex: 20,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: "rgba(5,8,16,0.72)",
+                }}
+              >
+                <div style={{
+                  width: "min(420px, 92%)", padding: "22px 24px", borderRadius: 14,
+                  background: "rgba(10,10,15,0.96)", border: "1px solid rgba(103,232,249,0.45)",
+                  color: "#f5efe6", textAlign: "center",
+                }}>
+                  <h3 style={{ margin: "0 0 10px", fontSize: 20 }}>
+                    {storyHud.phase === "blessing" ? "The Blessing of Water 水" : "The Torii Opens 鳥居"}
+                  </h3>
+                  <p style={{ fontSize: 13, opacity: 0.85, lineHeight: 1.5 }}>{storyHud.notice}</p>
+                  <button
+                    type="button"
+                    onClick={() => storyAction({ type: "continue" })}
+                    style={{ marginTop: 12, padding: "10px 18px", borderRadius: 8, border: "none", background: "rgba(103,232,249,0.85)", color: "#06202a", fontWeight: 800, fontSize: 13, cursor: "pointer", minHeight: 44 }}
+                  >
+                    {storyHud.phase === "blessing" ? "Continue — carry Water to the seals" : "Continue — cross the open torii"}
+                  </button>
+                </div>
+              </div>
+            )}
+            {(storyHud.phase === "won" || storyHud.phase === "lost") && (
+              <div
+                role="dialog"
+                aria-modal="true"
+                style={{
+                  position: "absolute", inset: 0, zIndex: 20,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: "rgba(5,8,16,0.78)",
+                }}
+              >
+                <div style={{
+                  width: "min(420px, 92%)", padding: "24px", borderRadius: 14,
+                  background: "rgba(10,10,15,0.96)",
+                  border: `1px solid ${storyHud.phase === "won" ? "rgba(103,232,249,0.6)" : "rgba(227,66,52,0.6)"}`,
+                  color: "#f5efe6", textAlign: "center",
+                }}>
+                  <h3 style={{ margin: "0 0 10px", fontSize: 22 }}>
+                    {storyHud.phase === "won" ? "Chapter Complete — you crossed the torii" : "The Story Falters"}
+                  </h3>
+                  <p style={{ fontSize: 13, opacity: 0.85, lineHeight: 1.5 }}>{storyHud.notice}</p>
+                  <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 14, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => props.onRestart?.()}
+                      style={{ padding: "10px 16px", borderRadius: 8, border: "none", background: "rgba(103,232,249,0.85)", color: "#06202a", fontWeight: 800, fontSize: 13, cursor: "pointer", minHeight: 44 }}
+                    >
+                      {storyHud.phase === "won" ? "Play Story again" : "Retry Story"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => props.onQuit?.()}
+                      style={{ padding: "10px 16px", borderRadius: 8, border: "1px solid rgba(245,239,230,0.3)", background: "transparent", color: "#f5efe6", fontSize: 13, cursor: "pointer", minHeight: 44 }}
+                    >
+                      Back to lobby
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
+      {storyRun && (
+        <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 10 }}>
+          {([ActorTypes.LEFT_FLIPPER, ActorTypes.RIGHT_FLIPPER] as const).map((type) => (
+            <button
+              key={type}
+              type="button"
+              aria-label={type === ActorTypes.LEFT_FLIPPER ? "Left flipper" : "Right flipper"}
+              onPointerDown={(e) => { e.currentTarget.setPointerCapture?.(e.pointerId); setFlipperState(type, true); }}
+              onPointerUp={() => setFlipperState(type, false)}
+              onPointerCancel={() => setFlipperState(type, false)}
+              onLostPointerCapture={() => setFlipperState(type, false)}
+              onBlur={() => setFlipperState(type, false)}
+              style={{
+                minWidth: 120, minHeight: 44, borderRadius: 10,
+                border: "1px solid rgba(245,239,230,0.3)", background: "rgba(0,0,0,0.55)",
+                color: "#f5efe6", fontWeight: 800, fontSize: 14, cursor: "pointer",
+                touchAction: "none",
+              }}
+            >
+              {type === ActorTypes.LEFT_FLIPPER ? "◀ FLIPPER" : "FLIPPER ▶"}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
