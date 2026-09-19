@@ -63,6 +63,10 @@ export function RiveArtboard(props: RiveArtboardProps) {
                     src: props.src,
                     canvas: canvasRef.current,
                     artboard: props.artboard,
+                    // Every artboard in scene.rml names its machine "SM".
+                    // Without this the runtime plays a linear animation and
+                    // no view-model binding ever applies.
+                    stateMachines: "SM",
                     autoplay: true,
                     autoBind: true,
                 };

@@ -68,12 +68,15 @@ describe("table-coach — the first run is taught on the table", () => {
         }
     });
 
-    it("teaches classic with one card covering flippers and the bump", () => {
+    it("teaches classic with one card covering flippers and the launch verb", () => {
         const script = coachScript("classic", false);
         expect(script).toHaveLength(1);
         const copy = script[0].lines.join(" ").toLowerCase();
         expect(copy).toContain("flipper");
-        expect(copy).toContain("bump");
+        expect(copy).toContain("launch");
+        expect(copy).toContain("charged hold");
+        // The retired bump verb must never resurface — Space now launches.
+        expect(copy).not.toContain("bump");
         expect(currentCue(script, noObservations())?.id).toBe("flippers");
     });
 

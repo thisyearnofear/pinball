@@ -121,8 +121,8 @@ const FLIPPERS_CARD = (touchscreen: boolean): CoachCue => ({
   lines: [
     "Tap either side of the table to work that flipper.",
     touchscreen
-      ? "Swipe up to bump the table — powerful, so don't spam it."
-      : "Press space to bump — powerful, so don't spam it.",
+      ? "Tap to launch or guide — swipe up to arm Water."
+      : "Space to launch or guide — a charged hold nudges a live ball.",
   ],
   anchor: "center",
   autoDismissSec: 9,
