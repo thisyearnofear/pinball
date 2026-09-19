@@ -1,0 +1,703 @@
+<Rive version="1" kind="fragment">
+
+    <!-- ── hud_gauge ────────────────────────────────────────────────
+         Story HUD resources as one driven component: three mana pips
+         (fill follows the mana count) and an armed glow (bool →
+         visible). Host drives: mana 0..3, armed bool. The live charge
+         ring stays DOM — it tracks the aim point every frame.          -->
+    <Artboard defaultStateMachineId="0:7" viewModelId="0:40" clip="false" width="100" height="32" name="hud_gauge" id="0:2">
+        <Fill name="Background"><SolidColor colorValue="00000000" name="Color"/></Fill>
+        <LayoutComponentStyle name="Gauge Style" id="0:3"/>
+
+        <!-- Armed glow bar behind the pips -->
+        <Shape x="8" y="16" name="ArmedGlow" id="0:16" opacity="0">
+            <Rectangle width="76" height="16" originX="0" originY="0.5" name="GlowRect" cornerRadiusTL="8" cornerRadiusTR="8" cornerRadiusBL="8" cornerRadiusBR="8"/>
+            <Fill name="GlowFill"><SolidColor colorValue="5267E8F9" name="Color"/></Fill>
+        </Shape>
+
+        <!-- Mana pips: track (dim) + fill (lit). Fills author 0 opacity;
+             each mana state's animation lights exactly its pips. -->
+        <Shape x="16" y="16" name="Pip1Track" id="0:10">
+            <Ellipse width="14" height="14" name="Pip1TrackPath"/>
+            <Fill name="Track"><SolidColor colorValue="26103249" name="Color"/></Fill>
+        </Shape>
+        <Shape x="16" y="16" name="Pip1" id="0:13" opacity="0">
+            <Ellipse width="14" height="14" name="Pip1Path"/>
+            <Fill name="Lit"><SolidColor colorValue="E667E8F9" name="Color"/></Fill>
+        </Shape>
+        <Shape x="42" y="16" name="Pip2Track" id="0:11">
+            <Ellipse width="14" height="14" name="Pip2TrackPath"/>
+            <Fill name="Track"><SolidColor colorValue="26103249" name="Color"/></Fill>
+        </Shape>
+        <Shape x="42" y="16" name="Pip2" id="0:14" opacity="0">
+            <Ellipse width="14" height="14" name="Pip2Path"/>
+            <Fill name="Lit"><SolidColor colorValue="E667E8F9" name="Color"/></Fill>
+        </Shape>
+        <Shape x="68" y="16" name="Pip3Track" id="0:12">
+            <Ellipse width="14" height="14" name="Pip3TrackPath"/>
+            <Fill name="Track"><SolidColor colorValue="26103249" name="Color"/></Fill>
+        </Shape>
+        <Shape x="68" y="16" name="Pip3" id="0:15" opacity="0">
+            <Ellipse width="14" height="14" name="Pip3Path"/>
+            <Fill name="Lit"><SolidColor colorValue="E667E8F9" name="Color"/></Fill>
+        </Shape>
+
+        <!-- Per-level appearances: each state keys the fills it owns. All fills
+             author 0 opacity, so M0/ArmedOff author nothing. -->
+        <LinearAnimation duration="8" name="M0" id="0:60"/>
+        <LinearAnimation duration="8" name="M1" id="0:61">
+            <KeyedObject objectId="0:13">
+                <KeyedProperty propertyKey="18">
+                    <KeyFrameDouble value="1" interpolationType="hold" frame="0"/>
+                </KeyedProperty>
+            </KeyedObject>
+        </LinearAnimation>
+        <LinearAnimation duration="8" name="M2" id="0:62">
+            <KeyedObject objectId="0:13">
+                <KeyedProperty propertyKey="18">
+                    <KeyFrameDouble value="1" interpolationType="hold" frame="0"/>
+                </KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:14">
+                <KeyedProperty propertyKey="18">
+                    <KeyFrameDouble value="1" interpolationType="hold" frame="0"/>
+                </KeyedProperty>
+            </KeyedObject>
+        </LinearAnimation>
+        <LinearAnimation duration="8" name="M3" id="0:63">
+            <KeyedObject objectId="0:13">
+                <KeyedProperty propertyKey="18">
+                    <KeyFrameDouble value="1" interpolationType="hold" frame="0"/>
+                </KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:14">
+                <KeyedProperty propertyKey="18">
+                    <KeyFrameDouble value="1" interpolationType="hold" frame="0"/>
+                </KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:15">
+                <KeyedProperty propertyKey="18">
+                    <KeyFrameDouble value="1" interpolationType="hold" frame="0"/>
+                </KeyedProperty>
+            </KeyedObject>
+        </LinearAnimation>
+        <LinearAnimation duration="8" name="ArmedOn" id="0:66">
+            <KeyedObject objectId="0:16">
+                <KeyedProperty propertyKey="18">
+                    <KeyFrameDouble value="1" interpolationType="hold" frame="0"/>
+                </KeyedProperty>
+            </KeyedObject>
+        </LinearAnimation>
+
+        <!-- One layer per input; each state's exit condition reads the VM. -->
+        <StateMachine name="SM" id="0:7">
+            <StateMachineLayer name="ManaLayer" id="0:70">
+                <AnyState x="200" y="-120"/>
+                <ExitState x="400" y="-120"/>
+                <EntryState>
+                    <StateTransition stateToId="0:71"/>
+                </EntryState>
+                <AnimationState x="40" animationId="0:60" id="0:71">
+                    <StateTransition stateToId="0:72">
+                        <TransitionViewModelCondition opValue="greaterThanOrEqual">
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyNumber>
+                                    <DataBindContext sourcePathIds="0:40-0:41" propertyKey="636"/>
+                                </BindablePropertyNumber>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueNumberComparator value="1"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                </AnimationState>
+                <AnimationState x="160" animationId="0:61" id="0:72">
+                    <StateTransition stateToId="0:73">
+                        <TransitionViewModelCondition opValue="greaterThanOrEqual">
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyNumber>
+                                    <DataBindContext sourcePathIds="0:40-0:41" propertyKey="636"/>
+                                </BindablePropertyNumber>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueNumberComparator value="2"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                    <StateTransition stateToId="0:71">
+                        <TransitionViewModelCondition opValue="lessThan">
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyNumber>
+                                    <DataBindContext sourcePathIds="0:40-0:41" propertyKey="636"/>
+                                </BindablePropertyNumber>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueNumberComparator value="1"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                </AnimationState>
+                <AnimationState x="280" animationId="0:62" id="0:73">
+                    <StateTransition stateToId="0:74">
+                        <TransitionViewModelCondition opValue="greaterThanOrEqual">
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyNumber>
+                                    <DataBindContext sourcePathIds="0:40-0:41" propertyKey="636"/>
+                                </BindablePropertyNumber>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueNumberComparator value="3"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                    <StateTransition stateToId="0:72">
+                        <TransitionViewModelCondition opValue="lessThan">
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyNumber>
+                                    <DataBindContext sourcePathIds="0:40-0:41" propertyKey="636"/>
+                                </BindablePropertyNumber>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueNumberComparator value="2"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                </AnimationState>
+                <AnimationState x="400" animationId="0:63" id="0:74">
+                    <StateTransition stateToId="0:73">
+                        <TransitionViewModelCondition opValue="lessThan">
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyNumber>
+                                    <DataBindContext sourcePathIds="0:40-0:41" propertyKey="636"/>
+                                </BindablePropertyNumber>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueNumberComparator value="3"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                </AnimationState>
+            </StateMachineLayer>
+            <StateMachineLayer name="ArmedLayer" id="0:90">
+                <AnyState x="200" y="-120"/>
+                <ExitState x="400" y="-120"/>
+                <EntryState>
+                    <StateTransition stateToId="0:91"/>
+                </EntryState>
+                <AnimationState x="160" animationId="0:60" id="0:91">
+                    <StateTransition stateToId="0:92">
+                        <TransitionViewModelCondition opValue="greaterThanOrEqual">
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyBoolean>
+                                    <DataBindContext sourcePathIds="0:40-0:43" propertyKey="634"/>
+                                </BindablePropertyBoolean>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueBooleanComparator value="true"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                </AnimationState>
+                <AnimationState x="320" animationId="0:66" id="0:92">
+                    <StateTransition stateToId="0:91">
+                        <TransitionViewModelCondition opValue="greaterThanOrEqual">
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyBoolean>
+                                    <DataBindContext sourcePathIds="0:40-0:43" propertyKey="634"/>
+                                </BindablePropertyBoolean>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueBooleanComparator value="false"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                </AnimationState>
+            </StateMachineLayer>
+        </StateMachine>
+    </Artboard>
+
+    <!-- ── coach_kanji ──────────────────────────────────────────────
+         Ink-brush reveal that sits behind the DOM kanji glyph. Host
+         pulses `reveal` (bool) when a cue mounts: splash pops, ripple
+         fades out. The glyph itself stays DOM text (font-free .riv). -->
+    <Artboard defaultStateMachineId="0:107" viewModelId="0:110" clip="false" width="120" height="120" name="coach_kanji" id="0:100">
+        <Fill name="Background"><SolidColor colorValue="00000000" name="Color"/></Fill>
+        <LayoutComponentStyle name="Kanji Style" id="0:101"/>
+
+        <Shape x="60" y="60" name="Ripple" id="0:103">
+            <Ellipse width="90" height="90" name="RipplePath"/>
+            <Stroke thickness="2" cap="round" name="RippleStroke">
+                <SolidColor colorValue="73D4A017" name="Color"/>
+            </Stroke>
+        </Shape>
+        <Shape x="60" y="60" name="Splash" id="0:102">
+            <Ellipse width="72" height="72" name="SplashPath"/>
+            <Fill name="Ink"><SolidColor colorValue="52103249" name="Color"/></Fill>
+        </Shape>
+
+        <LinearAnimation duration="8" name="KanjiIdle" id="0:105"/>
+        <LinearAnimation duration="60" name="Reveal" id="0:106">
+            <KeyedObject objectId="0:102">
+                <KeyedProperty propertyKey="20">
+                    <KeyFrameDouble value="8" interpolationType="cubic" frame="0"/>
+                    <KeyFrameDouble value="72" interpolationType="cubic" frame="18"/>
+                </KeyedProperty>
+                <KeyedProperty propertyKey="21">
+                    <KeyFrameDouble value="8" interpolationType="cubic" frame="0"/>
+                    <KeyFrameDouble value="72" interpolationType="cubic" frame="18"/>
+                </KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:103">
+                <KeyedProperty propertyKey="20">
+                    <KeyFrameDouble value="40" interpolationType="cubic" frame="6"/>
+                    <KeyFrameDouble value="118" interpolationType="cubic" frame="48"/>
+                </KeyedProperty>
+                <KeyedProperty propertyKey="21">
+                    <KeyFrameDouble value="40" interpolationType="cubic" frame="6"/>
+                    <KeyFrameDouble value="118" interpolationType="cubic" frame="48"/>
+                </KeyedProperty>
+                <KeyedProperty propertyKey="18">
+                    <KeyFrameDouble value="1" interpolationType="linear" frame="6"/>
+                    <KeyFrameDouble value="0" interpolationType="linear" frame="48"/>
+                </KeyedProperty>
+            </KeyedObject>
+        </LinearAnimation>
+
+        <StateMachine name="SM" id="0:107">
+            <StateMachineLayer name="Layer" id="0:108">
+                <AnyState x="200" y="-120"/>
+                <ExitState x="400" y="-120"/>
+                <EntryState>
+                    <StateTransition stateToId="0:109"/>
+                </EntryState>
+                <AnimationState x="160" animationId="0:105" id="0:109">
+                    <StateTransition stateToId="0:104">
+                        <TransitionViewModelCondition opValue="greaterThanOrEqual">
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyBoolean>
+                                    <DataBindContext sourcePathIds="0:110-0:112" propertyKey="634"/>
+                                </BindablePropertyBoolean>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueBooleanComparator value="true"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                </AnimationState>
+                <AnimationState x="320" animationId="0:106" id="0:104" reset="true"></AnimationState>
+            </StateMachineLayer>
+        </StateMachine>
+    </Artboard>
+
+    <!-- ── mood_sigil ───────────────────────────────────────────────
+         The machine's face. Host sets mood 0..3; the grin widens and
+         the eyes narrow as the machine gains the upper hand. An idle
+         pulse keeps it alive. -->
+    <Artboard defaultStateMachineId="0:220" viewModelId="0:210" clip="false" width="80" height="80" name="mood_sigil" id="0:200">
+        <Fill name="Background"><SolidColor colorValue="00000000" name="Color"/></Fill>
+        <LayoutComponentStyle name="Mood Style" id="0:201"/>
+
+        <Shape x="40" y="40" name="Halo" id="0:205">
+            <Ellipse width="70" height="70" name="HaloPath"/>
+            <Stroke thickness="2" cap="round" name="HaloStroke">
+                <SolidColor colorValue="59E34234" name="Color"/>
+            </Stroke>
+        </Shape>
+        <Shape x="26" y="30" name="EyeL" id="0:202">
+            <Rectangle width="8" height="16" originX="0.5" originY="0.5" name="EyeLPath" cornerRadiusTL="4" cornerRadiusTR="4" cornerRadiusBL="4" cornerRadiusBR="4" id="0:206"/>
+            <Fill name="Eye"><SolidColor colorValue="E6E34234" name="Color"/></Fill>
+        </Shape>
+        <Shape x="54" y="30" name="EyeR" id="0:203">
+            <Rectangle width="8" height="16" originX="0.5" originY="0.5" name="EyeRPath" cornerRadiusTL="4" cornerRadiusTR="4" cornerRadiusBL="4" cornerRadiusBR="4" id="0:207"/>
+            <Fill name="Eye"><SolidColor colorValue="E6E34234" name="Color"/></Fill>
+        </Shape>
+        <Shape x="40" y="52" name="Mouth" id="0:204">
+            <Rectangle width="26" height="6" originX="0.5" originY="0" name="MouthPath" cornerRadiusTL="3" cornerRadiusTR="3" cornerRadiusBL="3" cornerRadiusBR="3" id="0:208"/>
+            <Fill name="MouthFill"><SolidColor colorValue="E6E34234" name="Color"/></Fill>
+        </Shape>
+
+        <LinearAnimation duration="8" name="Mood0" id="0:230">
+            <KeyedObject objectId="0:206">
+                <KeyedProperty propertyKey="21"><KeyFrameDouble value="16" interpolationType="cubic" frame="0"/></KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:207">
+                <KeyedProperty propertyKey="21"><KeyFrameDouble value="16" interpolationType="cubic" frame="0"/></KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:208">
+                <KeyedProperty propertyKey="21"><KeyFrameDouble value="4" interpolationType="cubic" frame="0"/></KeyedProperty>
+            </KeyedObject>
+        </LinearAnimation>
+        <LinearAnimation duration="8" name="Mood1" id="0:231">
+            <KeyedObject objectId="0:206">
+                <KeyedProperty propertyKey="21"><KeyFrameDouble value="14" interpolationType="cubic" frame="0"/></KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:207">
+                <KeyedProperty propertyKey="21"><KeyFrameDouble value="14" interpolationType="cubic" frame="0"/></KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:208">
+                <KeyedProperty propertyKey="21"><KeyFrameDouble value="8" interpolationType="cubic" frame="0"/></KeyedProperty>
+            </KeyedObject>
+        </LinearAnimation>
+        <LinearAnimation duration="8" name="Mood2" id="0:232">
+            <KeyedObject objectId="0:206">
+                <KeyedProperty propertyKey="21"><KeyFrameDouble value="11" interpolationType="cubic" frame="0"/></KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:207">
+                <KeyedProperty propertyKey="21"><KeyFrameDouble value="11" interpolationType="cubic" frame="0"/></KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:208">
+                <KeyedProperty propertyKey="21"><KeyFrameDouble value="13" interpolationType="cubic" frame="0"/></KeyedProperty>
+            </KeyedObject>
+        </LinearAnimation>
+        <LinearAnimation duration="8" name="Mood3" id="0:233">
+            <KeyedObject objectId="0:206">
+                <KeyedProperty propertyKey="21"><KeyFrameDouble value="7" interpolationType="cubic" frame="0"/></KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:207">
+                <KeyedProperty propertyKey="21"><KeyFrameDouble value="7" interpolationType="cubic" frame="0"/></KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:208">
+                <KeyedProperty propertyKey="21"><KeyFrameDouble value="18" interpolationType="cubic" frame="0"/></KeyedProperty>
+            </KeyedObject>
+        </LinearAnimation>
+        <LinearAnimation duration="8" name="Mood4" id="0:234">
+            <KeyedObject objectId="0:206">
+                <KeyedProperty propertyKey="21"><KeyFrameDouble value="5" interpolationType="cubic" frame="0"/></KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:207">
+                <KeyedProperty propertyKey="21"><KeyFrameDouble value="5" interpolationType="cubic" frame="0"/></KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:208">
+                <KeyedProperty propertyKey="21"><KeyFrameDouble value="20" interpolationType="cubic" frame="0"/></KeyedProperty>
+            </KeyedObject>
+        </LinearAnimation>
+        <LinearAnimation duration="8" name="Mood5" id="0:235">
+            <KeyedObject objectId="0:206">
+                <KeyedProperty propertyKey="21"><KeyFrameDouble value="8" interpolationType="cubic" frame="0"/></KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:207">
+                <KeyedProperty propertyKey="21"><KeyFrameDouble value="8" interpolationType="cubic" frame="0"/></KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:208">
+                <KeyedProperty propertyKey="21"><KeyFrameDouble value="2" interpolationType="cubic" frame="0"/></KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:205">
+                <KeyedProperty propertyKey="18"><KeyFrameDouble value="0.35" interpolationType="cubic" frame="0"/></KeyedProperty>
+            </KeyedObject>
+        </LinearAnimation>
+
+        <LinearAnimation duration="180" name="Breathe" id="0:221" loopValue="pingPong">
+            <KeyedObject objectId="0:205">
+                <KeyedProperty propertyKey="18">
+                    <KeyFrameDouble value="0.55" interpolationType="linear" frame="0"/>
+                    <KeyFrameDouble value="1" interpolationType="linear" frame="180"/>
+                </KeyedProperty>
+            </KeyedObject>
+        </LinearAnimation>
+
+        <StateMachine name="SM" id="0:220">
+            <StateMachineLayer name="FaceLayer" id="0:228">
+                <AnyState x="200" y="-120"/>
+                <ExitState x="400" y="-120"/>
+                <EntryState>
+                    <StateTransition stateToId="0:240"/>
+                </EntryState>
+                <AnimationState x="40" animationId="0:230" id="0:240">
+                    <StateTransition stateToId="0:241">
+                        <TransitionViewModelCondition opValue="greaterThanOrEqual">
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyNumber>
+                                    <DataBindContext sourcePathIds="0:210-0:211" propertyKey="636"/>
+                                </BindablePropertyNumber>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueNumberComparator value="1"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                </AnimationState>
+                <AnimationState x="160" animationId="0:231" id="0:241">
+                    <StateTransition stateToId="0:242">
+                        <TransitionViewModelCondition opValue="greaterThanOrEqual">
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyNumber>
+                                    <DataBindContext sourcePathIds="0:210-0:211" propertyKey="636"/>
+                                </BindablePropertyNumber>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueNumberComparator value="2"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                    <StateTransition stateToId="0:240">
+                        <TransitionViewModelCondition opValue="lessThan">
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyNumber>
+                                    <DataBindContext sourcePathIds="0:210-0:211" propertyKey="636"/>
+                                </BindablePropertyNumber>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueNumberComparator value="1"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                </AnimationState>
+                <AnimationState x="280" animationId="0:232" id="0:242">
+                    <StateTransition stateToId="0:243">
+                        <TransitionViewModelCondition opValue="greaterThanOrEqual">
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyNumber>
+                                    <DataBindContext sourcePathIds="0:210-0:211" propertyKey="636"/>
+                                </BindablePropertyNumber>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueNumberComparator value="3"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                    <StateTransition stateToId="0:241">
+                        <TransitionViewModelCondition opValue="lessThan">
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyNumber>
+                                    <DataBindContext sourcePathIds="0:210-0:211" propertyKey="636"/>
+                                </BindablePropertyNumber>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueNumberComparator value="2"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                </AnimationState>
+                <AnimationState x="400" animationId="0:233" id="0:243">
+                    <StateTransition stateToId="0:244">
+                        <TransitionViewModelCondition opValue="greaterThanOrEqual">
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyNumber>
+                                    <DataBindContext sourcePathIds="0:210-0:211" propertyKey="636"/>
+                                </BindablePropertyNumber>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueNumberComparator value="4"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                    <StateTransition stateToId="0:242">
+                        <TransitionViewModelCondition opValue="lessThan">
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyNumber>
+                                    <DataBindContext sourcePathIds="0:210-0:211" propertyKey="636"/>
+                                </BindablePropertyNumber>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueNumberComparator value="3"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                </AnimationState>
+                <AnimationState x="520" animationId="0:234" id="0:244">
+                    <StateTransition stateToId="0:245">
+                        <TransitionViewModelCondition opValue="greaterThanOrEqual">
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyNumber>
+                                    <DataBindContext sourcePathIds="0:210-0:211" propertyKey="636"/>
+                                </BindablePropertyNumber>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueNumberComparator value="5"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                    <StateTransition stateToId="0:243">
+                        <TransitionViewModelCondition opValue="lessThan">
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyNumber>
+                                    <DataBindContext sourcePathIds="0:210-0:211" propertyKey="636"/>
+                                </BindablePropertyNumber>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueNumberComparator value="4"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                </AnimationState>
+                <AnimationState x="640" animationId="0:235" id="0:245">
+                    <StateTransition stateToId="0:244">
+                        <TransitionViewModelCondition opValue="lessThan">
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyNumber>
+                                    <DataBindContext sourcePathIds="0:210-0:211" propertyKey="636"/>
+                                </BindablePropertyNumber>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueNumberComparator value="5"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                </AnimationState>
+            </StateMachineLayer>
+            <StateMachineLayer name="BreatheLayer" id="0:229">
+                <AnyState x="200" y="-120"/>
+                <ExitState x="400" y="-120"/>
+                <EntryState>
+                    <StateTransition stateToId="0:222"/>
+                </EntryState>
+                <AnimationState x="160" animationId="0:221" id="0:222"/>
+            </StateMachineLayer>
+        </StateMachine>
+    </Artboard>
+
+    <!-- ── victory_sting ────────────────────────────────────────────
+         Torii gate rises while petals scatter. Host sets fire=true;
+         the one-shot plays and returns to idle. -->
+    <Artboard defaultStateMachineId="0:320" viewModelId="0:340" clip="false" width="320" height="180" name="victory_sting" id="0:300">
+        <Fill name="Background"><SolidColor colorValue="00000000" name="Color"/></Fill>
+        <LayoutComponentStyle name="Sting Style" id="0:301"/>
+
+        <Shape x="110" y="60" name="ToriiTop" id="0:310">
+            <Rectangle width="100" height="10" originX="0.5" originY="0.5" name="ToriiTopPath" cornerRadiusTL="4" cornerRadiusTR="4"/>
+            <Fill name="Wood"><SolidColor colorValue="E6D4A017" name="Color"/></Fill>
+        </Shape>
+        <Shape x="122" y="74" name="ToriiL" id="0:311">
+            <Rectangle width="8" height="70" originX="0.5" originY="0" name="ToriiLPath" cornerRadiusTL="3" cornerRadiusTR="3"/>
+            <Fill name="Wood"><SolidColor colorValue="CDD4A017" name="Color"/></Fill>
+        </Shape>
+        <Shape x="190" y="74" name="ToriiR" id="0:312">
+            <Rectangle width="8" height="70" originX="0.5" originY="0" name="ToriiRPath" cornerRadiusTL="3" cornerRadiusTR="3"/>
+            <Fill name="Wood"><SolidColor colorValue="CDD4A017" name="Color"/></Fill>
+        </Shape>
+
+        <Shape x="70" y="50" name="Petal1" id="0:302">
+            <Ellipse width="10" height="7" name="Petal1Path"/>
+            <Fill name="Petal"><SolidColor colorValue="E6F9A8D4" name="Color"/></Fill>
+        </Shape>
+        <Shape x="140" y="40" name="Petal2" id="0:303">
+            <Ellipse width="9" height="6" name="Petal2Path"/>
+            <Fill name="Petal"><SolidColor colorValue="E6F9A8D4" name="Color"/></Fill>
+        </Shape>
+        <Shape x="210" y="55" name="Petal3" id="0:304">
+            <Ellipse width="11" height="7" name="Petal3Path"/>
+            <Fill name="Petal"><SolidColor colorValue="E6F9A8D4" name="Color"/></Fill>
+        </Shape>
+        <Shape x="260" y="42" name="Petal4" id="0:305">
+            <Ellipse width="8" height="6" name="Petal4Path"/>
+            <Fill name="Petal"><SolidColor colorValue="CFF9A8D4" name="Color"/></Fill>
+        </Shape>
+        <Shape x="95" y="35" name="Petal5" id="0:306">
+            <Ellipse width="7" height="5" name="Petal5Path"/>
+            <Fill name="Petal"><SolidColor colorValue="CFF9A8D4" name="Color"/></Fill>
+        </Shape>
+        <Shape x="240" y="90" name="Petal6" id="0:307">
+            <Ellipse width="9" height="6" name="Petal6Path"/>
+            <Fill name="Petal"><SolidColor colorValue="E6F9A8D4" name="Color"/></Fill>
+        </Shape>
+
+        <LinearAnimation duration="8" name="StingIdle" id="0:331"/>
+        <LinearAnimation duration="100" name="Fireworks" id="0:330">
+            <KeyedObject objectId="0:310">
+                <KeyedProperty propertyKey="14">
+                    <KeyFrameDouble value="40" interpolationType="cubic" frame="0"/>
+                    <KeyFrameDouble value="60" interpolationType="cubic" frame="24"/>
+                </KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:311">
+                <KeyedProperty propertyKey="18">
+                    <KeyFrameDouble value="0" interpolationType="linear" frame="0"/>
+                    <KeyFrameDouble value="1" interpolationType="linear" frame="20"/>
+                </KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:312">
+                <KeyedProperty propertyKey="18">
+                    <KeyFrameDouble value="0" interpolationType="linear" frame="0"/>
+                    <KeyFrameDouble value="1" interpolationType="linear" frame="20"/>
+                </KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:302">
+                <KeyedProperty propertyKey="14">
+                    <KeyFrameDouble value="50" interpolationType="cubic" frame="0"/>
+                    <KeyFrameDouble value="10" interpolationType="cubic" frame="90"/>
+                </KeyedProperty>
+                <KeyedProperty propertyKey="18">
+                    <KeyFrameDouble value="1" interpolationType="linear" frame="10"/>
+                    <KeyFrameDouble value="0" interpolationType="linear" frame="90"/>
+                </KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:303">
+                <KeyedProperty propertyKey="13">
+                    <KeyFrameDouble value="140" interpolationType="cubic" frame="0"/>
+                    <KeyFrameDouble value="185" interpolationType="cubic" frame="80"/>
+                </KeyedProperty>
+                <KeyedProperty propertyKey="14">
+                    <KeyFrameDouble value="40" interpolationType="cubic" frame="0"/>
+                    <KeyFrameDouble value="8" interpolationType="cubic" frame="80"/>
+                </KeyedProperty>
+                <KeyedProperty propertyKey="18">
+                    <KeyFrameDouble value="1" interpolationType="linear" frame="10"/>
+                    <KeyFrameDouble value="0" interpolationType="linear" frame="80"/>
+                </KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:304">
+                <KeyedProperty propertyKey="14">
+                    <KeyFrameDouble value="55" interpolationType="cubic" frame="0"/>
+                    <KeyFrameDouble value="95" interpolationType="cubic" frame="95"/>
+                </KeyedProperty>
+                <KeyedProperty propertyKey="18">
+                    <KeyFrameDouble value="1" interpolationType="linear" frame="12"/>
+                    <KeyFrameDouble value="0" interpolationType="linear" frame="95"/>
+                </KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:305">
+                <KeyedProperty propertyKey="14">
+                    <KeyFrameDouble value="42" interpolationType="cubic" frame="0"/>
+                    <KeyFrameDouble value="78" interpolationType="cubic" frame="85"/>
+                </KeyedProperty>
+                <KeyedProperty propertyKey="18">
+                    <KeyFrameDouble value="0.8" interpolationType="linear" frame="10"/>
+                    <KeyFrameDouble value="0" interpolationType="linear" frame="85"/>
+                </KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:306">
+                <KeyedProperty propertyKey="14">
+                    <KeyFrameDouble value="35" interpolationType="cubic" frame="0"/>
+                    <KeyFrameDouble value="66" interpolationType="cubic" frame="88"/>
+                </KeyedProperty>
+                <KeyedProperty propertyKey="18">
+                    <KeyFrameDouble value="0.8" interpolationType="linear" frame="10"/>
+                    <KeyFrameDouble value="0" interpolationType="linear" frame="88"/>
+                </KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:307">
+                <KeyedProperty propertyKey="14">
+                    <KeyFrameDouble value="90" interpolationType="cubic" frame="0"/>
+                    <KeyFrameDouble value="150" interpolationType="cubic" frame="92"/>
+                </KeyedProperty>
+                <KeyedProperty propertyKey="18">
+                    <KeyFrameDouble value="1" interpolationType="linear" frame="12"/>
+                    <KeyFrameDouble value="0" interpolationType="linear" frame="92"/>
+                </KeyedProperty>
+            </KeyedObject>
+        </LinearAnimation>
+
+        <StateMachine name="SM" id="0:320">
+            <StateMachineLayer name="Layer" id="0:321">
+                <AnyState x="200" y="-120"/>
+                <ExitState x="400" y="-120"/>
+                <EntryState>
+                    <StateTransition stateToId="0:322"/>
+                </EntryState>
+                <AnimationState x="160" animationId="0:331" id="0:322">
+                    <StateTransition stateToId="0:323">
+                        <TransitionViewModelCondition opValue="greaterThanOrEqual">
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyBoolean>
+                                    <DataBindContext sourcePathIds="0:340-0:341" propertyKey="634"/>
+                                </BindablePropertyBoolean>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueBooleanComparator value="true"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                </AnimationState>
+                <AnimationState x="320" animationId="0:330" id="0:323" reset="true">
+                    <StateTransition stateToId="0:322"/>
+                </AnimationState>
+            </StateMachineLayer>
+        </StateMachine>
+    </Artboard>
+
+    <!-- ── view models ────────────────────────────────────────────── -->
+    <ViewModel defaultInstanceId="0:44" name="StoryHud" id="0:40">
+        <ViewModelPropertyNumber name="mana" id="0:41"/>
+        <ViewModelPropertyNumber name="charge" id="0:42"/>
+        <ViewModelPropertyBoolean name="armed" id="0:43"/>
+        <ViewModelInstance exports="true" name="Default" id="0:44">
+            <ViewModelInstanceNumber propertyValue="2" viewModelPropertyId="0:41"/>
+            <ViewModelInstanceNumber propertyValue="1" viewModelPropertyId="0:42"/>
+            <ViewModelInstanceBoolean propertyValue="false" viewModelPropertyId="0:43"/>
+        </ViewModelInstance>
+    </ViewModel>
+
+    <ViewModel defaultInstanceId="0:113" name="CoachCue" id="0:110">
+        <ViewModelPropertyBoolean name="reveal" id="0:112"/>
+        <ViewModelInstance exports="true" name="Default" id="0:113">
+            <ViewModelInstanceBoolean propertyValue="false" viewModelPropertyId="0:112"/>
+        </ViewModelInstance>
+    </ViewModel>
+
+    <ViewModel defaultInstanceId="0:212" name="MachineMood" id="0:210">
+        <ViewModelPropertyNumber name="mood" id="0:211"/>
+        <ViewModelInstance exports="true" name="Default" id="0:212">
+            <ViewModelInstanceNumber propertyValue="1" viewModelPropertyId="0:211"/>
+        </ViewModelInstance>
+    </ViewModel>
+
+    <ViewModel defaultInstanceId="0:342" name="Sting" id="0:340">
+        <ViewModelPropertyBoolean name="fire" id="0:341"/>
+        <ViewModelInstance exports="true" name="Default" id="0:342">
+            <ViewModelInstanceBoolean propertyValue="false" viewModelPropertyId="0:341"/>
+        </ViewModelInstance>
+    </ViewModel>
+
+    <!-- ── converters ─────────────────────────────────────────────── -->
+
+</Rive>

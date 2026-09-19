@@ -17,6 +17,8 @@ const ANCHORS: Record<CoachAnchor, React.CSSProperties> = {
 type Props = {
   cue: CoachCue;
   onDismiss: (id: CoachCueId) => void;
+  /** Optional ink-splash rendered behind the kanji (Rive artboard). */
+  splash?: React.ReactNode;
 };
 
 /**
@@ -40,6 +42,20 @@ export function consumeCoachReplayClick(event: { stopPropagation: () => void }, 
  */
 export function TableCoach(props: Props) {
   const { cue, onDismiss } = props;
+  const kanji = (
+    <span
+      aria-hidden="true"
+      style={{
+        fontFamily: "'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif",
+        fontSize: typography.size.xl,
+        lineHeight: 1.1,
+        color: colors.accent.primaryHover,
+        letterSpacing: "0.12em",
+      }}
+    >
+      {cue.kanji}
+    </span>
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => onDismiss(cue.id), cue.autoDismissSec * 1000);
@@ -71,18 +87,12 @@ export function TableCoach(props: Props) {
           animation: "fadeIn 200ms ease",
         }}
       >
-        <span
-          aria-hidden="true"
-          style={{
-            fontFamily: "'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif",
-            fontSize: typography.size.xl,
-            lineHeight: 1.1,
-            color: colors.accent.primaryHover,
-            letterSpacing: "0.12em",
-          }}
-        >
-          {cue.kanji}
-        </span>
+        {props.splash ? (
+          <span aria-hidden="true" style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 34 }}>
+            <span style={{ position: "absolute", inset: -14, pointerEvents: "none" }}>{props.splash}</span>
+            {kanji}
+          </span>
+        ) : kanji}
 
         <div role="status" aria-live="polite" style={{ flex: 1, textAlign: "left" }}>
           <div

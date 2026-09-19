@@ -21,6 +21,7 @@ import { useIsSmallScreen } from "@/hooks/use-media-query";
 import { KanjiWatermark } from "./ui/KanjiWatermark";
 import { type WorldReaction } from "@/presentation/world-reactor";
 import { isKamikazeMode, getLastTaunt, getTickCount, getTimeScale, consumeMomentumShift, getMachineMood, consumeKillCam, setKillCamEnabled, isShotCallMode, getShotVariant, getShotPhase, getShotAimedLane, getShotGuardLane, getShotMeterPosition, getShotLanes, getLastShotResult, getShotCanRelease, getShotFeintStage, shotRelease, type ShotResult, isStoryMode, isStoryFrozen, getStoryState, getStoryTargets, isStoryBallHeld, storyAction, launchStoryBall, setFlipperState } from "@/model/game";
+import { RiveArtboard } from "@/game/ui/RiveArtboard";
 import { ActorTypes } from "@/definitions/game";
 import { createStoryState, type StoryState } from "@/model/story-run";
 import type { StoryTarget } from "@/model/story-table";
@@ -381,6 +382,11 @@ export default function GameMount(props: Props) {
   const [machineSaving, setMachineSaving] = useState(false);
   const [kamikazeMessage, setKamikazeMessage] = useState<string | null>(null);
   const [machineMood, setMachineMood] = useState<string>("calm");
+  // Rive mood index: calm 0, wary 1, smug 2, desperate 3, enraged 4, grieving 5.
+  const moodIndex = useMemo(() => {
+    const order = ["calm", "wary", "smug", "desperate", "enraged", "grieving"];
+    return Math.max(0, order.indexOf(machineMood));
+  }, [machineMood]);
   const [shotHud, setShotHud] = useState<{ variant: "feint" | "precision"; phase: string; aimedLane: number | null; guardLane: number | null; meter: number; lanes: number; lastResult: ShotResult | null; canRelease: boolean; feintStage: string; active: boolean }>(
     { variant: "feint", phase: "aiming", aimedLane: null, guardLane: null, meter: 0, lanes: 2, lastResult: null, canRelease: false, feintStage: "idle", active: false }
   );
@@ -417,6 +423,10 @@ export default function GameMount(props: Props) {
   const storyRun = Boolean(props.story) && props.gameMode === "classic";
   const [storyHud, setStoryHud] = useState<StoryState | null>(null);
   const [storyHeld, setStoryHeld] = useState(false);
+  // Rive gauge readiness: while false (WASM loading / reduced motion / failure),
+  // the DOM pips + button render as the fallback. While true, the gauge
+  // artboard overlays them (same geometry, driven by the same state).
+  const [riveGaugeReady, setRiveGaugeReady] = useState(false);
   const [storyTargets, setStoryTargets] = useState<StoryTarget[]>([]);
   const [trialEncounter, setTrialEncounter] = useState<number | null>(null);
   // A1: mood drives the taunt overlay colour and the named state in the HUD.
@@ -1100,21 +1110,42 @@ export default function GameMount(props: Props) {
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
           <span>Integrity {"●".repeat(storyHud.integrity)}{"○".repeat(Math.max(0, 3 - storyHud.integrity))}</span>
           <span aria-label={`Mana ${storyHud.mana} of 3`} style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
-            <span style={{ opacity: 0.8 }}>Mana</span>
-            {Array.from({ length: 3 }, (_, i) => (
+            <span style={{ opacity: 0.8, marginRight: 4 }}>Mana</span>
+            <span style={{ position: "relative", width: 84, height: 24, display: "inline-block" }}>
               <span
-                key={i}
                 aria-hidden
                 style={{
-                  width: 9, height: 9, borderRadius: "50%",
-                  display: "inline-block",
-                  border: "1px solid rgba(103,232,249,0.8)",
-                  background: i < storyHud.mana ? "rgba(103,232,249,0.9)" : "transparent",
-                  boxShadow: i < storyHud.mana ? "0 0 6px rgba(103,232,249,0.7)" : "none",
-                  transition: "background 160ms ease, box-shadow 160ms ease",
+                  position: "absolute", inset: 0,
+                  display: "inline-flex", alignItems: "center", gap: 5,
+                  visibility: riveGaugeReady ? "hidden" : undefined,
                 }}
-              />
-            ))}
+              >
+                {Array.from({ length: 3 }, (_, i) => (
+                  <span
+                    key={i}
+                    style={{
+                      width: 11, height: 11, borderRadius: "50%",
+                      display: "inline-block",
+                      border: "1px solid rgba(103,232,249,0.8)",
+                      background: i < storyHud.mana ? "rgba(103,232,249,0.9)" : "transparent",
+                      boxShadow: i < storyHud.mana ? "0 0 6px rgba(103,232,249,0.7)" : "none",
+                      transition: "background 160ms ease, box-shadow 160ms ease",
+                    }}
+                  />
+                ))}
+              </span>
+              {riveGaugeReady && (
+                <span style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+                  <RiveArtboard
+                    src="/rive/hud.riv"
+                    artboard="hud_gauge"
+                    data={{ mana: storyHud.mana, armed: storyHud.waterArmed }}
+                    style={{ width: "100%", height: "100%" }}
+                    onReady={setRiveGaugeReady}
+                  />
+                </span>
+              )}
+            </span>
           </span>
           <span>{storyHud.learned ? (storyHud.waterArmed ? "Water armed" : "Water learned") : "No blessing"}</span>
           <span>Seals {storyHud.seals.length}/2</span>
@@ -1277,6 +1308,25 @@ export default function GameMount(props: Props) {
           </>
         )}
         <CelebrationParticles active={victoryConfetti} />
+        {/* Victory stinger: torii rises, petals fly. Pulse fires once per
+            victory; the artboard mounts only while the celebration is up. */}
+        {victoryConfetti && (
+          <div
+            aria-hidden
+            style={{
+              position: "absolute", top: "50%", left: "50%",
+              transform: "translate(-50%, -50%)",
+              width: 320, height: 180, zIndex: 12, pointerEvents: "none",
+            }}
+          >
+            <RiveArtboard
+              src="/rive/hud.riv"
+              artboard="victory_sting"
+              pulse="fire"
+              style={{ width: "100%", height: "100%" }}
+            />
+          </div>
+        )}
         {ripples.map((r) => (
           <div
             key={r.id}
@@ -1536,8 +1586,40 @@ export default function GameMount(props: Props) {
             {kamikazeMessage}
           </div>
         )}
+        {/* The machine's face: a Rive sigil whose grin widens as the machine
+            gains the upper hand (mood 0..5, artboard states). DOM taunt text
+            above still carries the words; this carries the *attitude*. */}
+        {kamikazeActive && (
+          <div aria-hidden style={{ position: "absolute", top: 8, right: 8, width: 56, height: 56, zIndex: 9, pointerEvents: "none", opacity: 0.9 }}>
+            <RiveArtboard
+              src="/rive/hud.riv"
+              artboard="mood_sigil"
+              data={{ mood: moodIndex }}
+              style={{ width: "100%", height: "100%" }}
+              ariaLabel={`Machine mood: ${machineMood}`}
+            />
+          </div>
+        )}
         {/* First-run coach: the teaching, on the table, while the ball is live. */}
-        {coachCue && <TableCoach cue={coachCue} onDismiss={dismissCoachCue} />}
+        {coachCue && (
+          <TableCoach
+            cue={coachCue}
+            onDismiss={dismissCoachCue}
+            splash={coachCue.kanji ? (
+              <span
+                key={coachCue.id}
+                style={{ display: "block", width: "100%", height: "100%" }}
+              >
+                <RiveArtboard
+                  src="/rive/hud.riv"
+                  artboard="coach_kanji"
+                  pulse="reveal"
+                  style={{ width: "100%", height: "100%" }}
+                />
+              </span>
+            ) : undefined}
+          />
+        )}
         {/* …and the standing way to ask for it again (tap) or for the whole
             reference (hold). */}
         {!mountError && <CoachReplayChip onReplay={replayCoach} onOpenGuide={props.onOpenControls} />}
