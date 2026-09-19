@@ -38,8 +38,10 @@ export function attachStoryTable(opts: {
     seals: [Matter.Body, Matter.Body];
     onChange: (state: StoryState) => void;
     onFreeze: (frozen: boolean) => void;
+    /** View-layer hook for feedback (haptics), fired on every accepted transition. */
+    onEvent?: (next: StoryState) => void;
 }): StoryTable {
-    const { engine, seals, onChange, onFreeze } = opts;
+    const { engine, seals, onChange, onFreeze, onEvent } = opts;
     let state = opts.state;
     let destroyed = false;
     let ball: Matter.Body | null = null;
@@ -75,6 +77,9 @@ export function attachStoryTable(opts: {
         if (next === state) return;
         const wasPlaying = state.phase === "playing";
         state = next;
+        // The model must not pull DOM/haptics code into its graph, so the view
+        // subscribes: same seam as onFreeze.
+        onEvent?.(next);
         const playing = next.phase === "playing";
         const terminal = next.phase === "lost" || next.phase === "won";
         gateBody.isSensor = next.seals.length === 2;

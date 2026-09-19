@@ -116,6 +116,16 @@ const SHOT_RELEASE: Record<ShotReleaseQuality, HapticEvent> = {
   neutral: { pattern: 16, rank: 1, gap: 120, visual: 1 },
 };
 
+/**
+ * Story-mode events. Same contract as the arcade verbs: a distinct shape per
+ * moment, felt once and understood. Story otherwise shares every generic
+ * pattern (flip/bump/nudge/charge) through the shared gesture layer.
+ */
+const STORY_CAPTURE: HapticEvent = { pattern: [10, 40, 10], rank: 1, gap: 400, visual: 1 };
+const STORY_ARM: HapticEvent = { pattern: [14, 30, 26], rank: 2, gap: 200, visual: 1 };
+const STORY_SEAL: HapticEvent = { pattern: [30, 40, 50], rank: 2, gap: 400, hold: 120, visual: 2 };
+const STORY_GATE: HapticEvent = { pattern: [12, 36, 18, 36, 60], rank: 3, gap: 600, hold: 160, visual: 2 };
+
 export function createHaptics(options: {
   /** `null` models a device without the API (iOS Safari). */
   vibrate: ((pattern: HapticPattern) => void) | null;
@@ -192,6 +202,10 @@ export function createHaptics(options: {
     tiltDenied: () => fire("tiltDenied", TILT_DENIED),
     tiltWarning: (level: number) => fire("tiltWarning", tiltWarningPattern(level)),
     shotReleased: (quality: ShotReleaseQuality) => fire(`shot:${quality}`, SHOT_RELEASE[quality]),
+    storyCapture: () => fire("storyCapture", STORY_CAPTURE),
+    storyArm: () => fire("storyArm", STORY_ARM),
+    storySeal: () => fire("storySeal", STORY_SEAL),
+    storyGate: () => fire("storyGate", STORY_GATE),
   };
 }
 
@@ -246,3 +260,7 @@ export const tilt = () => engine.tilt();
 export const tiltDenied = () => engine.tiltDenied();
 export const tiltWarning = (level: number) => engine.tiltWarning(level);
 export const shotReleased = (quality: ShotReleaseQuality) => engine.shotReleased(quality);
+export const storyCapture = () => engine.storyCapture();
+export const storyArm = () => engine.storyArm();
+export const storySeal = () => engine.storySeal();
+export const storyGate = () => engine.storyGate();

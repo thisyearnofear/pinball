@@ -1086,7 +1086,7 @@ export default function GameMount(props: Props) {
           Launch (Space)
         </button>
         <span style={{ fontSize: 11, opacity: 0.65 }}>
-          Tap/hold to guide · ← → flippers · Space launch/bump · W water
+          Tap/hold to guide or launch · swipe up to arm Water · ← → flippers · Space launch + charge
         </span>
       </div>
     </div>

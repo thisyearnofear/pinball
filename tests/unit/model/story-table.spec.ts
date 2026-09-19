@@ -12,15 +12,17 @@ function makeWorld(state: StoryState = createStoryState(false)) {
     Matter.Composite.add(engine.world, [ball, west, east]);
     const changes: StoryState[] = [];
     const freezes: boolean[] = [];
+    const events: string[] = [];
     const table = attachStoryTable({
         engine,
         state,
         seals: [west, east],
         onChange: (s) => changes.push(s),
         onFreeze: (f) => freezes.push(f),
+        onEvent: (s) => events.push(s.phase),
     });
     table.setBall(ball);
-    return { engine, ball, west, east, table, changes, freezes };
+    return { engine, ball, west, east, table, changes, freezes, events };
 }
 
 let tick = 0;
@@ -299,6 +301,23 @@ describe("attachStoryTable", () => {
             expect(table.isHeld()).toBe(true);
             advance(engine, table, 120);
             expect(ball.position.y).toBeCloseTo(1100);
+        });
+    });
+
+    describe("onEvent feedback hook", () => {
+        it("fires on accepted transitions and stays silent when the reducer is a no-op", () => {
+            world = makeWorld();
+            const { table } = world;
+            table.action({ type: "arm-water" }); // unlearned: notice-only change, still a new object
+            expect(world.events.length).toBeGreaterThan(0);
+            const before = world.events.length;
+            table.action({ type: "gate" }); // sealed gate: notice change only, no phase flip
+            expect(world.events.length).toBe(before + 1);
+            // A reducer no-op (already-won run) must not fire.
+            table.action({ type: "retry" });
+            const after = world.events.length;
+            table.action({ type: "shrine" });
+            expect(world.events.length).toBe(after + 1);
         });
     });
 });

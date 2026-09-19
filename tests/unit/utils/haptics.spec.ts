@@ -34,6 +34,37 @@ describe("haptics engine", () => {
     expect(calls).toEqual([15]);
   });
 
+  it("story events fire four distinct shapes", () => {
+    const { engine, calls } = setup();
+    engine.storyCapture();
+    engine.storyArm();
+    engine.storySeal();
+    engine.storyGate();
+    const shapes = new Set(calls.map((c) => JSON.stringify(c)));
+    expect(shapes.size).toBe(4);
+  });
+
+  it("a seal landing inside a gate beat's ring is dropped, then lands after", () => {
+    const { engine, calls, advance } = setup();
+    engine.storyGate();
+    engine.storySeal(); // rank 2 under storyGate's rank-3 160ms hold
+    expect(calls).toEqual([[12, 36, 18, 36, 60]]);
+    advance(200);
+    engine.storySeal();
+    expect(calls.length).toBe(2);
+  });
+
+  it("capture repeats only after its gap, like every other texture", () => {
+    const { engine, calls, advance } = setup();
+    engine.storyCapture();
+    advance(100);
+    engine.storyCapture(); // inside the 400ms gap
+    expect(calls.length).toBe(1);
+    advance(400);
+    engine.storyCapture();
+    expect(calls.length).toBe(2);
+  });
+
   it("swallows a repeated texture event inside its gap", () => {
     const { engine, calls, advance } = setup();
     engine.flip();

@@ -64,6 +64,13 @@ describe("storyReducer", () => {
     expect(failed.seals).toEqual(["west"]);
   });
 
+  it("a failed trial's notice coaches the water/wind order", () => {
+    const lesson = storyReducer(createStoryState(false), { type: "shrine" });
+    const failed = storyReducer(lesson, { type: "trial-result", encounterId: lesson.encounterId, outcome: "failed" });
+    expect(failed.notice).toMatch(/Integrity -1/);
+    expect(failed.notice).toMatch(/Water first, then wind/);
+  });
+
   it("a failed trial at one integrity loses the run", () => {
     const lesson = storyReducer({ ...createStoryState(false), integrity: 1 }, { type: "shrine" });
     const failed = storyReducer(lesson, { type: "trial-result", encounterId: lesson.encounterId, outcome: "failed" });

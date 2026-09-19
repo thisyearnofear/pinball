@@ -480,6 +480,14 @@ export const init = async (
                     }
                 }
             },
+            onEvent: (next) => {
+                // Story speaks the same haptic vocabulary as the arcade: each
+                // milestone is felt once and understood, not read off the HUD.
+                if (next.phase === "lesson") haptics.storyCapture();
+                else if (next.waterArmed) haptics.storyArm();
+                else if (next.phase === "gate-opening") haptics.storyGate();
+                else if (next.seals.length > (gameRef?.story?.seals.length ?? 0)) haptics.storySeal();
+            },
         });
     }
 

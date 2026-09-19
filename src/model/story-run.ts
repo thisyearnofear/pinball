@@ -24,6 +24,15 @@ export function createStoryState(learned = false): StoryState {
     };
 }
 
+/**
+ * Coaching line for a lost trial, appended to the integrity notice. The only
+ * failing answer is WIND-first (WATER is correct at step 0), so the coaching
+ * targets the actual misconception: wind FEEDS fire.
+ */
+function trialCoaching(): string {
+    return "Wind feeds the flame — water is what quenches it. Water first, then wind.";
+}
+
 export function storyReducer(s: StoryState, e: StoryEvent): StoryState {
     if (e.type === "retry") return { ...createStoryState(s.learned), encounterId: s.encounterId + 1 };
     if (s.phase === "won" || s.phase === "lost") return s;
@@ -44,8 +53,8 @@ export function storyReducer(s: StoryState, e: StoryEvent): StoryState {
                 integrity,
                 phase: integrity === 0 ? "lost" : "playing",
                 notice: integrity === 0
-                    ? "The trial exhausted your last integrity. Retry with what you learned."
-                    : "The trial ended. Integrity -1; your main-table progress remains.",
+                    ? `The trial exhausted your last integrity. Retry with what you learned. ${trialCoaching()}`
+                    : `The trial ended. Integrity -1; your main-table progress remains. ${trialCoaching()}`,
             };
         }
         return {

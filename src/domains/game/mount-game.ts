@@ -5,7 +5,7 @@ import type { Size } from "zcanvas";
 import type { GameDef, GameMessages } from "@/definitions/game";
 import { ActorTypes, FRAME_RATE, GameSounds } from "@/definitions/game";
 
-import { init, scaleCanvas, setFlipperState, bumpTable, getBumpLevel, update, panViewport, setPaused, getBallPosition, getBallCount, nudgeBallToward, isKamikazeMode, isStoryMode, storyAction, queueDive, deployStoredMunition, triggerTiltLock, hasStoredMunition, isShotCallMode, shotAim, shotRelease, getShotLanes } from "@/model/game";
+import { init, scaleCanvas, setFlipperState, bumpTable, getBumpLevel, update, panViewport, setPaused, getBallPosition, getBallCount, nudgeBallToward, isKamikazeMode, isStoryMode, isStoryBallHeld, storyAction, launchStoryBall, queueDive, deployStoredMunition, triggerTiltLock, hasStoredMunition, isShotCallMode, shotAim, shotRelease, getShotLanes } from "@/model/game";
 import SpriteCache from "@/utils/sprite-cache";
 import { createInputController, attachKamikazeGestures } from "@/utils/input-controller";
 import * as haptics from "@/utils/haptics";
@@ -206,7 +206,11 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     // nothing, while a keyboard player had no nudge verb at all. Space is the
     // charge-nudge key in this mode instead.
     onBump: () => {
-      if (isKamikazeMode()) return;
+      // Story owns Space: launch on hold-release via the gesture controller's
+      // keyboard charge, or a charged nudge while the ball is live. Feeding
+      // story Space into bumpTable made a held flipper-era habit tilt the
+      // table and cost integrity for a key that was only supposed to launch.
+      if (isStoryMode() || isKamikazeMode()) return;
       bumpHandler();
     },
     onPan: (delta: number) => panViewport(delta),
@@ -220,8 +224,10 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     },
     onNudge: (x: number, y: number) => {
       // Kamikaze nudging is owned by the pointer gesture controller
-      // (charged nudge / dive / deploy); skip the legacy click path.
-      if (isKamikazeMode()) return;
+      // (charged nudge / dive / deploy); skip the legacy click path. Story is
+      // too — otherwise a tap fired both this and the gesture controller and
+      // nudged the ball twice.
+      if (isKamikazeMode() || isStoryMode()) return;
       const world = clientToWorld(x, y);
       if (!world) return;
       nudgeBallToward(world.x, world.y);
@@ -262,6 +268,15 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     const world =
       clientX === null || clientY === null ? keyboardAim() : clientToWorld(clientX, clientY);
     if (!world) return;
+    // Story: with the ball held, this same verb is the launch — one release,
+    // one motion, whichever mode you came from. bumpTable is story-noop, so
+    // without this the held ball would have nothing to launch it.
+    if (isStoryMode() && isStoryBallHeld()) {
+      launchStoryBall();
+      haptics.bump();
+      markFirstAction();
+      return;
+    }
     nudgeBallToward(world.x, world.y, power);
     // A held nudge lands heavier the longer it was held; a tap stays a tap. The
     // difference is felt rather than read off the power readout.
@@ -283,7 +298,13 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     markFirstAction();
   }
   function dive() {
-    if (!isKamikazeMode() || isShotCallMode()) return;
+    if (!isKamikazeMode()) {
+      // Story has no dive verb. A swipe the controller consumes must still say
+      // "no" — silence reads as a broken screen (same principle as tiltDenied).
+      haptics.tiltDenied();
+      return;
+    }
+    if (isShotCallMode()) return;
     queueDive();
     haptics.bump();
     playVerbDive();
@@ -291,7 +312,12 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     opts.onDive?.();
   }
   function deploy() {
-    if (!isKamikazeMode() || isShotCallMode()) return;
+    if (!isKamikazeMode()) {
+      // Story owns swipes but not this verb; the finger must hear a no.
+      haptics.tiltDenied();
+      return;
+    }
+    if (isShotCallMode()) return;
     const type = deployStoredMunition();
     if (type !== null) {
       haptics.flip();
@@ -301,7 +327,13 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     }
   }
   function tiltLock() {
-    if (!isKamikazeMode() || isShotCallMode()) return;
+    if (!isKamikazeMode()) {
+      // Story: swipe-up is how touch players arm Water — the only other mode
+      // verb that makes sense mid-flight, and already the trial's own gesture.
+      storyAction({ type: "arm-water" });
+      return;
+    }
+    if (isShotCallMode()) return;
     const fired = triggerTiltLock();
     if (fired) {
       haptics.nudge();
@@ -450,9 +482,11 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
           },
           onChargeTick: (power) => opts.onCharge?.(power),
           onChargeEnd: () => opts.onCharge?.(null),
-          // In shot-calling, Space releases the shot (handleKamikazeKey); a
-          // charge starting on the same key would swallow the release.
-          canKeyboardCharge: () => !isShotCallMode() && !isStoryMode(),
+          // Story reuses the whole charge vocabulary: Space (or a held touch)
+          // launches the held ball and, once live, charges an aimed nudge —
+          // the same keyboard verb arcade players learn. bumpTable is no-op'd
+          // for story above, so the held-Space tilt trap is gone with it.
+          canKeyboardCharge: () => !isShotCallMode(),
           shouldHandle: () => (isKamikazeMode() || isStoryMode()) && !gameRef.paused && (opts.inputEnabled?.() ?? true),
         });
       }
