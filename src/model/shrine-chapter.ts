@@ -102,3 +102,74 @@ export function saveLearnedBlessing(learned: boolean): void {
     // storage may be denied; the blessing still lives in session state
   }
 }
+
+// ── Chapter progress (Tier 3: continue the story) ──────────────
+
+/** What survives between sessions: knowledge and quenched seals, never mana. */
+export type ChapterProgress = { learned: boolean; seals: SealId[]; won: boolean };
+export const CHAPTER_PROGRESS_KEY = "pinball_water_shrine_progress_v1";
+
+/**
+ * Persist the run after every accepted transition so the lobby can offer to
+ * continue it. Terminal phases follow run semantics: a win clears everything,
+ * and a shattered ball keeps only knowledge — exactly what a retry keeps — so
+ * the lobby never offers progress a retry would not honour.
+ */
+export function saveChapterProgress(s: ChapterState): void {
+  try {
+    if (s.phase === "won") {
+      clearChapterProgress();
+      return;
+    }
+    const seals = s.phase === "lost" ? [] : s.seals;
+    setInStorage(CHAPTER_PROGRESS_KEY, JSON.stringify({ learned: s.learned, seals, won: false }));
+  } catch {
+    // storage may be denied; progress still lives for this session
+  }
+}
+
+export function clearChapterProgress(): void {
+  try {
+    setInStorage(CHAPTER_PROGRESS_KEY, JSON.stringify(null));
+  } catch {
+    // storage may be denied
+  }
+}
+
+/** Corrupt, impossible, or finished progress reads as no progress at all. */
+export function loadChapterProgress(): ChapterProgress | null {
+  try {
+    const raw = getFromStorage(CHAPTER_PROGRESS_KEY);
+    if (!raw || raw === "null") return null;
+    const parsed = JSON.parse(raw) as Partial<ChapterProgress> | null;
+    if (!parsed || typeof parsed !== "object" || parsed.won) return null;
+    const learned = parsed.learned === true;
+    const seals = Array.isArray(parsed.seals)
+      ? parsed.seals.filter((id): id is SealId => id === "west" || id === "east")
+      : [];
+    // Seals cannot exist without the blessing, and an unlearned run has no
+    // durable progress to offer — anything else is corrupt.
+    if (!learned) return null;
+    return { learned, seals, won: false };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The state a story run starts from: mid-run progress when there is any,
+ * otherwise the plain blessing-aware start. Mana is never persisted — the
+ * shrine refills it — so a resume grants enough to arm for the remaining
+ * seals rather than soft-locking the player behind a detour.
+ */
+export function resumeChapterState(p: ChapterProgress | null): ChapterState {
+  if (!p || !p.learned) return createChapter(loadLearnedBlessing());
+  return {
+    ...createChapter(true),
+    seals: p.seals,
+    mana: Math.max(1, 3 - p.seals.length),
+    notice: p.seals.length === 1
+      ? "Your journey resumes: one seal already quenched. Arm Water and quench the other."
+      : "Your journey resumes. Arm Water and quench both fire seals.",
+  };
+}

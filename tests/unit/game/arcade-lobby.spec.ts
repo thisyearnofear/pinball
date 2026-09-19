@@ -94,4 +94,26 @@ describe("ArcadeLobby", () => {
         expect(markup).toContain("Change setup · Classic");
         expect(markup).not.toContain("machine: hard");
     });
+
+    it("offers to continue the story when durable progress exists, naming its state", () => {
+        const markup = html({ onStory: noop, storyProgress: { learned: true, seals: ["west"], won: false } });
+        expect(markup).toContain("Continue the Story");
+        expect(markup).toContain("1 of 2 seals quenched");
+        // A resumable card is a button, not the cold /chapter link.
+        expect(markup).not.toContain('href="/chapter"');
+    });
+
+    it("pitches a fresh story when there is no progress to continue", () => {
+        const markup = html({ onStory: noop, storyProgress: null });
+        expect(markup).toContain("Play Story");
+        expect(markup).not.toContain("Continue the Story");
+    });
+
+    it("keeps the story card reachable even while the lobby loads", () => {
+        const loading = html({ loading: true, storyProgress: { learned: true, seals: [], won: false } });
+        expect(loading).toContain("The Water Shrine");
+        // Loading has no progress read yet — it must not promise a continue
+        // it cannot back, so it renders the neutral pitch.
+        expect(loading).toContain("Play Story");
+    });
 });

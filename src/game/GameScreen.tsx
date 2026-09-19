@@ -14,6 +14,7 @@ import { parseChallengeUrl, didBeatChallenge, type ChallengeInvite } from "@/uti
 import { STORED_WORLD_ID } from "@/definitions/settings";
 import { START_TABLE_INDEX } from "@/definitions/tables";
 import type { AIDifficulty } from "@/model/kamikaze";
+import { loadChapterProgress, type ChapterProgress } from "@/model/shrine-chapter";
 
 import { colors, spacing } from "@/theme/tokens";
 import { useWorldTheme, getWorldAccent } from "@/hooks/use-world-theme";
@@ -367,6 +368,14 @@ function GameScreenInner({ initialStory = false }: { initialStory?: boolean }) {
 
   const pausedEffective = view === "paused" || activeModal !== null || showCelebration || showReplay || submissionStep !== null || showKamiTrials;
 
+  // Tier 3: the lobby's chapter card reflects durable story progress, so a
+  // player who leaves mid-run is offered Continue rather than a cold restart.
+  // Re-read whenever the lobby re-appears (view changes) or a new run starts.
+  const storyProgress = useMemo<ChapterProgress | null>(
+    () => (view === "lobby" ? loadChapterProgress() : null),
+    [view, runKey],
+  );
+
   // Ghost racing: fetch the tournament leader's replay for each run. Skip when
   // the leader's replay is for a different mode or the leader is the player.
   useEffect(() => {
@@ -560,6 +569,7 @@ function GameScreenInner({ initialStory = false }: { initialStory?: boolean }) {
                 onStory={startStory}
                 onPlayDaily={startDailyChallenge}
                 progress={progress}
+                storyProgress={storyProgress}
                 pendingChallenge={pendingChallenge}
                 onAcceptChallenge={acceptChallenge}
                 onDismissChallenge={() => setPendingChallenge(null)}

@@ -66,7 +66,7 @@ import { setKamikazeMode as setFlipperKamikazeMode } from "@/renderers/flipper-r
 import { recordReplayEvent, recordReplayTraceSample } from "@/model/replay-recorder";
 import { attachStoryTable, type StoryTable } from "@/model/story-table";
 import type { StoryEvent } from "@/model/story-run";
-import { saveLearnedBlessing } from "@/model/shrine-chapter";
+import { saveLearnedBlessing, saveChapterProgress } from "@/model/shrine-chapter";
 
 type IRoundEndHandler = (readyCallback: () => void, timeout: number) => void;
 type IMessageHandler = (message: GameMessages, optDuration?: number) => void;
@@ -470,6 +470,9 @@ export const init = async (
                 gameRef.balls = next.integrity;
                 gameRef.active = next.phase !== "won" && next.phase !== "lost";
                 if (learnedNow) saveLearnedBlessing(true);
+                // Tier 3: persist after every accepted transition so the lobby
+                // can offer to continue where the run actually stands.
+                saveChapterProgress(next);
                 if (next.phase === "gate-opening" || next.phase === "won") playFurinChime();
             },
             onFreeze: (frozen) => {

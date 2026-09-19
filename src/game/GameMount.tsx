@@ -24,7 +24,7 @@ import { isKamikazeMode, getLastTaunt, getTickCount, getTimeScale, consumeMoment
 import { ActorTypes } from "@/definitions/game";
 import { createStoryState, type StoryState } from "@/model/story-run";
 import type { StoryTarget } from "@/model/story-table";
-import { loadLearnedBlessing, chapterObjective } from "@/model/shrine-chapter";
+import { loadLearnedBlessing, loadChapterProgress, saveChapterProgress, chapterObjective } from "@/model/shrine-chapter";
 import ShrineChapter from "./chapter/ShrineChapter";
 import { createKamikazeState, POWERUP_NAMES, type AIDifficulty } from "@/model/kamikaze";
 import type { PowerUpSide } from "@/definitions/game";
@@ -83,7 +83,10 @@ function createRunGame(opts: {
     worldPhysics: opts.story ? undefined : getWorldById(opts.worldId ?? "")?.physics,
     controlScheme: opts.controlScheme,
     aiDifficulty: opts.aiDifficulty,
-    story: opts.story ? createStoryState(loadLearnedBlessing()) : undefined,
+    // Resume durable story progress when the run is a fresh story start; a
+    // retry calls createStoryState again through the reducer, honouring the
+    // same saved progress so retry and lobby-continue never disagree.
+    story: opts.story ? createStoryState(loadLearnedBlessing(), loadChapterProgress()) : undefined,
   };
 }
 

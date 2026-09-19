@@ -1,6 +1,9 @@
 import {
     chapterReducer,
     createChapter,
+    loadChapterProgress,
+    resumeChapterState,
+    type ChapterProgress,
     type ChapterState,
     type ChapterEvent,
 } from "@/model/shrine-chapter";
@@ -14,7 +17,11 @@ export type StoryEvent =
     | { type: "trial-result"; encounterId: number; outcome: TrialOutcome }
     | { type: "refill"; encounterId: number };
 
-export function createStoryState(learned = false): StoryState {
+export function createStoryState(learned = false, progress: ChapterProgress | null = null): StoryState {
+    if (progress?.learned) {
+        // Mid-run resume: seals and knowledge survive, mana is granted fresh.
+        return { ...resumeChapterState(progress), encounterId: 0 };
+    }
     return {
         ...createChapter(learned),
         encounterId: 0,
@@ -34,7 +41,11 @@ function trialCoaching(): string {
 }
 
 export function storyReducer(s: StoryState, e: StoryEvent): StoryState {
-    if (e.type === "retry") return { ...createStoryState(s.learned), encounterId: s.encounterId + 1 };
+    // Retry honours durable progress: what the lobby's Continue would restore,
+    // a retry restores too, so the two paths never disagree.
+    if (e.type === "retry") {
+        return { ...createStoryState(s.learned, loadChapterProgress()), encounterId: s.encounterId + 1 };
+    }
     if (s.phase === "won" || s.phase === "lost") return s;
     if (e.type === "trial-result" || e.type === "refill") {
         if (s.phase !== "lesson" || e.encounterId !== s.encounterId) return s;

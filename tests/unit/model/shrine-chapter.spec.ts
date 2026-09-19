@@ -2,8 +2,10 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   CHAPTER_MEMORY_KEY, chapterObjective, chapterReducer, createChapter,
   loadLearnedBlessing, saveLearnedBlessing,
+  clearChapterProgress, loadChapterProgress, saveChapterProgress, resumeChapterState,
   type ChapterState,
 } from "@/model/shrine-chapter";
+import { createStoryState, storyReducer } from "@/model/story-run";
 
 const reduce = (s: ChapterState, ...events: Parameters<typeof chapterReducer>[1][]) =>
   events.reduce(chapterReducer, s);
@@ -180,5 +182,80 @@ describe("blessing persistence", () => {
     expect(loadLearnedBlessing()).toBe(false);
     expect(() => saveLearnedBlessing(true)).not.toThrow();
     if (descriptor) Object.defineProperty(window, "localStorage", descriptor);
+  });
+});
+
+describe("chapter progress persistence (continue the story)", () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it("round-trips mid-run progress: learned flag and quenched seals", () => {
+    expect(loadChapterProgress()).toBeNull();
+    let s = learn(createChapter());
+    s = chapterReducer(s, { type: "continue" });
+    saveChapterProgress(s);
+    expect(loadChapterProgress()).toEqual({ learned: true, seals: [], won: false });
+    const armed = chapterReducer(s, { type: "arm-water" });
+    const quenched = chapterReducer(armed, { type: "seal", id: "west" });
+    saveChapterProgress(quenched);
+    expect(loadChapterProgress()).toEqual({ learned: true, seals: ["west"], won: false });
+  });
+
+  it("follows run semantics: a win clears progress and a shattered ball keeps only knowledge", () => {
+    let s = learn(createChapter());
+    s = chapterReducer(s, { type: "continue" });
+    s = reduce(s, { type: "arm-water" }, { type: "seal", id: "west" }, { type: "arm-water" }, { type: "seal", id: "east" });
+    saveChapterProgress(s);
+    expect(loadChapterProgress()!.seals).toEqual(["west", "east"]);
+    const won = reduce(s, { type: "continue" }, { type: "gate" });
+    expect(won.phase).toBe("won");
+    saveChapterProgress(won);
+    expect(loadChapterProgress()).toBeNull();
+    const shattered = reduce(learn(createChapter()), { type: "continue" }, { type: "drain" }, { type: "drain" }, { type: "drain" });
+    expect(shattered.phase).toBe("lost");
+    saveChapterProgress(shattered);
+    const after = loadChapterProgress();
+    expect(after).toEqual({ learned: true, seals: [], won: false });
+  });
+
+  it("reads corrupt, impossible, or finished data as no progress", () => {
+    const seed = (v: unknown) => window.localStorage.setItem("ps_data", JSON.stringify({ ["pinball_water_shrine_progress_v1"]: JSON.stringify(v) }));
+    saveChapterProgress({ ...createChapter(true), phase: "won" });
+    expect(loadChapterProgress()).toBeNull();
+    seed("{not json");
+    expect(loadChapterProgress()).toBeNull();
+    seed({ learned: false, seals: ["west"], won: false });
+    expect(loadChapterProgress()).toBeNull();
+    seed({ learned: true, seals: ["north"], won: false });
+    expect(loadChapterProgress()).toEqual({ learned: true, seals: [], won: false });
+    clearChapterProgress();
+    expect(loadChapterProgress()).toBeNull();
+  });
+
+  it("resume grants mana for the remaining seals and never soft-locks", () => {
+    expect(resumeChapterState(null).mana).toBe(0);
+    expect(resumeChapterState(null).learned).toBe(loadLearnedBlessing());
+    const resumedNoSeals = resumeChapterState({ learned: true, seals: [], won: false });
+    expect(resumedNoSeals.mana).toBe(3);
+    expect(resumedNoSeals.seals).toEqual([]);
+    const resumedOne = resumeChapterState({ learned: true, seals: ["west"], won: false });
+    expect(resumedOne.mana).toBe(2);
+    expect(resumedOne.seals).toEqual(["west"]);
+    expect(resumedOne.notice).toContain("resumes");
+    // One seal left → at least one arm's worth of mana, even at the clamp.
+    const clamped = resumeChapterState({ learned: true, seals: ["west", "west"], won: false });
+    expect(clamped.mana).toBeGreaterThanOrEqual(1);
+  });
+
+  it("retry restores the same durable progress the lobby's Continue would", () => {
+    const progressed = { learned: true, seals: ["east"] as const, won: false };
+    saveChapterProgress({ ...createChapter(true), seals: [progressed.seals[0]] });
+    const retried = storyReducer(
+      { ...createStoryState(true), phase: "lost" as const, integrity: 0 },
+      { type: "retry" },
+    );
+    expect(retried.seals).toEqual(["east"]);
+    expect(retried.integrity).toBe(3);
+    expect(retried.mana).toBe(2);
+    expect(retried.phase).toBe("playing");
   });
 });

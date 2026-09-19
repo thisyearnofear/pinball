@@ -43,6 +43,8 @@ type Props = {
   onPractice: () => void;
   /** Story mode entry: starts the Water Shrine run on the same table. */
   onStory?: () => void;
+  /** Durable Water Shrine progress, offered as Continue when present. */
+  storyProgress?: { learned: boolean; seals: string[]; won: boolean } | null;
   onPlayDaily: (challenge: DailyChallenge) => void;
   /** Local meta-progression (rank, level, streak) shown without a wallet. */
   progress?: PlayerProgress;
@@ -80,7 +82,7 @@ export function ArcadeLobby(props: Props) {
             <div key={i} className={styles.loadingCard} />
           ))}
         </div>
-        <ChapterLink onStory={props.onStory} />
+        <ChapterLink onStory={props.onStory} progress={null} />
       </div>
     );
   }
@@ -145,7 +147,7 @@ export function ArcadeLobby(props: Props) {
           </button>
         </div>
 
-        <ChapterLink onStory={props.onStory} />
+        <ChapterLink onStory={props.onStory} progress={props.storyProgress ?? null} />
 
         {showSetup && (
           <div id="run-setup" className={styles.setupPanel}>
@@ -272,8 +274,21 @@ export function ArcadeLobby(props: Props) {
   );
 }
 
-function ChapterLink({ onStory }: { onStory?: () => void }) {
-  const inner = (
+function ChapterLink({ onStory, progress }: { onStory?: () => void; progress: { learned: boolean; seals: string[]; won: boolean } | null }) {
+  // Continue reads as the chapter you were playing; a fresh start reads as the
+  // pitch. Progress always shows the run's real state, never marketing copy.
+  const resuming = Boolean(progress?.learned);
+  const seals = progress?.seals.length ?? 0;
+  const inner = resuming ? (
+    <>
+      <span>STORY · THE WATER SHRINE · CONTINUE</span>
+      <strong>The Water Shrine</strong>
+      <span>
+        Blessing learned · {seals === 1 ? "1 of 2 seals quenched — one burning seal remains" : "no seals quenched yet"}
+      </span>
+      <b>Continue the Story →</b>
+    </>
+  ) : (
     <>
       <span>STORY · THE WATER SHRINE</span>
       <strong>The Water Shrine</strong>
