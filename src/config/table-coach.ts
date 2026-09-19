@@ -17,7 +17,11 @@ import type { GameMode } from "@/config/tournaments";
  *    the reference (How to Play), never in the critical path.
  */
 
-/** What the table has seen the player do so far. Monotonic, first run only. */
+/**
+ * What the table has seen the player do so far. Monotonic, first run only:
+ * observations only ever turn on (or count up), never off, so a cue that has
+ * fired once cannot re-fire on a later sample of the same state.
+ */
 export type CoachObservations = {
   /** The player has touched the table at least once. */
   engaged: boolean;
@@ -25,13 +29,54 @@ export type CoachObservations = {
   dived: boolean;
   /** The player has paid the table's time tax (bumper / trigger group). */
   taxed: boolean;
+  // ── Story mode (Water Shrine) ───────────────────────────────
+  /** The ball has been captured at the shrine (lesson/blessing phase seen). */
+  captured: boolean;
+  /** The player holds the water blessing. */
+  learned: boolean;
+  /** The player has armed Water at least once — the arm verb is proven. */
+  armed: boolean;
+  /** How many fire seals have been quenched so far (0–2). */
+  sealsQuenched: number;
+  /** Both seals quenched — the torii passage is open. */
+  gateOpen: boolean;
+  /** The chapter has been won. */
+  won: boolean;
+  /** The player last lost integrity to an unarmed burning seal. */
+  burned: boolean;
+  /** The player last lost integrity to the drain. */
+  drained: boolean;
+  /** The player answered a drain with a deliberate (charged) save. */
+  saved: boolean;
 };
 
 export function noObservations(): CoachObservations {
-  return { engaged: false, dived: false, taxed: false };
+  return {
+    engaged: false,
+    dived: false,
+    taxed: false,
+    captured: false,
+    learned: false,
+    armed: false,
+    sealsQuenched: 0,
+    gateOpen: false,
+    won: false,
+    burned: false,
+    drained: false,
+    saved: false,
+  };
 }
 
-export type CoachCueId = "inversion" | "dive" | "tax" | "flippers" | "bump";
+export type CoachCueId =
+  | "inversion"
+  | "dive"
+  | "tax"
+  | "flippers"
+  | "bump"
+  | "shrine"
+  | "burn"
+  | "drain"
+  | "finish";
 
 /**
  * Where on the playfield the cue is anchored. The rule lands dead centre;
@@ -64,23 +109,88 @@ const CONTEXT_PRIORITY = 10;
  * that wins) plus contextual callouts that fire when the player meets them —
  * never a carousel.
  */
-export function coachScript(mode: GameMode | undefined, touchscreen: boolean): CoachCue[] {
-  if (mode !== "kamikaze") {
+/**
+ * The standing verb card, shared by classic and story. In story it retires
+ * itself once the player has armed Water — by then the shrine trial and the
+ * contextual callouts own the teaching, and a permanent card would only sit
+ * between the player and the playfield.
+ */
+const FLIPPERS_CARD = (touchscreen: boolean): CoachCue => ({
+  id: "flippers",
+  kanji: "◀▶",
+  lines: [
+    "Tap either side of the table to work that flipper.",
+    touchscreen
+      ? "Swipe up to bump the table — powerful, so don't spam it."
+      : "Press space to bump — powerful, so don't spam it.",
+  ],
+  anchor: "center",
+  autoDismissSec: 9,
+  priority: RULE_PRIORITY,
+  shows: () => true,
+  satisfied: () => false,
+});
+
+export function coachScript(mode: GameMode | "story" | undefined, touchscreen: boolean): CoachCue[] {
+  if (mode === "story") {
     return [
+      { ...FLIPPERS_CARD(touchscreen), satisfied: (obs) => obs.armed },
       {
-        id: "flippers",
-        kanji: "◀▶",
+        id: "shrine",
+        kanji: "水",
         lines: [
-          "Tap either side of the table to work that flipper.",
-          touchscreen ? "Swipe up to bump the table — powerful, so don't spam it." : "Press space to bump — powerful, so don't spam it.",
+          "Aim for the marked water shrine — the trial inside teaches Water.",
+          "Your first mistake there is free; the main ball waits, safely held.",
         ],
+        anchor: "bottom",
+        autoDismissSec: 7,
+        priority: CONTEXT_PRIORITY,
+        shows: (obs) => obs.captured,
+        satisfied: (obs) => obs.learned,
+      },
+      {
+        id: "burn",
+        kanji: "火",
+        lines: [
+          "That seal BURNED you. Water must be armed before contact.",
+          touchscreen ? "Swipe up to arm Water, then strike it." : "Press W to arm Water, then strike it.",
+        ],
+        anchor: "bottom",
+        autoDismissSec: 7,
+        priority: CONTEXT_PRIORITY,
+        // Only at the moment it hurts — the same principle as the tax cue.
+        shows: (obs) => obs.burned,
+        // If the player has since armed and quenched, the lesson landed.
+        satisfied: (obs) => obs.armed && obs.sealsQuenched >= 1,
+      },
+      {
+        id: "drain",
+        kanji: "落",
+        lines: [
+          "The drain costs integrity. Hold to launch — and once the ball is live, a charged hold nudges it clear.",
+          ...(touchscreen ? [] : ["Hold SPACE to launch; SPACE again charges an aimed save."]),
+        ],
+        anchor: "bottom",
+        autoDismissSec: 7,
+        priority: CONTEXT_PRIORITY,
+        shows: (obs) => obs.drained,
+        // A deliberate save after the fall is proof the counter-play landed.
+        satisfied: (obs) => obs.saved,
+      },
+      {
+        id: "finish",
+        kanji: "鳥居",
+        lines: ["Torii open — both seals quenched. Cross the marked passage to finish the chapter."],
         anchor: "center",
-        autoDismissSec: 9,
-        priority: RULE_PRIORITY,
-        shows: () => true,
-        satisfied: () => false,
+        autoDismissSec: 8,
+        priority: CONTEXT_PRIORITY,
+        shows: (obs) => obs.gateOpen,
+        satisfied: (obs) => obs.won,
       },
     ];
+  }
+  if (mode !== "kamikaze") {
+    return [FLIPPERS_CARD(touchscreen)];
   }
 
   return [

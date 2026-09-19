@@ -3,6 +3,7 @@ import { getFromStorage, setInStorage } from "@/utils/local-storage";
 export type SealId = "west" | "east";
 export type ChapterTarget = "shrine" | SealId | "gate";
 export type ChapterPhase = "playing" | "lesson" | "blessing" | "gate-opening" | "won" | "lost";
+export type DamageCause = "burn" | "drain";
 export type ChapterState = {
   phase: ChapterPhase;
   integrity: number;
@@ -13,6 +14,8 @@ export type ChapterState = {
   lessonStep: number;
   lessonMistakes: number;
   notice: string;
+  /** Why integrity was last lost — lets the coach explain the right mistake. */
+  lastDamage: DamageCause | null;
 };
 export type ChapterEvent =
   | { type: "shrine" }
@@ -29,11 +32,12 @@ export const CHAPTER_MEMORY_KEY = "pinball_water_shrine_blessing_v1";
 export function createChapter(learned = false): ChapterState {
   return { phase:"playing", integrity:3, mana:learned ? 3 : 0, learned,
     waterArmed:false, seals:[], lessonStep:0, lessonMistakes:0,
+    lastDamage:null,
     notice:learned ? "The water blessing is yours. Arm it before striking each fire seal." : "Aim for the water shrine. Learn its blessing before challenging the fire seals." };
 }
-function damage(s: ChapterState, cause: string): ChapterState {
+function damage(s: ChapterState, cause: string, kind: DamageCause): ChapterState {
   const integrity = Math.max(0,s.integrity-1);
-  return {...s, integrity, phase: integrity === 0 ? "lost" : s.phase,
+  return {...s, integrity, lastDamage:kind, phase: integrity === 0 ? "lost" : s.phase,
     notice: integrity === 0 ? `${cause} Your ball shattered. Retry with what you learned.` : `${cause} Integrity -1.${integrity===1 ? " Critical: one hit remaining." : ""}`};
 }
 export function chapterReducer(s: ChapterState, e: ChapterEvent): ChapterState {
@@ -50,7 +54,7 @@ export function chapterReducer(s: ChapterState, e: ChapterEvent): ChapterState {
     if(e.element !== expected) {
       const next = {...s,lessonStep:0,lessonMistakes:s.lessonMistakes+1};
       if(s.lessonMistakes===0) return {...next,notice:"A safe practice mistake. Water quenches flame; wind feeds it. Try water, then wind."};
-      return damage(next,"The trial's warned ember struck after another wrong answer.");
+      return damage(next,"The trial's warned ember struck after another wrong answer.","burn");
     }
     if(s.lessonStep===0) return {...s,lessonStep:1,notice:"Correct: water quenches fire. Which element would feed a flame instead?"};
     return {...s,phase:"blessing",learned:true,mana:3,waterArmed:false,notice:"Water blessing learned. Knowledge survives a shattered ball."};
@@ -65,12 +69,12 @@ export function chapterReducer(s: ChapterState, e: ChapterEvent): ChapterState {
       return {...s,mana:s.mana-1,waterArmed:true,notice:"Water armed: your next burning seal will be quenched. Ordinary rebounds do not consume it."};
     case "seal": {
       if(s.seals.includes(e.id)) return s;
-      if(!s.waterArmed) return damage(s,"A burning seal struck an unprotected ball. Arm Water before contact.");
+      if(!s.waterArmed) return damage(s,"A burning seal struck an unprotected ball. Arm Water before contact.","burn");
       const seals = [...s.seals,e.id];
       return {...s,seals,waterArmed:false,phase:seals.length===2 ? "gate-opening" : "playing",notice:seals.length===2 ? "Both fire seals are quenched. The torii opens." : "One seal quenched. Arm Water again for the other seal."};
     }
     case "gate": return s.seals.length===2 ? {...s,phase:"won",notice:"You crossed the torii by learning water and quenching both seals. Chapter complete."} : {...s,notice:"The torii is sealed. Learn Water and quench both fire seals first."};
-    case "drain": return damage({...s,waterArmed:false},"The ball fell between the flippers. Hold both as it returns to cradle it.");
+    case "drain": return damage({...s,waterArmed:false},"The ball fell between the flippers. Hold both as it returns to cradle it.","drain");
     case "ball-search": return {...s,notice:"MAMORU freed a trapped ball. No integrity or mana lost. Choose a target to relaunch."};
     default: return s;
   }

@@ -139,3 +139,69 @@ describe("table-coach — the reference keeps the secondary verbs off the table"
         expect(extraControlLines("classic", true)).toEqual([]);
     });
 });
+
+describe("table-coach — story teaches by consequence, not by lecture", () => {
+    it("opens with the verb card and retires it once Water has been armed", () => {
+        const script = coachScript("story", true);
+        expect(currentCue(script, noObservations(), none)?.id).toBe("flippers");
+        // The card stays until the arm verb is proven…
+        expect(currentCue(script, obs({ engaged: true }), none)?.id).toBe("flippers");
+        // …then the story's own cues own the teaching.
+        expect(currentCue(script, obs({ engaged: true, armed: true }), none)).toBeNull();
+    });
+
+    it("explains the shrine on first capture and stops once the blessing is learned", () => {
+        const script = coachScript("story", true);
+        expect(currentCue(script, obs({ captured: true }), none)?.id).toBe("shrine");
+        expect(currentCue(script, obs({ captured: true, learned: true }), none)?.id).toBe("flippers");
+    });
+
+    it("names the burn the moment it hurts and retires when the lesson lands", () => {
+        const script = coachScript("story", false);
+        expect(currentCue(script, obs({ burned: true }), none)?.id).toBe("burn");
+        // Keyboard copy names the W verb.
+        expect(currentCue(script, obs({ burned: true }), none)!.lines.join(" ")).toContain("W to arm");
+        // Armed + a quenched seal = the counter-play was demonstrated.
+        expect(currentCue(script, obs({ burned: true, armed: true, sealsQuenched: 1 }), none)).toBeNull();
+    });
+
+    it("names the drain and retires after a deliberate save", () => {
+        const script = coachScript("story", true);
+        expect(currentCue(script, obs({ drained: true }), none)?.id).toBe("drain");
+        // Once satisfied the standing verb card comes back (it only retires on
+        // arm), so dismiss it to isolate the contextual layer.
+        const sansCard = new Set(["flippers"]);
+        expect(currentCue(script, obs({ drained: true, saved: true }), sansCard)).toBeNull();
+        // Touch copy must not leak keyboard phrasing.
+        expect(currentCue(script, obs({ drained: true }), none)!.lines.join(" ")).not.toContain("SPACE");
+    });
+
+    it("announces the open torii and retires on the win", () => {
+        const script = coachScript("story", true);
+        expect(currentCue(script, obs({ gateOpen: true }), none)?.id).toBe("finish");
+        expect(currentCue(script, obs({ gateOpen: true, won: true }), new Set(["flippers"]))).toBeNull();
+    });
+
+    it("keeps story copy device-correct, emoji-free, and within the card lifetime budget", () => {
+        const script = coachScript("story", false);
+        for (const cue of script) {
+            expect(cue.kanji.length).toBeGreaterThan(0);
+            expect(cue.kanji).not.toMatch(EMOJI);
+            for (const line of cue.lines) {
+                expect(line.length).toBeGreaterThan(20);
+                expect(line).not.toMatch(EMOJI);
+            }
+            expect(cue.autoDismissSec).toBeGreaterThan(0);
+            expect(cue.autoDismissSec).toBeLessThanOrEqual(12);
+            expect(["center", "bottom"]).toContain(cue.anchor);
+        }
+    });
+
+    it("sells nothing in story mode either", () => {
+        const copy = coachScript("story", true).flatMap((c) => c.lines).join(" ").toLowerCase();
+        for (const word of MONEY_WORDS) {
+            expect(copy).not.toContain(word);
+        }
+        expect(copy).not.toMatch(WALLET_PITCH);
+    });
+});

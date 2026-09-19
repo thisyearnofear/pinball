@@ -387,6 +387,7 @@ export default function GameMount(props: Props) {
   const [momentumShift, setMomentumShift] = useState<"player" | "machine" | null>(null);
   // Phase 2 player agency
   const [chargePower, setChargePower] = useState<number | null>(null);
+  const chargePowerRef = useRef<number | null>(null);
   const [storedMunition, setStoredMunition] = useState<string | null>(null);
   const [underworldCharge, setUnderworldCharge] = useState(0);
   const [agencyBanner, setAgencyBanner] = useState<string | null>(null);
@@ -422,6 +423,10 @@ export default function GameMount(props: Props) {
   // have already waved away. Both survive the best-of-3 balls, so the teaching
   // does not restart every ball.
   const [coachObs, setCoachObs] = useState<CoachObservations>(noObservations);
+  /** Last damage kind seen on the story HUD, to edge-trigger burn/drain cues. */
+  const lastDamageSeenRef = useRef<string | null>(null);
+  /** Whether a charged save (power > 1.05 release) has landed in story mode. */
+  const storySaveSeenRef = useRef(false);
   const [coachDismissed, setCoachDismissed] = useState<CoachCueId[]>([]);
   // Set once the player asks for the tips again. The first run teaches
   // unprompted; after that the coach only speaks when invited.
@@ -432,7 +437,12 @@ export default function GameMount(props: Props) {
     () => typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)")?.matches === true,
     [],
   );
-  const coachCues = useMemo(() => coachScript(props.gameMode, coachTouchscreen), [props.gameMode, coachTouchscreen]);
+  // Story mode plays under gameMode "classic", so the coach script is chosen
+  // explicitly from the story flag rather than inferred from the mode.
+  const coachCues = useMemo(
+    () => coachScript(storyRun ? "story" : props.gameMode, coachTouchscreen),
+    [storyRun, props.gameMode, coachTouchscreen],
+  );
   const coachCue = useMemo(
     () => (props.coach || coachArmed ? currentCue(coachCues, coachObs, new Set<string>(coachDismissed)) : null),
     [props.coach, coachArmed, coachCues, coachObs, coachDismissed],
@@ -582,7 +592,16 @@ export default function GameMount(props: Props) {
           if (g.story) return g.story.phase === "playing" && !g.paused;
           return !g.paused;
         },
-        onCharge: (power) => setChargePower(power),
+        onCharge: (power) => {
+          setChargePower(power);
+          // A released charge is a deliberate save — in story it proves the
+          // drain coaching landed (the observation is monotonic, so firing this
+          // every frame costs nothing).
+          if (storyRun && power === null && chargePowerRef.current !== null && chargePowerRef.current > 1.05) {
+            storySaveSeenRef.current = true;
+          }
+          chargePowerRef.current = power;
+        },
         onDive: () => { observeCoach({ dived: true }); showAgencyBanner("突っ込む · DIVE!"); },
         onNudge: (power) => showAgencyBanner(power >= 2.9 ? "全力 · MAX NUDDGE!" : "突き · POWER NUDDGE!"),
         onDeploy: () => {
@@ -781,6 +800,29 @@ export default function GameMount(props: Props) {
           setStoryHud((prev) => (prev === s ? prev : s));
           setStoryHeld(isStoryBallHeld());
           setStoryTargets((prev) => (prev.length ? prev : getStoryTargets()));
+          // Coach observations ride the same sample: derive what the player has
+          // proven from the story state, edge-triggering damage causes so the
+          // burn/drain cues fire on the tick they hurt, not forever after.
+          if (s) {
+            const dmgKind = s.lastDamage ?? null;
+            const dmgChanged = dmgKind !== lastDamageSeenRef.current;
+            lastDamageSeenRef.current = dmgKind;
+            setCoachObs((prev) => {
+              const next = {
+                ...prev,
+                captured: prev.captured || s.phase === "lesson",
+                learned: prev.learned || s.learned,
+                armed: prev.armed || s.waterArmed,
+                sealsQuenched: Math.max(prev.sealsQuenched, s.seals.length),
+                gateOpen: prev.gateOpen || s.seals.length === 2,
+                won: prev.won || s.phase === "won",
+                burned: prev.burned || (dmgChanged && dmgKind === "burn"),
+                drained: prev.drained || (dmgChanged && dmgKind === "drain"),
+                saved: prev.saved || storySaveSeenRef.current,
+              };
+              return (Object.keys(next) as Array<keyof CoachObservations>).every((k) => prev[k] === next[k]) ? prev : next;
+            });
+          }
         }
       }
 
@@ -1052,11 +1094,27 @@ export default function GameMount(props: Props) {
     >
       <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", alignItems: "baseline", justifyContent: "space-between" }}>
         <b style={{ fontSize: 13, letterSpacing: "0.06em" }}>{chapterObjective(storyHud)}</b>
-        <span>
-          Integrity {"●".repeat(storyHud.integrity)}{"○".repeat(Math.max(0, 3 - storyHud.integrity))}
-          {" · "}Mana {storyHud.mana}/3
-          {" · "}{storyHud.learned ? (storyHud.waterArmed ? "Water armed" : "Water learned") : "No blessing"}
-          {" · "}Seals {storyHud.seals.length}/2
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <span>Integrity {"●".repeat(storyHud.integrity)}{"○".repeat(Math.max(0, 3 - storyHud.integrity))}</span>
+          <span aria-label={`Mana ${storyHud.mana} of 3`} style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+            <span style={{ opacity: 0.8 }}>Mana</span>
+            {Array.from({ length: 3 }, (_, i) => (
+              <span
+                key={i}
+                aria-hidden
+                style={{
+                  width: 9, height: 9, borderRadius: "50%",
+                  display: "inline-block",
+                  border: "1px solid rgba(103,232,249,0.8)",
+                  background: i < storyHud.mana ? "rgba(103,232,249,0.9)" : "transparent",
+                  boxShadow: i < storyHud.mana ? "0 0 6px rgba(103,232,249,0.7)" : "none",
+                  transition: "background 160ms ease, box-shadow 160ms ease",
+                }}
+              />
+            ))}
+          </span>
+          <span>{storyHud.learned ? (storyHud.waterArmed ? "Water armed" : "Water learned") : "No blessing"}</span>
+          <span>Seals {storyHud.seals.length}/2</span>
         </span>
       </div>
       <div aria-live="polite" style={{ opacity: 0.85, marginTop: 4 }}>{storyHud.notice}</div>
@@ -1481,7 +1539,7 @@ export default function GameMount(props: Props) {
             reference (hold). */}
         {!mountError && <CoachReplayChip onReplay={replayCoach} onOpenGuide={props.onOpenControls} />}
         {/* Charge ring: grows while holding to build a power nudge */}
-        {kamikazeActive && !shotHud.active && chargePower !== null && chargePower > 1.05 && (
+        {(kamikazeActive || storyRun) && !shotHud.active && chargePower !== null && chargePower > 1.05 && (
           <div
             aria-hidden
             style={{

@@ -87,6 +87,23 @@ describe("shrine chapter reducer", () => {
     expect(chapterReducer(dead, { type: "gate" })).toBe(dead);
   });
 
+  it("records why integrity was last lost, so coaching can name the mistake", () => {
+    // Unarmed seal contact is a burn…
+    let s = learn(createChapter());
+    s = chapterReducer(s, { type: "continue" });
+    const burned = chapterReducer(s, { type: "seal", id: "west" });
+    expect(burned.lastDamage).toBe("burn");
+    // …a drain supersedes it…
+    const drained = chapterReducer(chapterReducer(burned, { type: "arm-water" }), { type: "drain" });
+    expect(drained.lastDamage).toBe("drain");
+    // …and survival without loss clears the cause, so a stale cue cannot fire.
+    const cleared = chapterReducer(drained, { type: "retry" });
+    expect(cleared.lastDamage).toBeNull();
+    expect(createChapter(true).lastDamage).toBeNull();
+    // Non-damage events never invent a cause.
+    expect(chapterReducer(drained, { type: "ball-search" }).lastDamage).toBe("drain");
+  });
+
   it("refuses to arm with no mana, refills at the shrine, and retry keeps only the learning", () => {
     let s = learn(createChapter());
     s = chapterReducer(s, { type: "continue" });
