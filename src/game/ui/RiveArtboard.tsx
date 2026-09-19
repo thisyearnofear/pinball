@@ -65,8 +65,10 @@ export function RiveArtboard(props: RiveArtboardProps) {
                     artboard: props.artboard,
                     // Every artboard in scene.rml names its machine "SM".
                     // Without this the runtime plays a linear animation and
-                    // no view-model binding ever applies.
-                    stateMachines: "SM",
+                    // no view-model binding ever applies. (canvas-lite takes
+                    // `stateMachine` singular; the plural is deprecated and
+                    // silently ignored by the WASM runtime.)
+                    stateMachine: "SM",
                     autoplay: true,
                     autoBind: true,
                 };
