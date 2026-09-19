@@ -141,6 +141,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full domain-driven desi
 - **Wallet Integration**: Wagmi + RainbowKit with an explicit WalletPort adapter (no hidden globals)
 - **Sentry Error Tracking**: Frontend crash reporting with global error boundary and instrumentation
 - **Arcade Cabinet UX**: CRT overlay, neon marquee, and atmospheric lobby with tournament card selection
+- **Rive Motion Chrome**: HUD meters, the machine's mood sigil, coach cues, and victory stingers authored as text (`rive/scene.rml`) and rendered by a lazy-loaded runtime with DOM fallbacks. See [docs/RIVE_MOTION.md](docs/RIVE_MOTION.md).
+- **Story Chapter**: A teach-by-consequence opening chapter (`/chapter`) with persistent "Continue the Story" progress. See [docs/STORY_MODE.md](docs/STORY_MODE.md).
 - **Leaderboard**: View tournament rankings and scores
 - **Cross-Platform**: Responsive design with reduced-motion / low-end device fallback
 

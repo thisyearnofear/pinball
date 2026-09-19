@@ -34,6 +34,61 @@ never record replays, submit scores, award XP, or touch ghosts.
 Integrity starts at 3. Draining before the gate is open costs 1; a failed
 trial costs 1. At 0 integrity the chapter is lost.
 
+## Input verb map (identical in arcade and story)
+
+| Input | Ball held | Ball live |
+|---|---|---|
+| **Space** | Launch | **Charged aimed nudge** (hold to build 1–3×, release to fire) |
+| **W** | — | Arm Water (once learned; costs 1 mana) |
+| **Tap** | — | Nudge toward the tap point |
+| **Swipe up** | — | Arm Water (touch equivalent of W) |
+| **Swipe down / double-tap** | — | Rejected with a distinct "no" haptic |
+| **← →** | — | Flippers |
+
+Holding Space with the ball live can never bump the table — the old tilt
+trap is gone; Space only charges. Story touches ride the same gesture
+dispatch as kamikaze, so both modes share one vocabulary.
+
+## Coaching and feedback
+
+- **Table coach** (`src/config/table-coach.ts`): a story-specific cue
+  script teaches by consequence — a standing verb card retires once Water
+  is armed; burn/drain cues fire on the tick the mistake costs integrity
+  (the reducer records `lastDamage: "burn" \| "drain"` so the coach names
+  the actual error); shrine/gate cues mark real milestones. Failed trials
+  append *why* copy ("Wind feeds the flame — water is the one that
+  quenches it") targeting the actual misconception.
+- **Haptics** (`src/utils/haptics.ts`): capture, arm, seal-quench, and
+  gate-open patterns, with a rank ordering so important events win
+  concurrent collisions. Rejected gestures get a distinct denial shape.
+- **Mana pips**: the strip renders the mana count as glowing cyan pips
+  (screen-reader labelled), overlayed by the Rive `hud_gauge` artboard
+  when the runtime is ready (see
+  [RIVE_MOTION.md](./RIVE_MOTION.md)); the DOM pips are the
+  reduced-motion / failure fallback.
+- **Charge ring**: the kamikaze 3× charge ring and aim-guide line render
+  during story saves too — charging reads identically in both modes.
+
+## Continue the Story (progress persistence)
+
+Chapter progress (`{ learned, seals, won }`) persists to localStorage
+after every accepted transition (`saveChapterProgress` in
+`src/model/shrine-chapter.ts`):
+
+- **Win** clears progress — a replay is a fresh run.
+- **Loss** keeps only knowledge — exactly what a retry keeps, so the
+  lobby never offers more than a retry would honour.
+- Corrupt or impossible saves (seals without the blessing, unknown seal
+  ids, `won: true`) read as no progress.
+- Mana is never persisted; a resume grants `3 − seals` so the player can
+  arm for the remaining seals without a forced shrine detour.
+
+`retry` restores the same saved progress the lobby would, so the two
+paths can never disagree. With progress, the lobby card flips from the
+marketing pitch to a real-state summary —
+`STORY · THE WATER SHRINE · CONTINUE — Blessing learned · 1 of 2 seals
+quenched — **Continue the Story →**`.
+
 ## Architecture
 
 The story reuses the arcade engine wholesale. Layering, top-down:
@@ -66,11 +121,14 @@ Key invariants, all covered by specs:
 
 | Spec | Covers |
 |---|---|
-| `tests/unit/model/shrine-chapter.spec.ts` | Pure reducer: phases, seals, integrity |
-| `tests/unit/model/story-run.spec.ts` | encounterId staleness, trial results, refill |
-| `tests/unit/model/story-table.spec.ts` | Real-Matter physics rig: capture/release, seal quench, gate flip, drain re-serve, terminal cradle (lost mid-flight / lost from capture / won via gate / retry) |
+| `tests/unit/model/shrine-chapter.spec.ts` | Pure reducer: phases, seals, integrity, `lastDamage` causality, progress save/load/resume round-trip, win/lose persistence semantics, corrupt-data rejection, resume mana grant, retry-equals-continue |
+| `tests/unit/model/story-run.spec.ts` | encounterId staleness, trial results, refill, failure coaching copy |
+| `tests/unit/model/story-table.spec.ts` | Real-Matter physics rig: capture/release, seal quench, gate flip, drain re-serve, terminal cradle (lost mid-flight / lost from capture / won via gate / retry), `onEvent` hook firing |
 | `tests/unit/game/chapter-stranding.spec.ts` | Standalone chapter table stranding guard |
 | `tests/unit/game/story-integration.spec.ts` | `GameScreen` wiring: auto-start, pause persistence, ranked fencing (asserts `onRunEnd` never reaches `recordRun`) |
+| `tests/unit/config/table-coach.spec.ts` | Story coach script: cue ordering, retirement semantics, device-correct / emoji-free copy rules |
+| `tests/unit/game/arcade-lobby.spec.ts` | Lobby Continue card: fresh-start pitch vs progress summary |
+| `tests/unit/utils/haptics.spec.ts` | Story haptic shapes, rank ordering, denial gaps |
 
 ## Screenshots
 

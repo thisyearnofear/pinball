@@ -117,7 +117,7 @@ Disallowed:
 
 ## Test coverage
 
-- **403 frontend tests** (Vitest + jsdom): model/game, actors, trigger groups, math utils, HUD layout, audio fetch policy
+- **606 frontend tests** (Vitest + jsdom, 42 files): model/game, story chapter (reducer, run, physics-rig table), coach script, haptics, actors, trigger groups, math utils, HUD layout, audio fetch policy
 - **54 backend tests**: API endpoints, rate limiter, nonce tracker
 - **10 contract tests**: `finalizeWithSignedWinners` signature validation, winner claims, legacy compat
 - All passing. Run: `pnpm run test:all`
