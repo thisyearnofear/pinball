@@ -78,6 +78,7 @@ flowchart LR
 | Replay-hash ↔ signed score-metadata check in the replay viewer + ghost race (with metadata copy) | ✅ live | `src/utils/replay-verify.ts` |
 | First run taught **on the table** (no intro slides, zero blocking beats), replayable from a "How to win" chip — tap replays the tips, hold opens the full guide | ✅ live | `src/config/table-coach.ts` |
 | MAMORU's mood named in the HUD (escalation reads as character, not cheating) | ✅ live | `src/utils/mood-display.ts` |
+| Story mode: Water Shrine chapter on the mounted engine (teaches the arm-and-quench mechanic; fenced from ranked play) | ✅ live | [docs/STORY_MODE.md](docs/STORY_MODE.md) |
 
 A run's seed can optionally come from a quantum RNG (`GET /api/quantum/seed`) —
 the seed is recorded in the replay, so runs stay fully re-simulatable. See
@@ -288,6 +289,10 @@ npm run deploy:mezotestnet
 4. **Submit Score**: Scores are EIP-191 signed by the backend and submitted on-chain
 5. **Finalization**: Backend calls `finalizeWithSignedWinners()` to settle the tournament
 6. **Claim Rewards**: Top players claim MUSD rewards from the TournamentManager contract
+
+New to the machine? Start with the **story chapter** (`/chapter` or the
+"Story" link in the lobby) — it teaches the arm-and-quench mechanic on a real
+table, with no wallet required. See [docs/STORY_MODE.md](docs/STORY_MODE.md).
 
 ## Adding Custom Tables
 
