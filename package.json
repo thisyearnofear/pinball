@@ -12,6 +12,7 @@
     "start": "next start",
     "test": "vitest --environment jsdom --no-watch",
     "sim:kamikaze": "vitest run --config vitest.sim.config.ts",
+    "verify:visual": "next build && playwright test",
     "typecheck": "tsc --noEmit",
     "generate-manifest": "node scripts/generate-manifest.js",
     "test:frontend": "pnpm run typecheck && pnpm test && pnpm run build",
@@ -36,6 +37,7 @@
     "wagmi": "^2.14.6"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@types/matter-js": "^0.18.5",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",

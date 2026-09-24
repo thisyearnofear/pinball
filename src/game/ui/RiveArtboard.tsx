@@ -76,6 +76,17 @@ export function RiveArtboard(props: RiveArtboardProps) {
                 instance.on(EventType.Load, () => {
                     if (cancelled) return;
                     riveRef.current = instance;
+                    // Render-proof signal: data-rive-ready fires on LoadError
+                    // too, and an unbound artboard still animates its linear
+                    // timeline — only the *playing machine list* distinguishes
+                    // a bound state machine from inert binds (docs/TRAPS.md
+                    // #1/#2; the harness asserts data-rive-sm="SM").
+                    try {
+                        canvasRef.current?.setAttribute(
+                            "data-rive-sm",
+                            instance?.playingStateMachineNames.join(",") || "none",
+                        );
+                    } catch {}
                     setReady(true);
                     props.onReady?.(true);
                 });

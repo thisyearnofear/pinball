@@ -9,7 +9,7 @@ export default defineConfig({
   },
   test: {
     include: ["tests/**/*.spec.ts"],
-    exclude: ["backend/**", "contracts/**", "apps/**", "dist/**", "node_modules/**"],
+    exclude: ["backend/**", "contracts/**", "apps/**", "dist/**", "node_modules/**", "tests/visual/**"],
     environment: "jsdom",
   },
 });

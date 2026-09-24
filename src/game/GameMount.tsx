@@ -1134,17 +1134,19 @@ export default function GameMount(props: Props) {
                   />
                 ))}
               </span>
-              {riveGaugeReady && (
-                <span style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-                  <RiveArtboard
-                    src="/rive/hud.riv"
-                    artboard="hud_gauge"
-                    data={{ mana: storyHud.mana, armed: storyHud.waterArmed }}
-                    style={{ width: "100%", height: "100%" }}
-                    onReady={setRiveGaugeReady}
-                  />
-                </span>
-              )}
+              {/* The artboard must mount from the start: onReady is what
+                  flips riveGaugeReady, and mounting only when it is already
+                  true deadlocks the gauge in fallback forever (caught by
+                  tests/visual — docs/TRAPS.md #10). */}
+              <span style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+                <RiveArtboard
+                  src="/rive/hud.riv"
+                  artboard="hud_gauge"
+                  data={{ mana: storyHud.mana, armed: storyHud.waterArmed }}
+                  style={{ width: "100%", height: "100%" }}
+                  onReady={setRiveGaugeReady}
+                />
+              </span>
             </span>
           </span>
           <span>{storyHud.learned ? (storyHud.waterArmed ? "Water armed" : "Water learned") : "No blessing"}</span>

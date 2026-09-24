@@ -55,3 +55,8 @@ pnpm-debug.log*
 # Command Code
 .commandcode/
 
+# Playwright visual harness output
+/test-results/
+/playwright-report/
+/playwright/.cache/
+
