@@ -1,4 +1,5 @@
 import type { GameMode } from "@/config/tournaments";
+import { CHAPTERS, type ChapterConfig } from "@/model/chapters";
 
 /**
  * Everything the game *teaches on the first run*.
@@ -29,7 +30,7 @@ export type CoachObservations = {
   dived: boolean;
   /** The player has paid the table's time tax (bumper / trigger group). */
   taxed: boolean;
-  // ── Story mode (Water Shrine) ───────────────────────────────
+  // ── Story mode (any chapter — copy comes from the chapter config) ─
   /** The ball has been captured at the shrine (lesson/blessing phase seen). */
   captured: boolean;
   /** The player holds the water blessing. */
@@ -115,13 +116,13 @@ const CONTEXT_PRIORITY = 10;
  * contextual callouts own the teaching, and a permanent card would only sit
  * between the player and the playfield.
  */
-const FLIPPERS_CARD = (touchscreen: boolean): CoachCue => ({
+const FLIPPERS_CARD = (touchscreen: boolean, armName = "Water"): CoachCue => ({
   id: "flippers",
   kanji: "◀▶",
   lines: [
     "Tap either side of the table to work that flipper.",
     touchscreen
-      ? "Tap to launch or guide — swipe up to arm Water."
+      ? `Tap to launch or guide — swipe up to arm ${armName}.`
       : "Space to launch or guide — a charged hold nudges a live ball.",
   ],
   anchor: "center",
@@ -131,15 +132,19 @@ const FLIPPERS_CARD = (touchscreen: boolean): CoachCue => ({
   satisfied: () => false,
 });
 
-export function coachScript(mode: GameMode | "story" | undefined, touchscreen: boolean): CoachCue[] {
+export function coachScript(
+  mode: GameMode | "story" | undefined,
+  touchscreen: boolean,
+  chapter: ChapterConfig = CHAPTERS["water-shrine"],
+): CoachCue[] {
   if (mode === "story") {
     return [
-      { ...FLIPPERS_CARD(touchscreen), satisfied: (obs) => obs.armed },
+      { ...FLIPPERS_CARD(touchscreen, chapter.verb.name), satisfied: (obs) => obs.armed },
       {
         id: "shrine",
-        kanji: "水",
+        kanji: chapter.glyph,
         lines: [
-          "Aim for the marked water shrine — the trial inside teaches Water.",
+          chapter.coach.shrineLine,
           "Your first mistake there is free; the main ball waits, safely held.",
         ],
         anchor: "bottom",
@@ -150,10 +155,12 @@ export function coachScript(mode: GameMode | "story" | undefined, touchscreen: b
       },
       {
         id: "burn",
-        kanji: "火",
+        kanji: chapter.markers.sealHotGlyph,
         lines: [
-          "That seal BURNED you. Water must be armed before contact.",
-          touchscreen ? "Swipe up to arm Water, then strike it." : "Press W to arm Water, then strike it.",
+          chapter.coach.burnLine,
+          touchscreen
+            ? `Swipe up to arm ${chapter.verb.name}, then strike it.`
+            : `Press ${chapter.verb.key} to arm ${chapter.verb.name}, then strike it.`,
         ],
         anchor: "bottom",
         autoDismissSec: 7,
@@ -179,8 +186,8 @@ export function coachScript(mode: GameMode | "story" | undefined, touchscreen: b
       },
       {
         id: "finish",
-        kanji: "鳥居",
-        lines: ["Torii open — both seals quenched. Cross the marked passage to finish the chapter."],
+        kanji: chapter.markers.gateOpenLabel.split(" ")[0],
+        lines: [chapter.coach.finishLine],
         anchor: "center",
         autoDismissSec: 8,
         priority: CONTEXT_PRIORITY,

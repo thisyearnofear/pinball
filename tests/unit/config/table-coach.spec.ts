@@ -6,6 +6,7 @@ import {
     noObservations,
     type CoachObservations,
 } from "@/config/table-coach";
+import { CHAPTERS } from "@/model/chapters";
 
 // The decorative emoji the review asked us to drop from teaching surfaces.
 const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u;
@@ -206,5 +207,35 @@ describe("table-coach — story teaches by consequence, not by lecture", () => {
             expect(copy).not.toContain(word);
         }
         expect(copy).not.toMatch(WALLET_PITCH);
+    });
+});
+
+describe("table-coach — story cues read from the chapter config", () => {
+    const wind = CHAPTERS["wind-ridge"];
+
+    it("chapter 2 cues teach Wind with the ridge's own nouns", () => {
+        const script = coachScript("story", false, wind);
+        const shrine = script.find((c) => c.id === "shrine")!;
+        expect(shrine.lines[0]).toContain("wind shrine");
+        expect(shrine.kanji).toBe("風");
+        const burn = script.find((c) => c.id === "burn")!;
+        expect(burn.lines.join(" ")).toContain("Wind");
+        expect(burn.lines.join(" ")).not.toContain("Water");
+        expect(burn.lines.join(" ")).toContain("chime");
+        const finish = script.find((c) => c.id === "finish")!;
+        expect(finish.lines[0]).toContain("chimes rung");
+        expect(finish.kanji).toBe("峠");
+    });
+
+    it("the standing verb card arms the current chapter's blessing", () => {
+        const touchWater = coachScript("story", true).find((c) => c.id === "flippers")!;
+        expect(touchWater.lines.join(" ")).toContain("arm Water");
+        const touchWind = coachScript("story", true, wind).find((c) => c.id === "flippers")!;
+        expect(touchWind.lines.join(" ")).toContain("arm Wind");
+    });
+
+    it("defaults to chapter 1 so unparameterized callers keep the water copy", () => {
+        const script = coachScript("story", false);
+        expect(script.find((c) => c.id === "shrine")!.lines[0]).toContain("water shrine");
     });
 });

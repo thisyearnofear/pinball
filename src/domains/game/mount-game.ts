@@ -328,9 +328,10 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
   }
   function tiltLock() {
     if (!isKamikazeMode()) {
-      // Story: swipe-up is how touch players arm Water — the only other mode
-      // verb that makes sense mid-flight, and already the trial's own gesture.
-      storyAction({ type: "arm-water" });
+      // Story: swipe-up is how touch players arm the chapter's blessing —
+      // the only other mode verb that makes sense mid-flight, and already the
+      // trial's own gesture.
+      storyAction({ type: "arm" });
       return;
     }
     if (isShotCallMode()) return;
@@ -360,7 +361,7 @@ export async function mountGame(opts: MountGameOptions): Promise<MountedGame> {
     if (e.type !== "keydown" || e.repeat) return;
     if (!(opts.inputEnabled?.() ?? true)) return;
     if (e.code === "KeyW") {
-      storyAction({ type: "arm-water" });
+      storyAction({ type: "arm" });
       markFirstAction();
       e.preventDefault();
     }

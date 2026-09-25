@@ -65,8 +65,10 @@ Format: **symptom / why it stays green / the rule.**
 
 ## 6. Story progress is namespaced inside one `ps_data` blob
 
-- **Symptom** — `localStorage["pinball_water_shrine_progress_v1"]` reads
-  back `null` for save data that demonstrably saved.
+- **Symptom** — `localStorage["pinball_story_vault_v1"]` reads back `null`
+  for save data that demonstrably saved (and the legacy
+  `pinball_water_shrine_progress_v1` reads are dead ends — the vault
+  migrated them once and keeps them for old saves only).
 - **Why green** — the key is *inside* the JSON at
   `localStorage["ps_data"]` (src/utils/local-storage.ts:23–34); direct
   reads look like the classic "my save vanished" bug and invite a
@@ -76,14 +78,16 @@ Format: **symptom / why it stays green / the rule.**
 
 ## 7. Corrupt story progress *must* read as no progress
 
-- **Symptom** — `loadChapterProgress()` returns `null` for data that looks
-  present: `learned: false` with seals, `won: true`, unparseable JSON.
-- **Why green** — it is a loader, so a null looks like a bug; loosening
-  the validation is the tempting, wrong move.
+- **Symptom** — `loadVault()` scrubs data that looks present: runs whose
+  player never learned the blessing, `completed` entries not backed by a
+  blessing, a `current` run for an already-won chapter, unparseable JSON.
+- **Why green** — it is a loader, so a scrubbed field looks like a bug;
+  loosening the validation is the tempting, wrong move.
 - **The rule** — the rejection semantics are the contract (a shattered
-  ball keeps only knowledge; a win clears; seals cannot exist without the
-  blessing — src/model/shrine-chapter.ts:139–157). The lobby must never
-  offer what a retry would not honour. Tests in
+  ball keeps only knowledge; a win never persists as `current`; seals
+  cannot exist without the blessing; completed ⊆ blessings —
+  src/model/shrine-chapter.ts:153–190). The lobby must never offer what a
+  retry would not honour. Tests in
   tests/unit/model/shrine-chapter.spec.ts pin each case; extend them,
   don't relax them.
 

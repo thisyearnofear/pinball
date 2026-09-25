@@ -1,5 +1,6 @@
 import * as Matter from "matter-js";
 import type { ChapterEvent, ChapterState, ChapterTarget, SealId } from "@/model/shrine-chapter";
+import { CHAPTERS, type ChapterConfig } from "@/model/chapters";
 
 export const TABLE_W = 600;
 export const TABLE_H = 800;
@@ -325,7 +326,8 @@ export function createChapterTable(
   canvas: HTMLCanvasElement,
   state: ChapterState,
   onEvent: (event: ChapterEvent) => void,
-  onSnapshot: (snapshot: ChapterTableSnapshot) => void
+  onSnapshot: (snapshot: ChapterTableSnapshot) => void,
+  cfg: ChapterConfig = CHAPTERS[state.chapterId]
 ): ChapterTable {
   const physics = createChapterPhysics(state, onEvent);
   const ctx = canvas.getContext("2d");
@@ -387,10 +389,10 @@ export function createChapterTable(
     ctx.strokeRect(14, 10, TABLE_W - 28, TABLE_H - 20);
 
     ctx.setLineDash([4, 6]);
-    ctx.strokeStyle = "rgba(103,232,249,0.28)";
+    ctx.strokeStyle = `rgba(${cfg.tintRgb},0.28)`;
     ctx.strokeRect(CATCH_ZONE.x, CATCH_ZONE.y, CATCH_ZONE.w, CATCH_ZONE.h);
     ctx.setLineDash([]);
-    ctx.fillStyle = "rgba(103,232,249,0.5)";
+    ctx.fillStyle = `rgba(${cfg.tintRgb},0.5)`;
     ctx.font = "10px 'Hiragino Mincho ProN','Yu Mincho',serif";
     ctx.textAlign = "center";
     ctx.fillText("HOLD BOTH FLIPPERS TO CATCH", CATCH_ZONE.x + CATCH_ZONE.w / 2, CATCH_ZONE.y - 6);
@@ -426,7 +428,7 @@ export function createChapterTable(
       ctx.font = "11px serif";
       ctx.fillText("SEALED", GATE.x, GATE.y + GATE.h / 2 + 16);
     } else {
-      ctx.fillStyle = "rgba(103,232,249,0.85)";
+      ctx.fillStyle = `rgba(${cfg.tintRgb},0.85)`;
       ctx.font = "11px serif";
       ctx.fillText("OPEN", GATE.x, GATE.y + GATE.h / 2 + 16);
     }
@@ -437,7 +439,7 @@ export function createChapterTable(
       if (rr <= 4) continue;
       ctx.beginPath();
       ctx.arc(SHRINE.x, SHRINE.y, rr, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(103,232,249,${0.5 - i * 0.14})`;
+      ctx.strokeStyle = `rgba(${cfg.tintRgb},${0.5 - i * 0.14})`;
       ctx.lineWidth = 2;
       ctx.stroke();
     }
@@ -445,32 +447,33 @@ export function createChapterTable(
     ctx.arc(SHRINE.x, SHRINE.y, SHRINE.r, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(30,58,95,0.75)";
     ctx.fill();
-    ctx.strokeStyle = "#67e8f9";
+    ctx.strokeStyle = `rgb(${cfg.tintRgb})`;
     ctx.lineWidth = 2;
     ctx.stroke();
-    ctx.fillStyle = "#bff3ff";
+    ctx.fillStyle = cfg.tintText;
     ctx.font = "11px 'Hiragino Mincho ProN','Yu Mincho',serif";
-    ctx.fillText("WATER", SHRINE.x, SHRINE.y - 3);
-    ctx.fillText("SHRINE", SHRINE.x, SHRINE.y + 9);
+    const shrineWords = cfg.targets.shrine.toUpperCase().split(" ");
+    ctx.fillText(shrineWords[0], SHRINE.x, SHRINE.y - 3);
+    ctx.fillText(shrineWords.slice(1).join(" ") || "SHRINE", SHRINE.x, SHRINE.y + 9);
 
     (Object.keys(SEALS) as SealId[]).forEach((id, i) => {
       const s = SEALS[id];
       const quenched = current.seals.includes(id);
       ctx.beginPath();
       ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-      ctx.fillStyle = quenched ? "rgba(34,80,100,0.8)" : "rgba(120,32,20,0.8)";
+      ctx.fillStyle = quenched ? `rgba(${cfg.tintRgb},0.25)` : "rgba(120,32,20,0.8)";
       ctx.fill();
-      ctx.strokeStyle = quenched ? "#67e8f9" : "#e34234";
+      ctx.strokeStyle = quenched ? `rgb(${cfg.tintRgb})` : "#e34234";
       ctx.lineWidth = 2;
       ctx.stroke();
-      ctx.fillStyle = quenched ? "#bff3ff" : "#ffb59f";
+      ctx.fillStyle = quenched ? cfg.tintText : "#ffb59f";
       ctx.font = "12px serif";
-      ctx.fillText(quenched ? "水" : "火", s.x, s.y + 4);
+      ctx.fillText(quenched ? cfg.markers.sealDoneGlyph : cfg.markers.sealHotGlyph, s.x, s.y + 4);
       ctx.font = "9px serif";
       ctx.fillStyle = "rgba(245,239,230,0.75)";
-      ctx.fillText(`FIRE SEAL ${i === 0 ? "I" : "II"}`, s.x, s.y + s.r + 14);
+      ctx.fillText(`${cfg.markers.sealWord} ${i === 0 ? "I" : "II"}`, s.x, s.y + s.r + 14);
       if (quenched) {
-        ctx.strokeStyle = "#67e8f9";
+        ctx.strokeStyle = `rgb(${cfg.tintRgb})`;
         ctx.beginPath();
         ctx.moveTo(s.x - s.r * 0.6, s.y - s.r * 0.6);
         ctx.lineTo(s.x + s.r * 0.6, s.y + s.r * 0.6);
@@ -516,7 +519,7 @@ export function createChapterTable(
     if (snap.held && current.phase === "playing") {
       const target = TARGETS[snap.aim];
       ctx.setLineDash([2, 7]);
-      ctx.strokeStyle = "rgba(103,232,249,0.55)";
+      ctx.strokeStyle = `rgba(${cfg.tintRgb},0.55)`;
       ctx.lineWidth = 2;
       ctx.beginPath();
       let px = SERVE.x, py = SERVE.y;
@@ -531,7 +534,7 @@ export function createChapterTable(
       ctx.setLineDash([]);
       ctx.beginPath();
       ctx.arc(target.x, target.y, 6, 0, Math.PI * 2);
-      ctx.strokeStyle = "#67e8f9";
+      ctx.strokeStyle = `rgb(${cfg.tintRgb})`;
       ctx.stroke();
     }
 
@@ -553,10 +556,10 @@ export function createChapterTable(
       ctx.fill();
       ctx.strokeStyle = "rgba(0,0,0,0.4)";
       ctx.stroke();
-      if (current.waterArmed) {
+      if (current.armed) {
         ctx.beginPath();
         ctx.arc(bp.x, bp.y, BALL_R + 4, 0, Math.PI * 2);
-        ctx.strokeStyle = "#67e8f9";
+        ctx.strokeStyle = `rgb(${cfg.tintRgb})`;
         ctx.lineWidth = 2.5;
         ctx.stroke();
       }

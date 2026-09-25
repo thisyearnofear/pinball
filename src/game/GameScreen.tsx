@@ -14,7 +14,7 @@ import { parseChallengeUrl, didBeatChallenge, type ChallengeInvite } from "@/uti
 import { STORED_WORLD_ID } from "@/definitions/settings";
 import { START_TABLE_INDEX } from "@/definitions/tables";
 import type { AIDifficulty } from "@/model/kamikaze";
-import { loadChapterProgress, type ChapterProgress } from "@/model/shrine-chapter";
+import { loadStoryView, type StoryView } from "@/model/shrine-chapter";
 
 import { colors, spacing } from "@/theme/tokens";
 import { useWorldTheme, getWorldAccent } from "@/hooks/use-world-theme";
@@ -371,8 +371,8 @@ function GameScreenInner({ initialStory = false }: { initialStory?: boolean }) {
   // Tier 3: the lobby's chapter card reflects durable story progress, so a
   // player who leaves mid-run is offered Continue rather than a cold restart.
   // Re-read whenever the lobby re-appears (view changes) or a new run starts.
-  const storyProgress = useMemo<ChapterProgress | null>(
-    () => (view === "lobby" ? loadChapterProgress() : null),
+  const storyProgress = useMemo<StoryView | null>(
+    () => (view === "lobby" ? loadStoryView() : null),
     [view, runKey],
   );
 

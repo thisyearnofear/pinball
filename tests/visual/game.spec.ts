@@ -13,15 +13,29 @@ import { test, expect, type Page } from "@playwright/test";
  * Thresholds are variances, never golden pixels: no font/GPU flake.
  */
 
-const CHAPTER_PROGRESS_KEY = "pinball_water_shrine_progress_v1";
+const STORY_VAULT_KEY = "pinball_story_vault_v1";
+const LEGACY_PROGRESS_KEY = "pinball_water_shrine_progress_v1";
 
-/** Seed durable progress inside the ps_data blob (docs/TRAPS.md #6) before any app code runs. */
-async function seedStoryProgress(page: Page, learned: boolean, seals: string[]) {
+/** Seed the story vault inside the ps_data blob (docs/TRAPS.md #6) before any app code runs. */
+async function seedVault(
+    page: Page,
+    vault: { blessings: string[]; completed: string[]; current: { chapterId: string; learned: boolean; seals: string[] } | null },
+) {
     await page.addInitScript(
         ([key, payload]) => {
             window.localStorage.setItem("ps_data", JSON.stringify({ [key]: payload }));
         },
-        [CHAPTER_PROGRESS_KEY, JSON.stringify({ learned, seals, won: false })] as const,
+        [STORY_VAULT_KEY, JSON.stringify({ version: 1, ...vault })] as const,
+    );
+}
+
+/** Seed a legacy single-chapter save so the vault migration runs in the browser. */
+async function seedLegacyProgress(page: Page, learned: boolean, seals: string[]) {
+    await page.addInitScript(
+        ([key, payload]) => {
+            window.localStorage.setItem("ps_data", JSON.stringify({ [key]: payload }));
+        },
+        [LEGACY_PROGRESS_KEY, JSON.stringify({ learned, seals, won: false })] as const,
     );
 }
 
@@ -87,7 +101,11 @@ async function diffRatio(page: Page, a: Buffer, b: Buffer): Promise<number> {
 }
 
 async function openResumedStory(page: Page) {
-    await seedStoryProgress(page, true, []);
+    await seedVault(page, {
+        blessings: ["water-shrine"],
+        completed: [],
+        current: { chapterId: "water-shrine", learned: true, seals: [] },
+    });
     await page.goto("/chapter");
     const hud = page.locator('[data-testid="story-hud"]');
     // Hydration + WASM + runtime load: wait on content, never a fixed timeout.
@@ -169,7 +187,11 @@ test("reduced motion: DOM fallback stands in, still state-responsive", async ({ 
         !(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches)),
         "reduced-motion project only; the chromium project proves the Rive branch",
     );
-    await seedStoryProgress(page, true, []);
+    await seedVault(page, {
+        blessings: ["water-shrine"],
+        completed: [],
+        current: { chapterId: "water-shrine", learned: true, seals: [] },
+    });
     await page.goto("/chapter");
     const hud = page.locator('[data-testid="story-hud"]');
     await expect(hud).toBeVisible({ timeout: 45_000 });
@@ -192,4 +214,27 @@ test("reduced motion: DOM fallback stands in, still state-responsive", async ({ 
     // Rive canvas that never hides the pips would silently pass, so require
     // the real change, not just DOM text.
     expect(await diffRatio(page, shotA, shotB)).toBeGreaterThan(0.01);
+});
+
+test("legacy single-chapter save migrates: an old save still resumes chapter 1", async ({ page }) => {
+    await seedLegacyProgress(page, true, ["west"]);
+    await page.goto("/chapter");
+    const hud = page.locator('[data-testid="story-hud"]');
+    await expect(hud).toBeVisible({ timeout: 45_000 });
+    await expect(hud).toContainText("2 / 3 · Quench the fire seals (1/2)");
+});
+
+test("chapter 2: a completed chapter 1 opens the Wind Ridge with its own verbs", async ({ page }) => {
+    await seedVault(page, {
+        blessings: ["water-shrine"],
+        completed: ["water-shrine"],
+        current: null,
+    });
+    await page.goto("/chapter");
+    const hud = page.locator('[data-testid="story-hud"]');
+    await expect(hud).toBeVisible({ timeout: 45_000 });
+    await expect(hud).toContainText("1 / 3 · Enter the wind shrine");
+    await expect(hud.locator('button:has-text("Arm Wind (W)")')).toHaveCount(1);
+    const shot = await page.screenshot();
+    expect(await luminanceStdDev(page, shot)).toBeGreaterThan(5);
 });

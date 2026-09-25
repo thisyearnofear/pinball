@@ -8,6 +8,7 @@ import { getWorldById } from "@/config/worlds";
 import type { PlayerProgress } from "@/config/progression";
 import type { ChallengeInvite } from "@/utils/challenge-link";
 
+import { CHAPTERS, type StoryView } from "@/model/chapters";
 import { Button, Skeleton, NeonTitle, CRTOverlay, PlayerCard } from "@/game/ui";
 import { burstOnElement } from "@/utils/burst-fx";
 import { AttractMode } from "./AttractMode";
@@ -41,10 +42,10 @@ type Props = {
   onEnterTournament: (id: number) => void;
   onStartTournament: (id: number) => void;
   onPractice: () => void;
-  /** Story mode entry: starts the Water Shrine run on the same table. */
+  /** Story mode entry: starts the active chapter's run on the same table. */
   onStory?: () => void;
-  /** Durable Water Shrine progress, offered as Continue when present. */
-  storyProgress?: { learned: boolean; seals: string[]; won: boolean } | null;
+  /** Durable story state: active chapter + its mid-run progress, if any. */
+  storyProgress?: StoryView | null;
   onPlayDaily: (challenge: DailyChallenge) => void;
   /** Local meta-progression (rank, level, streak) shown without a wallet. */
   progress?: PlayerProgress;
@@ -82,7 +83,7 @@ export function ArcadeLobby(props: Props) {
             <div key={i} className={styles.loadingCard} />
           ))}
         </div>
-        <ChapterLink onStory={props.onStory} progress={null} />
+        <ChapterLink onStory={props.onStory} view={null} />
       </div>
     );
   }
@@ -147,7 +148,7 @@ export function ArcadeLobby(props: Props) {
           </button>
         </div>
 
-        <ChapterLink onStory={props.onStory} progress={props.storyProgress ?? null} />
+        <ChapterLink onStory={props.onStory} view={props.storyProgress ?? null} />
 
         {showSetup && (
           <div id="run-setup" className={styles.setupPanel}>
@@ -274,25 +275,28 @@ export function ArcadeLobby(props: Props) {
   );
 }
 
-function ChapterLink({ onStory, progress }: { onStory?: () => void; progress: { learned: boolean; seals: string[]; won: boolean } | null }) {
+function ChapterLink({ onStory, view }: { onStory?: () => void; view: StoryView | null }) {
+  const chapter = view?.chapter ?? CHAPTERS["water-shrine"];
+  const completed = view?.completed.length ?? 0;
+  const chapterNo = completed > 0 ? ` · CHAPTER ${completed + 1}` : "";
   // Continue reads as the chapter you were playing; a fresh start reads as the
   // pitch. Progress always shows the run's real state, never marketing copy.
-  const resuming = Boolean(progress?.learned);
-  const seals = progress?.seals.length ?? 0;
+  const resuming = Boolean(view?.run?.learned);
+  const seals = view?.run?.seals.length ?? 0;
   const inner = resuming ? (
     <>
-      <span>STORY · THE WATER SHRINE · CONTINUE</span>
-      <strong>The Water Shrine</strong>
+      <span>STORY · {chapter.name.toUpperCase()}{chapterNo} · CONTINUE</span>
+      <strong>{chapter.name}</strong>
       <span>
-        Blessing learned · {seals === 1 ? "1 of 2 seals quenched — one burning seal remains" : "no seals quenched yet"}
+        Blessing learned · {chapter.lobby.progressLine(seals, 2)}
       </span>
       <b>Continue the Story →</b>
     </>
   ) : (
     <>
-      <span>STORY · THE WATER SHRINE</span>
-      <strong>The Water Shrine</strong>
-      <span>Learn a blessing. Quench two seals. Earn passage through the torii.</span>
+      <span>STORY · {chapter.name.toUpperCase()}{chapterNo}</span>
+      <strong>{chapter.name}</strong>
+      <span>{chapter.tagline}</span>
       <b>Play Story →</b>
     </>
   );

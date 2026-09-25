@@ -66,7 +66,8 @@ import { setKamikazeMode as setFlipperKamikazeMode } from "@/renderers/flipper-r
 import { recordReplayEvent, recordReplayTraceSample } from "@/model/replay-recorder";
 import { attachStoryTable, type StoryTable } from "@/model/story-table";
 import type { StoryEvent } from "@/model/story-run";
-import { saveLearnedBlessing, saveChapterProgress } from "@/model/shrine-chapter";
+import { recordRun } from "@/model/shrine-chapter";
+import { CHAPTERS } from "@/model/chapters";
 
 type IRoundEndHandler = (readyCallback: () => void, timeout: number) => void;
 type IMessageHandler = (message: GameMessages, optDuration?: number) => void;
@@ -458,40 +459,41 @@ export const init = async (
     // 5. and get the music goin'
     enqueueTrack(table.soundtrackId);
 
-    if (game.story && bumpers.length >= 2) {
-        storyTable = attachStoryTable({
-            engine: engine.engine,
-            state: game.story,
-            seals: [bumpers[0].body, bumpers[1].body],
-            onChange: (next) => {
-                if (!gameRef?.story) return;
-                const learnedNow = next.learned && !gameRef.story.learned;
-                gameRef.story = next;
-                gameRef.balls = next.integrity;
-                gameRef.active = next.phase !== "won" && next.phase !== "lost";
-                if (learnedNow) saveLearnedBlessing(true);
-                // Tier 3: persist after every accepted transition so the lobby
-                // can offer to continue where the run actually stands.
-                saveChapterProgress(next);
-                if (next.phase === "gate-opening" || next.phase === "won") playFurinChime();
-            },
-            onFreeze: (frozen) => {
-                storyFrozen = frozen;
-                if (frozen) {
-                    for (flipper of flippers) {
-                        flipper.trigger(false);
+    if (game.story) {
+        const [sealA, sealB] = CHAPTERS[game.story.chapterId].sealBumpers;
+        if (bumpers.length > Math.max(sealA, sealB)) {
+            storyTable = attachStoryTable({
+                engine: engine.engine,
+                state: game.story,
+                seals: [bumpers[sealA].body, bumpers[sealB].body],
+                onChange: (next) => {
+                    if (!gameRef?.story) return;
+                    gameRef.story = next;
+                    gameRef.balls = next.integrity;
+                    gameRef.active = next.phase !== "won" && next.phase !== "lost";
+                    // Tier 3: persist after every accepted transition so the
+                    // lobby can offer to continue where the run actually stands.
+                    recordRun(next);
+                    if (next.phase === "gate-opening" || next.phase === "won") playFurinChime();
+                },
+                onFreeze: (frozen) => {
+                    storyFrozen = frozen;
+                    if (frozen) {
+                        for (flipper of flippers) {
+                            flipper.trigger(false);
+                        }
                     }
-                }
-            },
-            onEvent: (next) => {
-                // Story speaks the same haptic vocabulary as the arcade: each
-                // milestone is felt once and understood, not read off the HUD.
-                if (next.phase === "lesson") haptics.storyCapture();
-                else if (next.waterArmed) haptics.storyArm();
-                else if (next.phase === "gate-opening") haptics.storyGate();
-                else if (next.seals.length > (gameRef?.story?.seals.length ?? 0)) haptics.storySeal();
-            },
-        });
+                },
+                onEvent: (next) => {
+                    // Story speaks the same haptic vocabulary as the arcade: each
+                    // milestone is felt once and understood, not read off the HUD.
+                    if (next.phase === "lesson") haptics.storyCapture();
+                    else if (next.armed) haptics.storyArm();
+                    else if (next.phase === "gate-opening") haptics.storyGate();
+                    else if (next.seals.length > (gameRef?.story?.seals.length ?? 0)) haptics.storySeal();
+                },
+            });
+        }
     }
 
     game.active = true;

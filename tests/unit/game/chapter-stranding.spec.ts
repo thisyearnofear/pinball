@@ -7,7 +7,7 @@ const targets: ChapterTarget[] = ["shrine", "west", "east", "gate"];
 const ticks = [0, 9, 18, 27, 36, 45, 54, 63, 72, 81, 90, 108, 126, 144, 162];
 
 function rig(learned = false) {
-  let state = createChapter(learned);
+  let state = createChapter("water-shrine", learned);
   const events: ChapterEvent[] = [];
   let physics: ChapterPhysics;
   physics = createChapterPhysics(state, event => {
@@ -67,7 +67,7 @@ describe("chapter launch recovery", () => {
   it("recovers a genuinely stranded ball once without charging integrity, mana, or the armed blessing", () => {
     const r = rig(true);
     try {
-      r.send({ type: "arm-water" });
+      r.send({ type: "arm" });
       const before = r.getState();
       restOnPlatform(r.physics);
       r.physics.advance(120);

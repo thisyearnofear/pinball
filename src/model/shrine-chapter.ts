@@ -1,15 +1,27 @@
 import { getFromStorage, setInStorage } from "@/utils/local-storage";
+import {
+  CHAPTERS,
+  activeChapterId,
+  type ChapterConfig,
+  type ChapterId,
+  type ChapterPhase,
+  type ElementId,
+  type SealId,
+  type StoryView,
+} from "@/model/chapters";
 
-export type SealId = "west" | "east";
+export type { ChapterId, ChapterPhase, ElementId, SealId } from "@/model/chapters";
+export type { ChapterConfig, StoryView } from "@/model/chapters";
+
 export type ChapterTarget = "shrine" | SealId | "gate";
-export type ChapterPhase = "playing" | "lesson" | "blessing" | "gate-opening" | "won" | "lost";
 export type DamageCause = "burn" | "drain";
 export type ChapterState = {
+  chapterId: ChapterId;
   phase: ChapterPhase;
   integrity: number;
   mana: number;
   learned: boolean;
-  waterArmed: boolean;
+  armed: boolean;
   seals: SealId[];
   lessonStep: number;
   lessonMistakes: number;
@@ -19,141 +31,242 @@ export type ChapterState = {
 };
 export type ChapterEvent =
   | { type: "shrine" }
-  | { type: "answer"; element: "water" | "fire" | "wind" }
+  | { type: "answer"; element: ElementId }
   | { type: "leave-lesson" }
   | { type: "continue" }
-  | { type: "arm-water" }
+  | { type: "arm" }
   | { type: "seal"; id: SealId }
   | { type: "gate" }
   | { type: "drain" }
   | { type: "ball-search" }
   | { type: "retry" };
-export const CHAPTER_MEMORY_KEY = "pinball_water_shrine_blessing_v1";
-export function createChapter(learned = false): ChapterState {
-  return { phase:"playing", integrity:3, mana:learned ? 3 : 0, learned,
-    waterArmed:false, seals:[], lessonStep:0, lessonMistakes:0,
-    lastDamage:null,
-    notice:learned ? "The water blessing is yours. Arm it before striking each fire seal." : "Aim for the water shrine. Learn its blessing before challenging the fire seals." };
+
+export const SEALS_TOTAL = 2;
+
+export function createChapter(chapterId: ChapterId = "water-shrine", learned = false): ChapterState {
+  const copy = CHAPTERS[chapterId].copy;
+  return { chapterId, phase: "playing", integrity: 3, mana: learned ? 3 : 0, learned,
+    armed: false, seals: [], lessonStep: 0, lessonMistakes: 0,
+    lastDamage: null,
+    notice: learned ? copy.startLearned : copy.startFresh };
 }
+
 function damage(s: ChapterState, cause: string, kind: DamageCause): ChapterState {
   const integrity = Math.max(0,s.integrity-1);
   return {...s, integrity, lastDamage:kind, phase: integrity === 0 ? "lost" : s.phase,
     notice: integrity === 0 ? `${cause} Your ball shattered. Retry with what you learned.` : `${cause} Integrity -1.${integrity===1 ? " Critical: one hit remaining." : ""}`};
 }
 export function chapterReducer(s: ChapterState, e: ChapterEvent): ChapterState {
-  if(e.type === "retry") return createChapter(s.learned);
+  const { copy, lessonExpected } = CHAPTERS[s.chapterId];
+  if(e.type === "retry") return createChapter(s.chapterId, s.learned);
   if(s.phase === "lost" || s.phase === "won") return s;
   if(e.type === "continue") {
     if(s.phase !== "blessing" && s.phase !== "gate-opening") return s;
-    return {...s, phase:"playing", notice:s.phase === "blessing" ? "Water quenches fire. Arm Water (W), then strike a seal. Each blessing costs 1 mana." : "Both seals are quenched. Aim through the open torii to complete the chapter."};
+    return {...s, phase:"playing", notice:s.phase === "blessing" ? copy.continueBlessing : copy.continueGate};
   }
   if(s.phase === "lesson") {
-    if(e.type === "leave-lesson") return {...s,phase:"playing",lessonStep:0,notice:"The shrine will wait. Return when you are ready to learn."};
+    if(e.type === "leave-lesson") return {...s,phase:"playing",lessonStep:0,notice:copy.leaveLesson};
     if(e.type !== "answer") return s;
-    const expected = s.lessonStep === 0 ? "water" : "wind";
+    const expected = lessonExpected[s.lessonStep];
     if(e.element !== expected) {
       const next = {...s,lessonStep:0,lessonMistakes:s.lessonMistakes+1};
-      if(s.lessonMistakes===0) return {...next,notice:"A safe practice mistake. Water quenches flame; wind feeds it. Try water, then wind."};
-      return damage(next,"The trial's warned ember struck after another wrong answer.","burn");
+      if(s.lessonMistakes===0) return {...next,notice:copy.lessonMistakeSafe};
+      return damage(next,copy.lessonMistakeHit,"burn");
     }
-    if(s.lessonStep===0) return {...s,lessonStep:1,notice:"Correct: water quenches fire. Which element would feed a flame instead?"};
-    return {...s,phase:"blessing",learned:true,mana:3,waterArmed:false,notice:"Water blessing learned. Knowledge survives a shattered ball."};
+    if(s.lessonStep===0) return {...s,lessonStep:1,notice:copy.lessonCorrectFirst};
+    return {...s,phase:"blessing",learned:true,mana:3,armed:false,notice:copy.lessonDone};
   }
   if(s.phase !== "playing") return s;
   switch(e.type) {
-    case "shrine": return s.learned ? {...s,mana:3,notice:"The shrine restores your mana to 3. Your learned blessing remains."} : {...s,phase:"lesson",lessonStep:0,notice:`Water quenches flame; wind feeds it. ${s.lessonMistakes === 0 ? "First mistake is safe. Later mistakes cost 1 integrity." : "Practice attempt used. Every further mistake costs 1 integrity."} Which element quenches a fire seal?`};
-    case "arm-water":
-      if(!s.learned) return {...s,notice:"Learn the water blessing at the shrine first."};
-      if(s.waterArmed) return s;
-      if(s.mana===0) return {...s,notice:"No mana. Aim for the shrine to refill."};
-      return {...s,mana:s.mana-1,waterArmed:true,notice:"Water armed: your next burning seal will be quenched. Ordinary rebounds do not consume it."};
+    case "shrine": return s.learned ? {...s,mana:3,notice:copy.shrineRefill} : {...s,phase:"lesson",lessonStep:0,notice:copy.lessonPrompt(s.lessonMistakes === 0)};
+    case "arm":
+      if(!s.learned) return {...s,notice:copy.armNeedLearn};
+      if(s.armed) return s;
+      if(s.mana===0) return {...s,notice:copy.armNoMana};
+      return {...s,mana:s.mana-1,armed:true,notice:copy.armOk};
     case "seal": {
       if(s.seals.includes(e.id)) return s;
-      if(!s.waterArmed) return damage(s,"A burning seal struck an unprotected ball. Arm Water before contact.","burn");
+      if(!s.armed) return damage(s,copy.sealBurn,"burn");
       const seals = [...s.seals,e.id];
-      return {...s,seals,waterArmed:false,phase:seals.length===2 ? "gate-opening" : "playing",notice:seals.length===2 ? "Both fire seals are quenched. The torii opens." : "One seal quenched. Arm Water again for the other seal."};
+      return {...s,seals,armed:false,phase:seals.length===SEALS_TOTAL ? "gate-opening" : "playing",notice:seals.length===SEALS_TOTAL ? copy.sealBoth : copy.sealOne};
     }
-    case "gate": return s.seals.length===2 ? {...s,phase:"won",notice:"You crossed the torii by learning water and quenching both seals. Chapter complete."} : {...s,notice:"The torii is sealed. Learn Water and quench both fire seals first."};
-    case "drain": return damage({...s,waterArmed:false},"The ball fell between the flippers. Hold both as it returns to cradle it.","drain");
-    case "ball-search": return {...s,notice:"MAMORU freed a trapped ball. No integrity or mana lost. Choose a target to relaunch."};
+    case "gate": return s.seals.length===SEALS_TOTAL ? {...s,phase:"won",notice:copy.gateWin} : {...s,notice:copy.gateLocked};
+    case "drain": return damage({...s,armed:false},copy.drain,"drain");
+    case "ball-search": return {...s,notice:copy.ballSearch};
     default: return s;
   }
 }
 export function chapterObjective(s: ChapterState): string {
-  if(s.phase === "won") return "Chapter complete";
-  if(s.phase === "lost") return "Ball shattered — your learning remains";
-  if(!s.learned) return "1 / 3 · Enter the water shrine and learn its blessing";
-  if(s.seals.length < 2) return `2 / 3 · Quench the fire seals (${s.seals.length}/2)`;
-  return "3 / 3 · Cross the open torii";
+  return CHAPTERS[s.chapterId].copy.objective({
+    phase: s.phase, learned: s.learned, seals: s.seals.length, total: SEALS_TOTAL,
+  });
 }
 
-export function loadLearnedBlessing(): boolean {
+// ── Story vault (durable progress across chapters) ─────────────
+
+/** What survives between sessions: knowledge, quenched/rung seals, wins — never mana. */
+export type ChapterRun = { learned: boolean; seals: SealId[] };
+export type StoryVault = {
+  version: 1;
+  blessings: ChapterId[];
+  completed: ChapterId[];
+  current: (ChapterRun & { chapterId: ChapterId }) | null;
+};
+
+export const STORY_VAULT_KEY = "pinball_story_vault_v1";
+// Legacy single-chapter keys, read once and folded into the vault.
+const LEGACY_PROGRESS_KEY = "pinball_water_shrine_progress_v1";
+const LEGACY_BLESSING_KEY = "pinball_water_shrine_blessing_v1";
+
+const EMPTY_VAULT: StoryVault = { version: 1, blessings: [], completed: [], current: null };
+
+function isChapterId(v: unknown): v is ChapterId {
+  return v === "water-shrine" || v === "wind-ridge";
+}
+function sanitizeSeals(v: unknown): SealId[] {
+  return Array.isArray(v) ? v.filter((id): id is SealId => id === "west" || id === "east") : [];
+}
+
+function migrateLegacyVault(): StoryVault | null {
+  const rawProgress = getFromStorage(LEGACY_PROGRESS_KEY);
+  const rawBlessing = getFromStorage(LEGACY_BLESSING_KEY);
+  if (!rawProgress && !rawBlessing) return null;
+  const vault: StoryVault = { ...EMPTY_VAULT, blessings: [], completed: [], current: null };
+  if (rawBlessing === "true") vault.blessings.push("water-shrine");
+  if (rawProgress && rawProgress !== "null") {
+    try {
+      const parsed = JSON.parse(rawProgress) as { learned?: unknown; seals?: unknown; won?: unknown };
+      // Same rejection rule as before: a win was cleared on write, and seals
+      // without the blessing are corrupt — never loosen to "fix" a load issue.
+      if (parsed && !parsed.won && parsed.learned === true) {
+        const seals = sanitizeSeals(parsed.seals);
+        vault.current = { chapterId: "water-shrine", learned: true, seals };
+        if (!vault.blessings.includes("water-shrine")) vault.blessings.push("water-shrine");
+      }
+    } catch {
+      // corrupt legacy blob: migration simply finds nothing to carry
+    }
+  }
+  return vault;
+}
+
+/**
+ * Corrupt or impossible vault data reads as an empty vault — the same rule
+ * the legacy single-chapter loader used: seals cannot exist without the
+ * blessing, unknown chapter ids are junk, and completed ⊆ blessings.
+ */
+export function loadVault(): StoryVault {
   try {
-    return getFromStorage(CHAPTER_MEMORY_KEY) === "true";
+    const raw = getFromStorage(STORY_VAULT_KEY);
+    if (raw && raw !== "null") {
+      const parsed = JSON.parse(raw) as Partial<StoryVault> | null;
+      if (parsed && parsed.version === 1) {
+        const blessings = Array.isArray(parsed.blessings) ? parsed.blessings.filter(isChapterId) : [];
+        const completed = (Array.isArray(parsed.completed) ? parsed.completed.filter(isChapterId) : [])
+          .filter((id) => blessings.includes(id));
+        const cur = parsed.current;
+        let current: StoryVault["current"] = null;
+        if (cur && isChapterId(cur.chapterId) && !completed.includes(cur.chapterId)) {
+          const seals = sanitizeSeals(cur.seals);
+          if (cur.learned === true) {
+            current = { chapterId: cur.chapterId, learned: true, seals };
+            if (!blessings.includes(cur.chapterId)) blessings.push(cur.chapterId);
+          } else if (seals.length === 0) {
+            current = { chapterId: cur.chapterId, learned: false, seals: [] };
+          }
+        }
+        return { version: 1, blessings, completed, current };
+      }
+    }
+    const migrated = migrateLegacyVault();
+    if (migrated) {
+      saveVault(migrated);
+      return migrated;
+    }
+    return { ...EMPTY_VAULT, blessings: [], completed: [], current: null };
   } catch {
-    return false;
+    return { ...EMPTY_VAULT, blessings: [], completed: [], current: null };
   }
 }
 
-export function saveLearnedBlessing(learned: boolean): void {
+export function saveVault(v: StoryVault): void {
   try {
-    setInStorage(CHAPTER_MEMORY_KEY, learned ? "true" : "false");
+    setInStorage(STORY_VAULT_KEY, JSON.stringify(v));
   } catch {
-    // storage may be denied; the blessing still lives in session state
+    // storage may be denied; the run still lives for this session
   }
 }
 
-// ── Chapter progress (Tier 3: continue the story) ──────────────
+export function blessingKnown(chapterId: ChapterId): boolean {
+  return loadVault().blessings.includes(chapterId);
+}
 
-/** What survives between sessions: knowledge and quenched seals, never mana. */
-export type ChapterProgress = { learned: boolean; seals: SealId[]; won: boolean };
-export const CHAPTER_PROGRESS_KEY = "pinball_water_shrine_progress_v1";
+/** Record that a chapter's blessing was learned, without touching the run. */
+export function markBlessingLearned(chapterId: ChapterId): void {
+  const v = loadVault();
+  if (!v.blessings.includes(chapterId)) {
+    saveVault({ ...v, blessings: [...v.blessings, chapterId] });
+  }
+}
+
+/** The chapter a fresh story run should open on. */
+export function activeChapter(): ChapterId {
+  return activeChapterId(loadVault().completed);
+}
+
+/** The lobby's view of the story: active chapter, its durable run, the wins. */
+export function loadStoryView(): StoryView {
+  const v = loadVault();
+  const chapterId = activeChapterId(v.completed);
+  const cur = v.current?.chapterId === chapterId ? v.current : null;
+  return {
+    chapter: CHAPTERS[chapterId],
+    run: cur ? { learned: cur.learned, seals: cur.seals } : null,
+    completed: v.completed,
+  };
+}
 
 /**
  * Persist the run after every accepted transition so the lobby can offer to
- * continue it. Terminal phases follow run semantics: a win clears everything,
- * and a shattered ball keeps only knowledge — exactly what a retry keeps — so
- * the lobby never offers progress a retry would not honour.
+ * continue it. A win completes the chapter and unlocks the next; a shattered
+ * ball keeps only knowledge — exactly what a retry keeps — so the lobby never
+ * offers progress a retry would not honour.
  */
-export function saveChapterProgress(s: ChapterState): void {
-  try {
-    if (s.phase === "won") {
-      clearChapterProgress();
-      return;
-    }
-    const seals = s.phase === "lost" ? [] : s.seals;
-    setInStorage(CHAPTER_PROGRESS_KEY, JSON.stringify({ learned: s.learned, seals, won: false }));
-  } catch {
-    // storage may be denied; progress still lives for this session
+export function recordRun(s: ChapterState): void {
+  const v = loadVault();
+  const blessings = v.blessings.includes(s.chapterId) || s.learned
+    ? [...new Set([...v.blessings, s.chapterId] as ChapterId[])]
+    : v.blessings;
+  if (s.phase === "won") {
+    saveVault({
+      version: 1,
+      blessings,
+      completed: [...new Set([...v.completed, s.chapterId] as ChapterId[])],
+      current: null,
+    });
+    return;
+  }
+  const seals = s.phase === "lost" ? [] : s.seals;
+  saveVault({
+    version: 1,
+    blessings,
+    completed: v.completed,
+    current: { chapterId: s.chapterId, learned: s.learned, seals },
+  });
+}
+
+export function clearRun(chapterId: ChapterId): void {
+  const v = loadVault();
+  if (v.current?.chapterId === chapterId) {
+    saveVault({ ...v, current: null });
   }
 }
 
-export function clearChapterProgress(): void {
-  try {
-    setInStorage(CHAPTER_PROGRESS_KEY, JSON.stringify(null));
-  } catch {
-    // storage may be denied
-  }
-}
-
-/** Corrupt, impossible, or finished progress reads as no progress at all. */
-export function loadChapterProgress(): ChapterProgress | null {
-  try {
-    const raw = getFromStorage(CHAPTER_PROGRESS_KEY);
-    if (!raw || raw === "null") return null;
-    const parsed = JSON.parse(raw) as Partial<ChapterProgress> | null;
-    if (!parsed || typeof parsed !== "object" || parsed.won) return null;
-    const learned = parsed.learned === true;
-    const seals = Array.isArray(parsed.seals)
-      ? parsed.seals.filter((id): id is SealId => id === "west" || id === "east")
-      : [];
-    // Seals cannot exist without the blessing, and an unlearned run has no
-    // durable progress to offer — anything else is corrupt.
-    if (!learned) return null;
-    return { learned, seals, won: false };
-  } catch {
-    return null;
-  }
+/** The durable mid-run progress for one chapter, or null. */
+export function loadRun(chapterId: ChapterId): ChapterRun | null {
+  const v = loadVault();
+  if (!v.current || v.current.chapterId !== chapterId || !v.current.learned) return null;
+  return { learned: true, seals: v.current.seals };
 }
 
 /**
@@ -162,14 +275,13 @@ export function loadChapterProgress(): ChapterProgress | null {
  * shrine refills it — so a resume grants enough to arm for the remaining
  * seals rather than soft-locking the player behind a detour.
  */
-export function resumeChapterState(p: ChapterProgress | null): ChapterState {
-  if (!p || !p.learned) return createChapter(loadLearnedBlessing());
+export function resumeChapterState(chapterId: ChapterId, p: ChapterRun | null): ChapterState {
+  if (!p || !p.learned) return createChapter(chapterId, blessingKnown(chapterId));
+  const copy = CHAPTERS[chapterId].copy;
   return {
-    ...createChapter(true),
+    ...createChapter(chapterId, true),
     seals: p.seals,
     mana: Math.max(1, 3 - p.seals.length),
-    notice: p.seals.length === 1
-      ? "Your journey resumes: one seal already quenched. Arm Water and quench the other."
-      : "Your journey resumes. Arm Water and quench both fire seals.",
+    notice: p.seals.length === 1 ? copy.resumeOne : copy.resumeFresh,
   };
 }

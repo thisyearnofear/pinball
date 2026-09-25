@@ -25,7 +25,8 @@ import { RiveArtboard } from "@/game/ui/RiveArtboard";
 import { ActorTypes } from "@/definitions/game";
 import { createStoryState, type StoryState } from "@/model/story-run";
 import type { StoryTarget } from "@/model/story-table";
-import { loadLearnedBlessing, loadChapterProgress, saveChapterProgress, chapterObjective } from "@/model/shrine-chapter";
+import { chapterObjective } from "@/model/shrine-chapter";
+import { CHAPTERS, type ChapterConfig } from "@/model/chapters";
 import ShrineChapter from "./chapter/ShrineChapter";
 import { createKamikazeState, POWERUP_NAMES, type AIDifficulty } from "@/model/kamikaze";
 import type { PowerUpSide } from "@/definitions/game";
@@ -87,7 +88,7 @@ function createRunGame(opts: {
     // Resume durable story progress when the run is a fresh story start; a
     // retry calls createStoryState again through the reducer, honouring the
     // same saved progress so retry and lobby-continue never disagree.
-    story: opts.story ? createStoryState(loadLearnedBlessing(), loadChapterProgress()) : undefined,
+    story: opts.story ? createStoryState() : undefined,
   };
 }
 
@@ -216,6 +217,7 @@ function StoryMarkers(props: {
   seals: string[];
   gateOpen: boolean;
   armed: boolean;
+  cfg: ChapterConfig;
   containerRef: React.RefObject<HTMLDivElement | null>;
   getClient: (x: number, y: number) => { x: number; y: number } | null;
   getBallClientPos: () => { x: number; y: number } | null;
@@ -256,6 +258,8 @@ function StoryMarkers(props: {
   return (
     <div aria-hidden style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 6 }}>
       {props.targets.map((t) => {
+        const m = props.cfg.markers;
+        const tint = props.cfg.tintRgb;
         const p = toLocal(t.x, t.y);
         if (!p) return null;
         if (t.id === "shrine") {
@@ -264,44 +268,44 @@ function StoryMarkers(props: {
             <div key={t.id} style={{ position: "absolute", left: p.x - r, top: p.y - r, width: r * 2, height: r * 2 }}>
               <div style={{
                 position: "absolute", inset: 0, borderRadius: "50%",
-                border: "2px solid #67e8f9", boxShadow: "0 0 14px rgba(103,232,249,0.7), inset 0 0 18px rgba(103,232,249,0.35)",
+                border: `2px solid rgb(${tint})`, boxShadow: `0 0 14px rgba(${tint},0.7), inset 0 0 18px rgba(${tint},0.35)`,
               }} />
               <div style={{
                 position: "absolute", inset: -8, borderRadius: "50%",
-                border: "1px solid rgba(103,232,249,0.45)",
+                border: `1px solid rgba(${tint},0.45)`,
               }} />
-              {label("水 SHRINE")}
+              {label(m.shrineLabel)}
             </div>
           );
         }
         if (t.id === "west" || t.id === "east") {
           const done = props.seals.includes(t.id);
           const r = Math.max(10, px(t.radius) + 6);
-          const color = done ? "#67e8f9" : "#e34234";
+          const color = done ? `rgb(${tint})` : "#e34234";
           return (
             <div key={t.id} style={{ position: "absolute", left: p.x - r, top: p.y - r, width: r * 2, height: r * 2 }}>
               <div style={{
                 position: "absolute", inset: 0, borderRadius: "50%",
                 border: `3px solid ${color}`,
-                boxShadow: `0 0 16px ${done ? "rgba(103,232,249,0.7)" : "rgba(227,66,52,0.7)"}`,
+                boxShadow: `0 0 16px ${done ? `rgba(${tint},0.7)` : "rgba(227,66,52,0.7)"}`,
                 opacity: done ? 0.9 : 1,
               }} />
-              {label(`${done ? "水" : "火"} SEAL ${t.id === "west" ? "I" : "II"}`, done ? "quenched" : "burning")}
+              {label(`${done ? m.sealDoneGlyph : m.sealHotGlyph} ${m.sealWord} ${t.id === "west" ? "I" : "II"}`, done ? m.sealDoneWord : m.sealHotWord)}
             </div>
           );
         }
-        // gate: horizontal beam across the torii passage
+        // gate: horizontal beam across the passage
         const halfW = Math.max(12, px(t.radius));
         const h = Math.max(6, px(18));
         return (
           <div key={t.id} style={{ position: "absolute", left: p.x - halfW, top: p.y - h / 2, width: halfW * 2, height: h }}>
             <div style={{
               position: "absolute", inset: 0, borderRadius: 3,
-              background: props.gateOpen ? "rgba(103,232,249,0.15)" : "rgba(227,66,52,0.5)",
-              border: `2px solid ${props.gateOpen ? "#67e8f9" : "#e34234"}`,
+              background: props.gateOpen ? `rgba(${tint},0.15)` : "rgba(227,66,52,0.5)",
+              border: `2px solid ${props.gateOpen ? `rgb(${tint})` : "#e34234"}`,
               boxShadow: props.gateOpen ? "none" : "0 0 14px rgba(227,66,52,0.6)",
             }} />
-            {label(props.gateOpen ? "鳥居 OPEN" : "鳥居 SEALED", props.gateOpen ? "cross to finish" : "2 seals")}
+            {label(props.gateOpen ? m.gateOpenLabel : m.gateSealedLabel, props.gateOpen ? m.gateOpenSub : m.gateSealedSub)}
           </div>
         );
       })}
@@ -309,7 +313,7 @@ function StoryMarkers(props: {
         <div style={{
           position: "absolute", left: ballLocal.x - 16, top: ballLocal.y - 16,
           width: 32, height: 32, borderRadius: "50%",
-          border: "2.5px solid #67e8f9", boxShadow: "0 0 12px rgba(103,232,249,0.8)",
+          border: `2.5px solid rgb(${props.cfg.tintRgb})`, boxShadow: `0 0 12px rgba(${props.cfg.tintRgb},0.8)`,
         }} />
       )}
     </div>
@@ -453,8 +457,12 @@ export default function GameMount(props: Props) {
   // Story mode plays under gameMode "classic", so the coach script is chosen
   // explicitly from the story flag rather than inferred from the mode.
   const coachCues = useMemo(
-    () => coachScript(storyRun ? "story" : props.gameMode, coachTouchscreen),
-    [storyRun, props.gameMode, coachTouchscreen],
+    () => coachScript(
+      storyRun ? "story" : props.gameMode,
+      coachTouchscreen,
+      storyHud ? CHAPTERS[storyHud.chapterId] : undefined,
+    ),
+    [storyRun, props.gameMode, coachTouchscreen, storyHud?.chapterId],
   );
   const coachCue = useMemo(
     () => (props.coach || coachArmed ? currentCue(coachCues, coachObs, new Set<string>(coachDismissed)) : null),
@@ -825,7 +833,7 @@ export default function GameMount(props: Props) {
                 ...prev,
                 captured: prev.captured || s.phase === "lesson",
                 learned: prev.learned || s.learned,
-                armed: prev.armed || s.waterArmed,
+                armed: prev.armed || s.armed,
                 sealsQuenched: Math.max(prev.sealsQuenched, s.seals.length),
                 gateOpen: prev.gateOpen || s.seals.length === 2,
                 won: prev.won || s.phase === "won",
@@ -1090,8 +1098,9 @@ export default function GameMount(props: Props) {
     }
   }, [storyHud?.phase, trialEncounter]);
 
-  // Story mode readout: objective + resources + the Water verbs, as a strip
-  // above the playfield on all widths so it never occludes the ball's lane.
+  const storyCfg = CHAPTERS[storyHud?.chapterId ?? "water-shrine"];
+  // Story mode readout: objective + resources + the chapter's verbs, as a
+  // strip above the playfield on all widths so it never occludes the ball's lane.
   const storyStrip = storyRun && storyHud ? (
     <div
       data-testid="story-hud"
@@ -1100,7 +1109,7 @@ export default function GameMount(props: Props) {
         padding: "10px 14px",
         borderRadius: 10,
         background: "rgba(0,0,0,0.6)",
-        border: "1px solid rgba(103,232,249,0.35)",
+        border: `1px solid rgba(${storyCfg.tintRgb},0.35)`,
         color: "#f5efe6",
         fontSize: 12,
       }}
@@ -1126,9 +1135,9 @@ export default function GameMount(props: Props) {
                     style={{
                       width: 11, height: 11, borderRadius: "50%",
                       display: "inline-block",
-                      border: "1px solid rgba(103,232,249,0.8)",
-                      background: i < storyHud.mana ? "rgba(103,232,249,0.9)" : "transparent",
-                      boxShadow: i < storyHud.mana ? "0 0 6px rgba(103,232,249,0.7)" : "none",
+                      border: `1px solid rgba(${storyCfg.tintRgb},0.8)`,
+                      background: i < storyHud.mana ? `rgba(${storyCfg.tintRgb},0.9)` : "transparent",
+                      boxShadow: i < storyHud.mana ? `0 0 6px rgba(${storyCfg.tintRgb},0.7)` : "none",
                       transition: "background 160ms ease, box-shadow 160ms ease",
                     }}
                   />
@@ -1142,30 +1151,30 @@ export default function GameMount(props: Props) {
                 <RiveArtboard
                   src="/rive/hud.riv"
                   artboard="hud_gauge"
-                  data={{ mana: storyHud.mana, armed: storyHud.waterArmed }}
+                  data={{ mana: storyHud.mana, armed: storyHud.armed }}
                   style={{ width: "100%", height: "100%" }}
                   onReady={setRiveGaugeReady}
                 />
               </span>
             </span>
           </span>
-          <span>{storyHud.learned ? (storyHud.waterArmed ? "Water armed" : "Water learned") : "No blessing"}</span>
-          <span>Seals {storyHud.seals.length}/2</span>
+          <span>{storyHud.learned ? (storyHud.armed ? storyCfg.blessingWord.armed : storyCfg.blessingWord.learned) : storyCfg.blessingWord.none}</span>
+          <span>{storyCfg.markers.sealPlural} {storyHud.seals.length}/2</span>
         </span>
       </div>
       <div aria-live="polite" style={{ opacity: 0.85, marginTop: 4 }}>{storyHud.notice}</div>
       <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
         <button
           type="button"
-          disabled={!storyHud.learned || storyHud.mana === 0 || storyHud.waterArmed || storyHud.phase !== "playing"}
-          onClick={() => storyAction({ type: "arm-water" })}
+          disabled={!storyHud.learned || storyHud.mana === 0 || storyHud.armed || storyHud.phase !== "playing"}
+          onClick={() => storyAction({ type: "arm" })}
           style={{
-            padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(103,232,249,0.5)",
-            background: storyHud.waterArmed ? "rgba(103,232,249,0.25)" : "rgba(103,232,249,0.12)",
-            color: "#bff3ff", fontWeight: 700, fontSize: 12, cursor: "pointer", minHeight: 36,
+            padding: "8px 14px", borderRadius: 8, border: `1px solid rgba(${storyCfg.tintRgb},0.5)`,
+            background: storyHud.armed ? `rgba(${storyCfg.tintRgb},0.25)` : `rgba(${storyCfg.tintRgb},0.12)`,
+            color: `rgb(${storyCfg.tintRgb})`, fontWeight: 700, fontSize: 12, cursor: "pointer", minHeight: 36,
           }}
         >
-          {storyHud.waterArmed ? "Water armed" : "Arm Water (W)"}
+          {storyHud.armed ? storyCfg.blessingWord.armed : `Arm ${storyCfg.verb.name} (${storyCfg.verb.key})`}
         </button>
         <button
           type="button"
@@ -1440,7 +1449,8 @@ export default function GameMount(props: Props) {
             targets={storyTargets}
             seals={storyHud.seals}
             gateOpen={storyHud.seals.length === 2}
-            armed={storyHud.waterArmed}
+            armed={storyHud.armed}
+            cfg={storyCfg}
             containerRef={shakeRef}
             getClient={(x, y) => mountedRef.current?.getPointClientPosition(x, y) ?? null}
             getBallClientPos={() => mountedRef.current?.getBallClientPosition() ?? null}
@@ -1714,7 +1724,7 @@ export default function GameMount(props: Props) {
                 }}
               >
                 {trialEncounter !== null ? (
-                  <div style={{ width: "min(720px, 96%)", maxHeight: "100%", overflowY: "auto", borderRadius: 12, border: "1px solid rgba(103,232,249,0.4)", background: "#0a0a0f" }}>
+                  <div style={{ width: "min(720px, 96%)", maxHeight: "100%", overflowY: "auto", borderRadius: 12, border: `1px solid rgba(${storyCfg.tintRgb},0.4)`, background: "#0a0a0f" }}>
                     <ShrineChapter
                       embedded
                       paused={props.paused}
@@ -1728,29 +1738,29 @@ export default function GameMount(props: Props) {
                 ) : (
                   <div style={{
                     width: "min(420px, 92%)", padding: "22px 24px", borderRadius: 14,
-                    background: "rgba(10,10,15,0.96)", border: "1px solid rgba(103,232,249,0.45)",
+                    background: "rgba(10,10,15,0.96)", border: `1px solid rgba(${storyCfg.tintRgb},0.45)`,
                     color: "#f5efe6", textAlign: "center",
                   }}>
-                    <p style={{ fontSize: 10, letterSpacing: "0.35em", textTransform: "uppercase", color: "rgba(103,232,249,0.8)", margin: "0 0 6px" }}>Shrine encounter</p>
-                    <h3 style={{ margin: "0 0 10px", fontSize: 22 }}>水 The Water Shrine</h3>
+                    <p style={{ fontSize: 10, letterSpacing: "0.35em", textTransform: "uppercase", color: `rgba(${storyCfg.tintRgb},0.8)`, margin: "0 0 6px" }}>Shrine encounter</p>
+                    <h3 style={{ margin: "0 0 10px", fontSize: 22 }}>{storyCfg.glyph} {storyCfg.overlay.shrineHeading}</h3>
                     <p style={{ fontSize: 13, opacity: 0.85, lineHeight: 1.5 }}>
                       The main ball is safely held. {storyHud.learned
-                        ? "MAMORU can restore your mana — or you may practice the Water Trial again."
-                        : "MAMORU offers a contained Water Trial: a short lesson and one practice seal."}
+                        ? storyCfg.overlay.shrinePractice
+                        : storyCfg.overlay.shrineOffer}
                     </p>
                     <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 14 }}>
                       <button
                         type="button"
                         onClick={() => setTrialEncounter(storyHud.encounterId)}
-                        style={{ padding: "10px 16px", borderRadius: 8, border: "none", background: "rgba(103,232,249,0.85)", color: "#06202a", fontWeight: 800, fontSize: 13, cursor: "pointer", minHeight: 44 }}
+                        style={{ padding: "10px 16px", borderRadius: 8, border: "none", background: `rgba(${storyCfg.tintRgb},0.85)`, color: storyCfg.tintInk, fontWeight: 800, fontSize: 13, cursor: "pointer", minHeight: 44 }}
                       >
-                        {storyHud.learned ? "Practice the Water Trial" : "Begin the Water Trial"}
+                        {storyHud.learned ? storyCfg.overlay.trialLearned : storyCfg.overlay.trialFresh}
                       </button>
                       {storyHud.learned && (
                         <button
                           type="button"
                           onClick={() => storyAction({ type: "refill", encounterId: storyHud.encounterId })}
-                          style={{ padding: "10px 16px", borderRadius: 8, border: "1px solid rgba(103,232,249,0.5)", background: "rgba(103,232,249,0.12)", color: "#bff3ff", fontWeight: 700, fontSize: 13, cursor: "pointer", minHeight: 44 }}
+                          style={{ padding: "10px 16px", borderRadius: 8, border: `1px solid rgba(${storyCfg.tintRgb},0.5)`, background: `rgba(${storyCfg.tintRgb},0.12)`, color: storyCfg.tintText, fontWeight: 700, fontSize: 13, cursor: "pointer", minHeight: 44 }}
                         >
                           Refill mana & return
                         </button>
@@ -1779,19 +1789,19 @@ export default function GameMount(props: Props) {
               >
                 <div style={{
                   width: "min(420px, 92%)", padding: "22px 24px", borderRadius: 14,
-                  background: "rgba(10,10,15,0.96)", border: "1px solid rgba(103,232,249,0.45)",
+                  background: "rgba(10,10,15,0.96)", border: `1px solid rgba(${storyCfg.tintRgb},0.45)`,
                   color: "#f5efe6", textAlign: "center",
                 }}>
                   <h3 style={{ margin: "0 0 10px", fontSize: 20 }}>
-                    {storyHud.phase === "blessing" ? "The Blessing of Water 水" : "The Torii Opens 鳥居"}
+                    {storyHud.phase === "blessing" ? storyCfg.overlay.blessingTitle : storyCfg.overlay.gateTitle}
                   </h3>
                   <p style={{ fontSize: 13, opacity: 0.85, lineHeight: 1.5 }}>{storyHud.notice}</p>
                   <button
                     type="button"
                     onClick={() => storyAction({ type: "continue" })}
-                    style={{ marginTop: 12, padding: "10px 18px", borderRadius: 8, border: "none", background: "rgba(103,232,249,0.85)", color: "#06202a", fontWeight: 800, fontSize: 13, cursor: "pointer", minHeight: 44 }}
+                    style={{ marginTop: 12, padding: "10px 18px", borderRadius: 8, border: "none", background: `rgba(${storyCfg.tintRgb},0.85)`, color: storyCfg.tintInk, fontWeight: 800, fontSize: 13, cursor: "pointer", minHeight: 44 }}
                   >
-                    {storyHud.phase === "blessing" ? "Continue — carry Water to the seals" : "Continue — cross the open torii"}
+                    {storyHud.phase === "blessing" ? storyCfg.overlay.continueBlessing : storyCfg.overlay.continueGate}
                   </button>
                 </div>
               </div>
@@ -1809,18 +1819,18 @@ export default function GameMount(props: Props) {
                 <div style={{
                   width: "min(420px, 92%)", padding: "24px", borderRadius: 14,
                   background: "rgba(10,10,15,0.96)",
-                  border: `1px solid ${storyHud.phase === "won" ? "rgba(103,232,249,0.6)" : "rgba(227,66,52,0.6)"}`,
+                  border: `1px solid ${storyHud.phase === "won" ? `rgba(${storyCfg.tintRgb},0.6)` : "rgba(227,66,52,0.6)"}`,
                   color: "#f5efe6", textAlign: "center",
                 }}>
                   <h3 style={{ margin: "0 0 10px", fontSize: 22 }}>
-                    {storyHud.phase === "won" ? "Chapter Complete — you crossed the torii" : "The Story Falters"}
+                    {storyHud.phase === "won" ? storyCfg.overlay.winTitle : "The Story Falters"}
                   </h3>
                   <p style={{ fontSize: 13, opacity: 0.85, lineHeight: 1.5 }}>{storyHud.notice}</p>
                   <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 14, flexWrap: "wrap" }}>
                     <button
                       type="button"
                       onClick={() => props.onRestart?.()}
-                      style={{ padding: "10px 16px", borderRadius: 8, border: "none", background: "rgba(103,232,249,0.85)", color: "#06202a", fontWeight: 800, fontSize: 13, cursor: "pointer", minHeight: 44 }}
+                      style={{ padding: "10px 16px", borderRadius: 8, border: "none", background: `rgba(${storyCfg.tintRgb},0.85)`, color: storyCfg.tintInk, fontWeight: 800, fontSize: 13, cursor: "pointer", minHeight: 44 }}
                     >
                       {storyHud.phase === "won" ? "Play Story again" : "Retry Story"}
                     </button>

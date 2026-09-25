@@ -2,6 +2,14 @@ import { describe, it, expect, beforeAll } from "vitest";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ArcadeLobby } from "@/game/ui/ArcadeLobby";
+import { CHAPTERS, type StoryView } from "@/model/chapters";
+
+const storyView = ( over: Partial<StoryView> = {} ): StoryView => ({
+    chapter: CHAPTERS["water-shrine"],
+    run: null,
+    completed: [],
+    ...over,
+});
 
 /**
  * The lobby has exactly one job: start a run. Mode, machine difficulty and
@@ -96,11 +104,21 @@ describe("ArcadeLobby", () => {
     });
 
     it("offers to continue the story when durable progress exists, naming its state", () => {
-        const markup = html({ onStory: noop, storyProgress: { learned: true, seals: ["west"], won: false } });
+        const markup = html({ onStory: noop, storyProgress: storyView({ run: { learned: true, seals: ["west"] } }) });
         expect(markup).toContain("Continue the Story");
         expect(markup).toContain("1 of 2 seals quenched");
         // A resumable card is a button, not the cold /chapter link.
         expect(markup).not.toContain('href="/chapter"');
+    });
+
+    it("names the active chapter and its number once chapter 1 is complete", () => {
+        const markup = html({ onStory: noop, storyProgress: storyView({
+            chapter: CHAPTERS["wind-ridge"], completed: ["water-shrine"],
+        })});
+        expect(markup).toContain("The Wind Ridge");
+        expect(markup).toContain("CHAPTER 2");
+        expect(markup).toContain("storm chimes");
+        expect(markup).not.toContain("Continue the Story");
     });
 
     it("pitches a fresh story when there is no progress to continue", () => {
@@ -110,7 +128,7 @@ describe("ArcadeLobby", () => {
     });
 
     it("keeps the story card reachable even while the lobby loads", () => {
-        const loading = html({ loading: true, storyProgress: { learned: true, seals: [], won: false } });
+        const loading = html({ loading: true, storyProgress: storyView({ run: { learned: true, seals: [] } }) });
         expect(loading).toContain("The Water Shrine");
         // Loading has no progress read yet — it must not promise a continue
         // it cannot back, so it renders the neutral pitch.

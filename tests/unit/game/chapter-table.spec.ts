@@ -70,7 +70,7 @@ describe("chapter table physics", () => {
   });
 
   it("keeps the torii physically shut until both seals are quenched", () => {
-    const r = rig(createChapter(true));
+    const r = rig(createChapter("water-shrine", true));
     expect(r.phys.engine.world.bodies.find(body => body.label === "gate")?.isSensor).toBe(false);
     shoot(r, "gate");
     expect(eventsOf(r, "gate")).toHaveLength(1);
@@ -80,7 +80,7 @@ describe("chapter table physics", () => {
   });
 
   it("quenches each fire seal only while water is armed, and opens the gate after both", () => {
-    const r = rig(createChapter(true));
+    const r = rig(createChapter("water-shrine", true));
     shootUntil(r, "west", "seal");
     expect(r.getState().integrity).toBe(2);
     expect(r.getState().seals).toEqual([]);
@@ -88,10 +88,10 @@ describe("chapter table physics", () => {
     r.phys.flip("right", true);
     r.phys.advance(100);
     expect(r.phys.snapshot().held).toBe(true);
-    r.send({ type: "arm-water" });
+    r.send({ type: "arm" });
     shoot(r, "west");
     expect(r.getState().seals).toEqual(["west"]);
-    r.send({ type: "arm-water" });
+    r.send({ type: "arm" });
     shoot(r, "east");
     expect(r.getState().phase).toBe("gate-opening");
     r.send({ type: "continue" });
@@ -115,9 +115,9 @@ describe("chapter table physics", () => {
     r.send({ type: "answer", element: "wind" });
     expect(r.getState().phase).toBe("blessing");
     r.send({ type: "continue" });
-    r.send({ type: "arm-water" });
+    r.send({ type: "arm" });
     shoot(r, "west");
-    r.send({ type: "arm-water" });
+    r.send({ type: "arm" });
     shoot(r, "east");
     expect(r.getState().phase).toBe("gate-opening");
     r.send({ type: "continue" });
@@ -142,8 +142,8 @@ describe("chapter table physics", () => {
   });
 
   it("emits a single drain then cradles, and clears arming per the reducer", () => {
-    const r = rig(createChapter(true));
-    r.send({ type: "arm-water" });
+    const r = rig(createChapter("water-shrine", true));
+    r.send({ type: "arm" });
     r.phys.aim("gate");
     r.phys.release();
     Matter.Body.setPosition(r.phys.ball, { x: 300, y: 815 });
@@ -152,7 +152,7 @@ describe("chapter table physics", () => {
     expect(eventsOf(r, "drain")).toHaveLength(1);
     expect(r.phys.snapshot().held).toBe(true);
     expect(r.phys.ball.isStatic).toBe(true);
-    expect(r.getState().waterArmed).toBe(false);
+    expect(r.getState().armed).toBe(false);
     r.phys.advance(60);
     expect(eventsOf(r, "drain")).toHaveLength(1);
     r.phys.destroy();
@@ -174,7 +174,7 @@ describe("chapter table physics", () => {
   });
 
   it("counts a fire seal once per launch even if the ball re-enters it", () => {
-    const r = rig(createChapter(true));
+    const r = rig(createChapter("water-shrine", true));
     shootUntil(r, "west", "seal");
     expect(eventsOf(r, "seal")).toHaveLength(1);
     expect(r.phys.ball.isStatic).toBe(false);
@@ -190,7 +190,7 @@ describe("chapter table physics", () => {
   });
 
   it("pays for an unarmed seal hit but never for walls or bumpers", () => {
-    const r = rig(createChapter(true));
+    const r = rig(createChapter("water-shrine", true));
     shootUntil(r, "west", "seal");
     expect(r.getState().integrity).toBe(2);
     let bumperContacts = 0;

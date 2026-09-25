@@ -3,24 +3,32 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  chapterReducer, chapterObjective, createChapter,
-  loadLearnedBlessing, saveLearnedBlessing,
-  type ChapterEvent, type ChapterState, type ChapterTarget,
+  activeChapter,
+  blessingKnown,
+  chapterReducer,
+  chapterObjective,
+  createChapter,
+  markBlessingLearned,
+  type ChapterEvent,
+  type ChapterId,
+  type ChapterState,
+  type ChapterTarget,
 } from "@/model/shrine-chapter";
+import { CHAPTER_ORDER, CHAPTERS, type ChapterConfig, type ElementId } from "@/model/chapters";
 import type { TrialOutcome } from "@/model/story-run";
 import { createChapterTable, type ChapterTable, type ChapterTableSnapshot } from "./chapter-table";
 import styles from "./ShrineChapter.module.scss";
 
-const AIM_LABELS: { target: ChapterTarget; key: string; label: string; hint: string }[] = [
-  { target: "shrine", key: "1", label: "Water Shrine", hint: "learn · refill mana" },
-  { target: "west", key: "2", label: "Fire Seal I", hint: "needs armed water" },
-  { target: "east", key: "3", label: "Fire Seal II", hint: "needs armed water" },
-  { target: "gate", key: "4", label: "Torii Gate", hint: "opens after both seals" },
-];
+function aimsFor(cfg: ChapterConfig): { target: ChapterTarget; key: string; label: string; hint: string }[] {
+  return [
+    { target: "shrine", key: "1", label: cfg.targets.shrine, hint: cfg.hints.shrine },
+    { target: "west", key: "2", label: cfg.targets.sealI, hint: cfg.hints.seal },
+    { target: "east", key: "3", label: cfg.targets.sealII, hint: cfg.hints.seal },
+    { target: "gate", key: "4", label: cfg.targets.gate, hint: cfg.hints.gate },
+  ];
+}
 
-const EMBEDDED_AIMS = AIM_LABELS.filter(a => a.target === "shrine" || a.target === "west");
-
-const ELEMENTS: { element: "water" | "fire" | "wind"; label: string; glyph: string }[] = [
+const ELEMENTS: { element: ElementId; label: string; glyph: string }[] = [
   { element: "water", label: "Water", glyph: "水" },
   { element: "fire", label: "Fire", glyph: "火" },
   { element: "wind", label: "Wind", glyph: "風" },
@@ -35,13 +43,16 @@ function isTextInput(el: EventTarget | null): boolean {
 }
 
 type Props = {
+  chapterId?: ChapterId;
   embedded?: boolean;
   paused?: boolean;
   onResult?: (outcome: TrialOutcome) => void;
 };
 
-export default function ShrineChapter({ embedded = false, paused: externalPaused = false, onResult }: Props = {}) {
-  const [state, setState] = useState<ChapterState>(() => createChapter(embedded ? false : loadLearnedBlessing()));
+export default function ShrineChapter({ chapterId: chapterIdProp, embedded = false, paused: externalPaused = false, onResult }: Props = {}) {
+  const chapterId = chapterIdProp ?? activeChapter();
+  const cfg = CHAPTERS[chapterId];
+  const [state, setState] = useState<ChapterState>(() => createChapter(chapterId, embedded ? false : blessingKnown(chapterId)));
   const [paused, setPaused] = useState(false);
   const resultSentRef = useRef(false);
   const onResultRef = useRef(onResult);
@@ -70,13 +81,13 @@ export default function ShrineChapter({ embedded = false, paused: externalPaused
     let next = chapterReducer(prev, event);
     if (next === prev) return;
     // Embedded trial: the lesson + one practice seal is the whole encounter —
-    // no second fire seal or gate campaign lives inside the shrine visit.
+    // no second seal or gate campaign lives inside the shrine visit.
     if (embedded && next.learned && next.seals.includes("west") && next.phase !== "won") {
-      next = { ...next, phase: "won", waterArmed: false, notice: "Water trial mastered. Carry the blessing back to the main table." };
+      next = { ...next, phase: "won", armed: false, notice: CHAPTERS[prev.chapterId].copy.trial.mastered };
     }
     stateRef.current = next;
     tableRef.current?.setState(next);
-    if (!embedded && next.learned && !prev.learned) saveLearnedBlessing(true);
+    if (!embedded && next.learned && !prev.learned) markBlessingLearned(next.chapterId);
     setState(next);
   }, [embedded]);
 
@@ -104,7 +115,8 @@ export default function ShrineChapter({ embedded = false, paused: externalPaused
     canvasRef.current?.focus({ preventScroll: true });
   }, []);
 
-  const aims = embedded ? EMBEDDED_AIMS : AIM_LABELS;
+  const allAims = aimsFor(cfg);
+  const aims = embedded ? allAims.filter(a => a.target === "shrine" || a.target === "west") : allAims;
 
   useEffect(() => {
     if (!embedded) return;
@@ -178,7 +190,7 @@ export default function ShrineChapter({ embedded = false, paused: externalPaused
         return;
       }
       if (phase !== "playing" || pausedRef.current) return;
-      if (key === "w") { dispatch({ type: "arm-water" }); return; }
+      if (key === cfg.verb.key.toLowerCase()) { dispatch({ type: "arm" }); return; }
       if (key === "a" || e.key === "ArrowLeft") {
         e.preventDefault(); tableRef.current?.flip("left", true); return;
       }
@@ -203,7 +215,7 @@ export default function ShrineChapter({ embedded = false, paused: externalPaused
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
     };
-  }, [dispatch, setPausedBoth, chooseTarget, embedded, externalPaused, emitResult, aims]);
+  }, [dispatch, setPausedBoth, chooseTarget, embedded, externalPaused, emitResult, aims, cfg]);
 
   useEffect(() => {
     if (!dialogOpen) return;
@@ -256,21 +268,22 @@ export default function ShrineChapter({ embedded = false, paused: externalPaused
   });
 
   const launchDisabled = !held || pausedEff || !playing || !aimReady;
-  const armDisabled = !state.learned || state.mana === 0 || state.waterArmed || !playing || pausedEff;
+  const armDisabled = !state.learned || state.mana === 0 || state.armed || !playing || pausedEff;
+  const chapterNo = String(CHAPTER_ORDER.indexOf(chapterId) + 1).padStart(2, "0");
 
   return (
     <main className={`${styles.page} ${embedded ? styles.embedded : ""}`}>
       {embedded ? (
         <header className={`${styles.header} ${styles.headerEmbedded}`} inert={dialogOpen || undefined}>
           <p className={styles.eyebrow}>Shrine encounter</p>
-          <h1 className={styles.titleSmall}>MAMORU&rsquo;s Water Trial <span aria-hidden="true">水</span></h1>
+          <h1 className={styles.titleSmall}>MAMORU&rsquo;s {cfg.overlay.trialName} <span aria-hidden="true">{cfg.glyph}</span></h1>
         </header>
       ) : (
         <header className={styles.header} inert={dialogOpen || undefined}>
           <Link href="/" className={styles.back}>← Return to arcade</Link>
-          <p className={styles.eyebrow}>Free play · Story prototype · Chapter 01</p>
-          <h1 className={styles.title}>The Water Shrine <span aria-hidden="true">水</span></h1>
-          <p className={styles.tagline}>Learn the water blessing. Earn passage through the torii.</p>
+          <p className={styles.eyebrow}>Free play · Story prototype · Chapter {chapterNo}</p>
+          <h1 className={styles.title}>{cfg.name} <span aria-hidden="true">{cfg.glyph}</span></h1>
+          <p className={styles.tagline}>{cfg.tagline}</p>
         </header>
       )}
 
@@ -281,7 +294,7 @@ export default function ShrineChapter({ embedded = false, paused: externalPaused
             className={styles.canvas}
             role="img"
             tabIndex={0}
-            aria-label="Shrine garden pinball table. Aim at the water shrine, two fire seals, and the torii gate."
+            aria-label={`Shrine garden pinball table. Aim at the ${cfg.targets.shrine.toLowerCase()}, two ${cfg.markers.sealWord.toLowerCase()}s, and the ${cfg.targets.gate.toLowerCase()}.`}
           />
           <div className={styles.meterRow}>
             <div ref={meterRef} className={styles.meter} role="meter" aria-label="Shot timing" aria-valuemin={0} aria-valuemax={100} aria-valuenow={0}>
@@ -305,7 +318,7 @@ export default function ShrineChapter({ embedded = false, paused: externalPaused
                   title={a.hint}
                 >
                   <span className={styles.aimKey}>{a.key}</span>
-                  {embedded && a.target === "west" ? "Practice seal" : a.label}
+                  {embedded && a.target === "west" ? cfg.overlay.practiceTarget : a.label}
                 </button>
               ))}
             </div>
@@ -314,9 +327,9 @@ export default function ShrineChapter({ embedded = false, paused: externalPaused
                 type="button"
                 className={styles.armBtn}
                 disabled={armDisabled}
-                onClick={() => { dispatch({ type: "arm-water" }); canvasRef.current?.focus({ preventScroll: true }); }}
+                onClick={() => { dispatch({ type: "arm" }); canvasRef.current?.focus({ preventScroll: true }); }}
               >
-                {state.waterArmed ? "Water armed" : "Arm Water (W)"}
+                {state.armed ? cfg.blessingWord.armed : `Arm ${cfg.verb.name} (${cfg.verb.key})`}
               </button>
               <button
                 type="button"
@@ -351,18 +364,18 @@ export default function ShrineChapter({ embedded = false, paused: externalPaused
           <dl className={styles.stats}>
             <div><dt>{embedded ? "Trial attempts" : "Integrity"}</dt><dd className={state.integrity === 1 ? styles.critical : ""}>{"●".repeat(state.integrity)}{"○".repeat(3 - state.integrity)} {state.integrity === 1 ? "— critical" : ""}</dd></div>
             <div><dt>Mana</dt><dd>{state.mana} / 3{embedded ? " (practice only)" : ""}</dd></div>
-            <div><dt>Blessing</dt><dd>{state.learned ? (state.waterArmed ? "Water armed" : "Water learned") : "Not learned"}</dd></div>
-            <div><dt>{embedded ? "Practice seal" : "Seals"}</dt><dd>{(embedded ? ["west"] : ["west", "east"]).map(id => <span key={id} className={state.seals.includes(id as "west" | "east") ? styles.sealDone : styles.sealOpen}>{id === "west" ? "I" : "II"} {state.seals.includes(id as "west" | "east") ? "quenched" : "burning"}</span>)}</dd></div>
+            <div><dt>Blessing</dt><dd>{state.learned ? (state.armed ? cfg.blessingWord.armed : cfg.blessingWord.learned) : "Not learned"}</dd></div>
+            <div><dt>{embedded ? cfg.overlay.practiceTarget : cfg.markers.sealPlural}</dt><dd>{(embedded ? ["west"] : ["west", "east"]).map(id => <span key={id} className={state.seals.includes(id as "west" | "east") ? styles.sealDone : styles.sealOpen}>{id === "west" ? "I" : "II"} {state.seals.includes(id as "west" | "east") ? cfg.markers.sealDoneWord : cfg.markers.sealHotWord}</span>)}</dd></div>
           </dl>
           {embedded && <p className={styles.trialNote}>Failing all attempts costs 1 main integrity. Leaving costs nothing.</p>}
           <p className={styles.notice} aria-live="polite">{state.notice}</p>
           <details className={styles.help}>
             <summary>How to play</summary>
             <ol className={styles.howto}>
-              <li>Choose a target (1–4) — fire seals burn an unarmed ball.</li>
+              <li>Choose a target (1–4) — the {cfg.markers.sealWord.toLowerCase()}s punish an unarmed ball.</li>
               <li>Launch on the lit meter band (Space).</li>
               <li>Hold both flippers (A + D) to catch a falling ball.</li>
-              <li>Press W to arm Water before each seal shot.</li>
+              <li>Press {cfg.verb.key} to arm {cfg.verb.name} before each {cfg.markers.sealWord.toLowerCase()} shot.</li>
             </ol>
           </details>
         </aside>
@@ -374,14 +387,12 @@ export default function ShrineChapter({ embedded = false, paused: externalPaused
             <p className={styles.dialogEyebrow}>Mamoru, shrine guardian</p>
             <h2 id="lesson-title" className={styles.dialogTitle}>The Trial of Elements</h2>
             <p className={styles.dialogText}>
-              Water quenches flame; wind feeds it. {state.lessonMistakes === 0
+              {cfg.overlay.trialIntro} {state.lessonMistakes === 0
                 ? "Your first mistake is safe; later mistakes cost 1 integrity."
                 : "Practice attempt used. Every further mistake costs 1 integrity."}
             </p>
             <p className={styles.dialogQuestion}>
-              {state.lessonStep === 0
-                ? "Which element quenches a fire seal?"
-                : "And which element would feed a flame instead?"}
+              {cfg.overlay.questions[Math.min(state.lessonStep, cfg.overlay.questions.length - 1)]}
             </p>
             <p className={styles.lessonFeedback} role="status">{state.notice}</p>
             <p className={styles.dialogText}>Integrity: {state.integrity} / 3{state.integrity === 1 ? " — critical" : ""}</p>
@@ -413,12 +424,8 @@ export default function ShrineChapter({ embedded = false, paused: externalPaused
         <div className={styles.overlay}>
           <div ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="blessing-title">
             <p className={styles.dialogEyebrow}>Mamoru, shrine guardian</p>
-            <h2 id="blessing-title" className={styles.dialogTitle}>The Blessing of Water 水</h2>
-            <p className={styles.dialogText}>
-              You answered truly. The water blessing is yours — carry it to the two fire seals.
-              Arm Water (W) before each strike; each warding costs 1 mana, and the shrine refills it.
-              This knowledge survives even a shattered ball.
-            </p>
+            <h2 id="blessing-title" className={styles.dialogTitle}>{cfg.overlay.blessingTitle}</h2>
+            <p className={styles.dialogText}>{cfg.overlay.blessingBody}</p>
             <button type="button" className={styles.continueBtn} onClick={() => dispatch({ type: "continue" })}>
               Continue — return to the table
             </button>
@@ -430,11 +437,8 @@ export default function ShrineChapter({ embedded = false, paused: externalPaused
         <div className={styles.overlay}>
           <div ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="gate-title">
             <p className={styles.dialogEyebrow}>Mamoru, shrine guardian</p>
-            <h2 id="gate-title" className={styles.dialogTitle}>The Torii Opens</h2>
-            <p className={styles.dialogText}>
-              Both seals lie quenched and quiet. The vermilion cross-line fades — the way through
-              the torii is open. One true shot remains.
-            </p>
+            <h2 id="gate-title" className={styles.dialogTitle}>{cfg.overlay.gateTitle}</h2>
+            <p className={styles.dialogText}>{cfg.overlay.gateBody}</p>
             <button type="button" className={styles.continueBtn} onClick={() => dispatch({ type: "continue" })}>
               Continue — aim through the gate
             </button>
@@ -445,16 +449,14 @@ export default function ShrineChapter({ embedded = false, paused: externalPaused
       {state.phase === "won" && (
         <div className={styles.overlay}>
           <div ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="won-title">
-            <h2 id="won-title" className={styles.dialogTitle}>{embedded ? "Water Trial Mastered" : "Chapter Complete"}</h2>
+            <h2 id="won-title" className={styles.dialogTitle}>{embedded ? `${cfg.overlay.trialName} Mastered` : "Chapter Complete"}</h2>
             <p className={styles.dialogText}>
-              {embedded
-                ? "You learned water at the shrine and quenched the practice seal. Carry the blessing back to the main table — two fire seals await."
-                : "You crossed the torii because you learned water at the shrine, carried it to both fire seals, and earned the gate's opening. Your learning opened the way."}
+              {embedded ? cfg.overlay.wonEmbedded : cfg.overlay.wonFull}
             </p>
             <div className={styles.choiceRow}>
               {embedded ? (
                 <button type="button" className={styles.continueBtn} onClick={() => emitResult("mastered")}>
-                  Carry Water back
+                  {cfg.overlay.carryBack}
                 </button>
               ) : (
                 <>

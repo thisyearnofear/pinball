@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { attachStoryTable, STORY_GATE, STORY_SHRINE, type StoryTable } from "@/model/story-table";
 import { createStoryState, type StoryState } from "@/model/story-run";
 
-function makeWorld(state: StoryState = createStoryState(false)) {
+function makeWorld(state: StoryState = createStoryState({ learned: false })) {
     const engine = Matter.Engine.create();
     engine.gravity.y = 0;
     const ball = Matter.Bodies.circle(400, 1100, 12, { label: "ball", friction: 0, frictionAir: 0, restitution: 0 });
@@ -95,7 +95,7 @@ describe("attachStoryTable", () => {
     });
 
     it("dedupes seal contacts, requires Water, and opens the gate on the second distinct seal", () => {
-        world = makeWorld(createStoryState(true));
+        world = makeWorld(createStoryState({ learned: true }));
         const { engine, ball, table, west, east } = world;
         table.launch();
         // Unarmed seal contact costs integrity.
@@ -111,16 +111,16 @@ describe("attachStoryTable", () => {
         put(ball, 650, 1000, 0, -1);
         advance(engine, table, 200);
         // Arm and quench west.
-        table.action({ type: "arm-water" });
+        table.action({ type: "arm" });
         put(ball, west.position.x, west.position.y + 60, 0, -6);
         advance(engine, table, 40);
         expect(table.getState().seals).toEqual(["west"]);
-        expect(table.getState().waterArmed).toBe(false);
+        expect(table.getState().armed).toBe(false);
         // Gate is still a solid body — the ball cannot pass.
         const gate = Matter.Composite.allBodies(engine.world).find(b => b.label === "story-gate")!;
         expect(gate.isSensor).toBe(false);
         // Second distinct seal opens it.
-        table.action({ type: "arm-water" });
+        table.action({ type: "arm" });
         put(ball, east.position.x, east.position.y + 60, 0, -6);
         advance(engine, table, 30);
         expect(table.getState().phase).toBe("gate-opening");
@@ -135,7 +135,7 @@ describe("attachStoryTable", () => {
     });
 
     it("a locked gate blocks the ball and emits sealed feedback without winning", () => {
-        world = makeWorld(createStoryState(true));
+        world = makeWorld(createStoryState({ learned: true }));
         const { engine, ball, table } = world;
         table.launch();
         put(ball, STORY_GATE.x, STORY_GATE.y + 40, 0, -6);
@@ -209,7 +209,7 @@ describe("attachStoryTable", () => {
     });
 
     it("re-entering the shrine after release respects the cooldown then reopens", () => {
-        world = makeWorld(createStoryState(true));
+        world = makeWorld(createStoryState({ learned: true }));
         const { engine, ball, table } = world;
         table.launch();
         put(ball, STORY_SHRINE.x, STORY_SHRINE.y - 60, 0, 6);
@@ -230,7 +230,7 @@ describe("attachStoryTable", () => {
 
     describe("terminal phase ball handling", () => {
         it("cradles the ball at the plunger when the run is lost mid-fall", () => {
-            world = makeWorld({ ...createStoryState(true), integrity: 1 });
+            world = makeWorld({ ...createStoryState({ learned: true }), integrity: 1 });
             const { engine, ball, table, freezes } = world;
             table.launch();
             // The doomed ball is already past the drain line, plunging.
@@ -251,7 +251,7 @@ describe("attachStoryTable", () => {
         });
 
         it("cradles the ball when a failed trial costs the last integrity, and retry relaunches cleanly", () => {
-            world = makeWorld({ ...createStoryState(false), integrity: 1 });
+            world = makeWorld({ ...createStoryState({ learned: false }), integrity: 1 });
             const { engine, ball, table } = world;
             table.launch();
             put(ball, STORY_SHRINE.x, STORY_SHRINE.y - 60, 0, 6);
@@ -277,15 +277,15 @@ describe("attachStoryTable", () => {
         });
 
         it("cradles the ball at the plunger after winning through the gate", () => {
-            world = makeWorld(createStoryState(true));
+            world = makeWorld(createStoryState({ learned: true }));
             const { engine, ball, table, west, east } = world;
             table.launch();
             // Quench both seals (arm → contact), then return to play.
-            table.action({ type: "arm-water" });
+            table.action({ type: "arm" });
             put(ball, west.position.x, west.position.y + 60, 0, -6);
             advance(engine, table, 40);
             expect(table.getState().seals).toEqual(["west"]);
-            table.action({ type: "arm-water" });
+            table.action({ type: "arm" });
             put(ball, east.position.x, east.position.y + 60, 0, -6);
             advance(engine, table, 40);
             expect(table.getState().phase).toBe("gate-opening");
@@ -308,7 +308,7 @@ describe("attachStoryTable", () => {
         it("fires on accepted transitions and stays silent when the reducer is a no-op", () => {
             world = makeWorld();
             const { table } = world;
-            table.action({ type: "arm-water" }); // unlearned: notice-only change, still a new object
+            table.action({ type: "arm" }); // unlearned: notice-only change, still a new object
             expect(world.events.length).toBeGreaterThan(0);
             const before = world.events.length;
             table.action({ type: "gate" }); // sealed gate: notice change only, no phase flip

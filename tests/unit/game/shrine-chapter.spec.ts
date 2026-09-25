@@ -92,7 +92,7 @@ describe("ShrineChapter", () => {
     key("w");
     expect(tableMock.calls.setState).toHaveBeenCalled();
     const last = tableMock.calls.setState.mock.calls.at(-1)?.[0];
-    expect(last.waterArmed).toBe(true);
+    expect(last.armed).toBe(true);
   });
 
   it("aim buttons select targets and launch calls release", () => {
@@ -140,7 +140,7 @@ describe("ShrineChapter", () => {
     key("w");
     key("2");
     expect(tableMock.calls.aim).not.toHaveBeenCalled();
-    const lastArmStates = tableMock.calls.setState.mock.calls.map(c => c[0]).filter(s => s.waterArmed);
+    const lastArmStates = tableMock.calls.setState.mock.calls.map(c => c[0]).filter(s => s.armed);
     expect(lastArmStates).toHaveLength(0);
   });
 
@@ -165,7 +165,7 @@ describe("ShrineChapter", () => {
       tableMock.captured.onEvent?.({ type: "shrine" });
       expect(tableMock.calls.setState).toHaveBeenCalledTimes(1);
       expect(tableMock.calls.setState.mock.calls[0][0].phase).toBe("lesson");
-      tableMock.captured.onEvent?.({ type: "arm-water" });
+      tableMock.captured.onEvent?.({ type: "arm" });
       expect(tableMock.calls.setState).toHaveBeenCalledTimes(1);
     });
     click(dialogBtn(container, "Water"));
@@ -181,7 +181,7 @@ describe("ShrineChapter", () => {
     const aim = btn(container, "Fire Seal I") as HTMLButtonElement;
     aim.focus();
     act(() => aim.dispatchEvent(new KeyboardEvent("keydown", { key: "w", bubbles: true })));
-    expect(tableMock.calls.setState.mock.calls.at(-1)?.[0].waterArmed).toBe(true);
+    expect(tableMock.calls.setState.mock.calls.at(-1)?.[0].armed).toBe(true);
     key("p");
     expect(container.querySelector('[role="dialog"]')?.textContent).toContain("Paused");
     key("p");

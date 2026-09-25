@@ -5,6 +5,7 @@ import {
     type StoryState,
 } from "@/model/story-run";
 import type { SealId } from "@/model/shrine-chapter";
+import { CHAPTERS } from "@/model/chapters";
 
 export type StoryTargetId = "shrine" | "west" | "east" | "gate";
 export type StoryTarget = { id: StoryTargetId; x: number; y: number; radius: number; label: string };
@@ -176,12 +177,13 @@ export function attachStoryTable(opts: {
     return {
         getState: () => state,
         getTargets() {
+            const targets = CHAPTERS[state.chapterId].targets;
             const radiusOf = (b: Matter.Body) => (b.circleRadius ?? Math.max(b.bounds.max.x - b.bounds.min.x, b.bounds.max.y - b.bounds.min.y) / 2);
             return [
-                { id: "shrine", x: STORY_SHRINE.x, y: STORY_SHRINE.y, radius: STORY_SHRINE.r, label: "Water Shrine" },
-                { id: "west", x: sealBodies.west.position.x, y: sealBodies.west.position.y, radius: radiusOf(sealBodies.west), label: "Fire Seal I" },
-                { id: "east", x: sealBodies.east.position.x, y: sealBodies.east.position.y, radius: radiusOf(sealBodies.east), label: "Fire Seal II" },
-                { id: "gate", x: STORY_GATE.x, y: STORY_GATE.y, radius: STORY_GATE.w / 2, label: "Torii Gate" },
+                { id: "shrine", x: STORY_SHRINE.x, y: STORY_SHRINE.y, radius: STORY_SHRINE.r, label: targets.shrine },
+                { id: "west", x: sealBodies.west.position.x, y: sealBodies.west.position.y, radius: radiusOf(sealBodies.west), label: targets.sealI },
+                { id: "east", x: sealBodies.east.position.x, y: sealBodies.east.position.y, radius: radiusOf(sealBodies.east), label: targets.sealII },
+                { id: "gate", x: STORY_GATE.x, y: STORY_GATE.y, radius: STORY_GATE.w / 2, label: targets.gate },
             ];
         },
         isHeld: () => held,
