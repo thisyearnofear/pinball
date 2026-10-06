@@ -135,3 +135,43 @@ describe("audio service (B3)", () => {
         });
     });
 });
+
+describe("sound density (cosmetic mix)", () => {
+    it("cycles variants round-robin without repeating back to back", async () => {
+        const { nextFxVariant, FX_VARIANTS } = await import("@/services/audio-service");
+        const { GameSounds } = await import("@/definitions/game");
+        const n = FX_VARIANTS[GameSounds.BUMPER]!.length;
+        const picks = Array.from({ length: n * 2 }, () => nextFxVariant(GameSounds.BUMPER));
+        for (let i = 1; i < picks.length; i++) expect(picks[i]).not.toBe(picks[i - 1]);
+        expect(new Set(picks).size).toBe(n);
+        expect(nextFxVariant(GameSounds.BALL_OUT)).toBeUndefined();
+    });
+
+    it("scales gain, pitch and brightness with impact and clamps bad input", async () => {
+        const { impactMix } = await import("@/services/audio-service");
+        const soft = impactMix(0.1), hard = impactMix(1);
+        expect(hard.gain).toBeGreaterThan(soft.gain);
+        expect(hard.detune).toBeGreaterThan(soft.detune);
+        expect(hard.brightness).toBeGreaterThan(soft.brightness);
+        expect(hard.gain).toBeLessThanOrEqual(1);
+        expect(impactMix(5)).toEqual(impactMix(1));
+        expect(impactMix(Number.NaN)).toEqual(impactMix(0));
+    });
+
+    it("pans by table x, kept off the hard edges", async () => {
+        const { panForX } = await import("@/services/audio-service");
+        expect(panForX(0, 600)).toBeCloseTo(-0.8);
+        expect(panForX(300, 600)).toBeCloseTo(0);
+        expect(panForX(600, 600)).toBeCloseTo(0.8);
+        expect(panForX(9999, 600)).toBeCloseTo(0.8);
+        expect(panForX(100, 0)).toBe(0);
+        expect(panForX(Number.NaN, 600)).toBe(0);
+    });
+
+    it("maps ball speed to a 0..1 intensity", async () => {
+        const { intensityForSpeed } = await import("@/services/audio-service");
+        expect(intensityForSpeed(0, 0)).toBe(0);
+        expect(intensityForSpeed(11, 0)).toBeCloseTo(0.5);
+        expect(intensityForSpeed(30, 40)).toBe(1);
+    });
+});

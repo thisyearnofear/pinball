@@ -22,6 +22,7 @@ import { KanjiWatermark } from "./ui/KanjiWatermark";
 import { type WorldReaction } from "@/presentation/world-reactor";
 import { isKamikazeMode, getLastTaunt, getTickCount, getTimeScale, consumeMomentumShift, getMachineMood, consumeKillCam, setKillCamEnabled, isShotCallMode, getShotVariant, getShotPhase, getShotAimedLane, getShotGuardLane, getShotMeterPosition, getShotLanes, getLastShotResult, getShotCanRelease, getShotFeintStage, shotRelease, type ShotResult, isStoryMode, isStoryFrozen, getStoryState, getStoryTargets, isStoryBallHeld, storyAction, launchStoryBall, setFlipperState } from "@/model/game";
 import { RiveArtboard } from "@/game/ui/RiveArtboard";
+import { DotMatrixDisplay } from "./ui/DotMatrixDisplay";
 import { ActorTypes } from "@/definitions/game";
 import { createStoryState, type StoryState } from "@/model/story-run";
 import type { StoryTarget } from "@/model/story-table";
@@ -396,6 +397,7 @@ export default function GameMount(props: Props) {
   const [stability, setStability] = useState(0);
   const [machineSaving, setMachineSaving] = useState(false);
   const [kamikazeMessage, setKamikazeMessage] = useState<string | null>(null);
+  const dmdFlashRef = useRef(0);
   const [machineMood, setMachineMood] = useState<string>("calm");
   // Rive mood index: calm 0, wary 1, smug 2, desperate 3, enraged 4, grieving 5.
   const moodIndex = useMemo(() => {
@@ -673,6 +675,7 @@ export default function GameMount(props: Props) {
             ? `守: "${getLastTaunt()}"`
             : kamikazeMessages[msg];
           if (kamMsg) {
+            dmdFlashRef.current += 1;
             setKamikazeMessage(kamMsg);
             window.setTimeout(() => setKamikazeMessage(null), msg === GameMessages.UNSTOPPABLE ? 3200 : 2500);
           }
@@ -1585,29 +1588,15 @@ export default function GameMount(props: Props) {
             metadata={props.ghost.metadata}
           />
         )}
-        {kamikazeMessage && (
-          <div
-            style={{
-              position: "absolute",
-              top: "40%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              padding: "12px 24px",
-              borderRadius: 12,
-              background: "rgba(0,0,0,0.75)",
-              border: `1px solid ${moodDisplay.border}`,
-              color: moodDisplay.color,
-              fontSize: 18,
-              fontWeight: "bold",
-              textTransform: "uppercase",
-              letterSpacing: 1,
-              pointerEvents: "none",
-              zIndex: 10,
-              animation: "fadeIn 0.3s ease-out",
-              transition: "color 0.4s ease, border-color 0.4s ease",
-            }}
-          >
-            {kamikazeMessage}
+        {/* MAMORU's dot-matrix display: idle shows the machine's mood; taunts,
+            saves and power-up calls flash in over it. */}
+        {(kamikazeActive || kamikazeMessage) && (
+          <div style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", zIndex: 10, pointerEvents: "none", maxWidth: "calc(100% - 140px)" }}>
+            <DotMatrixDisplay
+              text={kamikazeMessage ?? `守 MAMORU · ${moodDisplay.label}`}
+              color={moodDisplay.color}
+              flashKey={dmdFlashRef.current}
+            />
           </div>
         )}
         {/* The machine's face: a Rive sigil whose grin widens as the machine
