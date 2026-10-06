@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { describeSeedProvenance, seedProvenanceLine } from "@/utils/seed-provenance";
+import { describeSeedProvenance, sanitizeSeedAttestation, seedProvenanceLine } from "@/utils/seed-provenance";
 
 describe("describeSeedProvenance", () => {
     it("maps each recorded source to distinct copy and tone", () => {
@@ -67,5 +67,68 @@ describe("seedProvenanceLine", () => {
     it("returns empty for unknown provenance (so callers omit the line)", () => {
         expect(seedProvenanceLine(undefined)).toBe("");
         expect(seedProvenanceLine("nope")).toBe("");
+    });
+});
+
+describe("MOTH provenance labels", () => {
+    it("labels MOTH QPU seeds as hardware quantum", () => {
+        const p = describeSeedProvenance("moth-qpu");
+        expect(p.source).toBe("moth-qpu");
+        expect(p.label).toBe("QPU-SEEDED");
+        expect(p.symbol).toBe("⚛");
+        expect(p.tone).toBe("quantum");
+        expect(p.phrase.toLowerCase()).toContain("hardware");
+    });
+
+    it("labels MOTH emu seeds as simulator output, never as hardware quantum", () => {
+        const p = describeSeedProvenance("moth-emu");
+        expect(p.source).toBe("moth-emu");
+        expect(p.tone).toBe("simulator");
+        expect(p.symbol).not.toBe("⚛");
+        const copy = `${p.label} ${p.phrase}`.toLowerCase();
+        expect(copy).toContain("simulat");
+        for (const banned of ["hardware", "qpu", "quantum-seeded"]) {
+            expect(copy).not.toContain(banned);
+        }
+    });
+
+    it("keeps all five recorded sources visually distinct", () => {
+        const all = ["qrng", "moth-qpu", "moth-emu", "csprng", "local"].map((s) => describeSeedProvenance(s));
+        expect(new Set(all.map((p) => p.label)).size).toBe(5);
+        expect(new Set(all.map((p) => p.color)).size).toBe(5);
+    });
+});
+
+describe("sanitizeSeedAttestation", () => {
+    const good = {
+        provider: "moth",
+        engine: "comet-qrng-v1",
+        mode: "emu",
+        jobId: "b0ebb149-087d-4f5a-93d1-168e85859c73",
+        pulseHash: "AB".repeat(32),
+        backend: "aer",
+        bellViolation: true,
+    };
+
+    it("accepts a well-formed MOTH attestation and normalises the pulse hash", () => {
+        expect(sanitizeSeedAttestation(good)).toEqual({ ...good, pulseHash: "ab".repeat(32) });
+    });
+
+    it("rejects non-MOTH, bad-mode, or unsafe job ids", () => {
+        for (const bad of [
+            null,
+            "x",
+            { ...good, provider: "anu" },
+            { ...good, mode: "hardware" },
+            { ...good, jobId: "<img src=x>" },
+            { ...good, jobId: 42 },
+        ]) {
+            expect(sanitizeSeedAttestation(bad)).toBeUndefined();
+        }
+    });
+
+    it("drops malformed optional fields rather than rendering them", () => {
+        const out = sanitizeSeedAttestation({ ...good, pulseHash: "0x123", backend: "a b", bellViolation: "yes" });
+        expect(out).toEqual({ provider: "moth", engine: "comet-qrng-v1", mode: "emu", jobId: good.jobId });
     });
 });

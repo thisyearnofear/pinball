@@ -7,6 +7,8 @@
  * its keccak hash travels inside the signed score metadata, binding the two.
  */
 
+import type { SeedAttestation } from "@/utils/seed-provenance";
+
 export type ReplayEventType =
     | "L+" | "L-"   // left flipper down/up
     | "R+" | "R-"   // right flipper down/up
@@ -39,8 +41,10 @@ export type ReplayDigest = {
     world?: string;
     /** Shot-calling: which control scheme produced this run (steer/feint/precision). */
     controlScheme?: string;
-    /** Where the run seed came from (qrng/csprng/local) — provenance, not physics. */
+    /** Where the run seed came from (qrng/moth-qpu/moth-emu/csprng/local) — provenance, not physics. */
     seedSource?: string;
+    /** MOTH job/pulse the seed came from (moth-* sources) — provenance, not physics. */
+    seedAttestation?: SeedAttestation;
     tickCount: number;
     finalScore: number;
     truncated: boolean;
@@ -67,6 +71,7 @@ let aiDifficulty: string | undefined;
 let world: string | undefined;
 let controlScheme: string | undefined;
 let seedSource: string | undefined;
+let seedAttestation: SeedAttestation | undefined;
 let events: ReplayEvent[] = [];
 let trace: number[] = [];
 let lastTraceTick = -Infinity;
@@ -79,6 +84,7 @@ export function startReplayRecording(opts: {
     world?: string;
     controlScheme?: string;
     seedSource?: string;
+    seedAttestation?: SeedAttestation;
 }): void {
     recording = true;
     truncated = false;
@@ -89,6 +95,7 @@ export function startReplayRecording(opts: {
     world = opts.world;
     controlScheme = opts.controlScheme;
     seedSource = opts.seedSource;
+    seedAttestation = opts.seedAttestation;
     events = [];
     trace = [];
     lastTraceTick = -Infinity;
@@ -138,6 +145,7 @@ export function finishReplayRecording(finalScore: number, tickCount: number): Re
         ...(world ? { world } : {}),
         ...(controlScheme ? { controlScheme } : {}),
         ...(seedSource ? { seedSource } : {}),
+        ...(seedAttestation ? { seedAttestation } : {}),
         tickCount,
         finalScore,
         truncated,
