@@ -46,7 +46,7 @@ import {
     laneForX, resolveDrain, canRelease, feintStage, resolveLandingLane, laneTargetX, commitVelocityX,
     type ShotState, type ShotVariant, type FeintStage, type GuardPolicy,
 } from "@/model/shot-calling";
-import { enqueueTrack, setFrequency, playSoundEffect, duckMusic, playTaikoHit, playFurinChime, momentarySilence } from "@/services/audio-service";
+import { enqueueTrack, setFrequency, playSoundEffect, duckMusic, playTaikoHit, playFurinChime, momentarySilence, intensityForSpeed, panForX, type FxOptions } from "@/services/audio-service";
 import * as haptics from "@/utils/haptics";
 import {
     loadMemory, greetingLine, dominantHabit, habitTaunt, emptyHabits, isSilentRank, subduedSaveTaunt,
@@ -83,6 +83,11 @@ let triggerGroups: TriggerGroup[] = []; // separate list for quick access to Tri
 let group: TriggerGroup;
 let flippers: Flipper[] = []; // separate list for quick access to Flipper Actors
 let tableHasUnderworld: boolean;
+
+/** Cosmetic mix for a hit: impact speed → gain/pitch, table x → stereo pan. Reads only, never writes physics. */
+function impactFx(body: { velocity: { x: number; y: number }; position: { x: number } }): FxOptions {
+    return { intensity: intensityForSpeed(body.velocity.x, body.velocity.y), pan: table ? panForX(body.position.x, table.width) : 0 };
+}
 
 let canvas: zCanvas;
 let backgroundRenderer: Sprite;
@@ -292,7 +297,7 @@ export const init = async (
                         messageHandler(GameMessages.GOT_LUCKY);
                         removeActor(popper);
                     }
-                    playSoundEffect(GameSounds.POPPER);
+                    playSoundEffect(GameSounds.POPPER, impactFx(pair.bodyB));
                     break;
                 case ActorLabels.BUMPER: {
                     if (game.kamikaze?.enabled) {
@@ -314,7 +319,7 @@ export const init = async (
                     }
                     awardPoints(game, AwardablePoints.BUMPER);
                     (actorMap.get(pair.bodyA.id) as Bumper).collided = true;
-                    playSoundEffect(GameSounds.BUMPER);
+                    playSoundEffect(GameSounds.BUMPER, impactFx(pair.bodyB));
                     // Kamikaze: the machine's defense lands like a taiko drum.
                     if (game.kamikaze?.enabled) {
                         playTaikoHit();
@@ -362,7 +367,7 @@ export const init = async (
                     if (triggerGroup.triggerType !== TriggerTypes.SERIES) {
                         awardPoints(game, AwardablePoints.TRIGGER);
                         if (!groupCompleted) {
-                            playSoundEffect(GameSounds.TRIGGER);
+                            playSoundEffect(GameSounds.TRIGGER, impactFx(pair.bodyB));
                         }
                     }
 

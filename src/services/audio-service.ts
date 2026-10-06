@@ -72,6 +72,161 @@ const FX_CHARACTER = new Map<GameSounds, { detune: number; rate: number }>([
 
 const soundEffects: Map<GameSounds, HTMLMediaElement> = new Map();
 
+// ── Sound density (cosmetic only: never feeds physics) ─────────────
+// One sample per event sounds like a loop pedal. Each hit instead plays a
+// decoded buffer through its own voice (so rapid hits overlap instead of
+// cutting off), picks the next of several timbre variants round-robin, scales
+// gain/pitch/brightness with impact speed and pans by where it happened.
+
+export type FxOptions = {
+    /** 0..1 impact strength (e.g. ball speed). Default 0.6. */
+    intensity?: number;
+    /** -1 (left) .. 1 (right). Default 0 (centre). */
+    pan?: number;
+};
+
+type FxVariant = { detune: number; rate: number; cutoff: number };
+
+/** Timbre variants per event; picked round-robin, never the same twice running. */
+export const FX_VARIANTS: Partial<Record<GameSounds, FxVariant[]>> = {
+    [ GameSounds.BUMPER ]: [
+        { detune: 0,    rate: 1,    cutoff: 9000 },
+        { detune: 300,  rate: 1.08, cutoff: 12000 },
+        { detune: -250, rate: 0.94, cutoff: 7000 },
+        { detune: 500,  rate: 1.12, cutoff: 14000 },
+        { detune: -450, rate: 0.9,  cutoff: 6000 },
+        { detune: 150,  rate: 1.04, cutoff: 10000 },
+    ],
+    [ GameSounds.POPPER ]: [
+        { detune: 0,    rate: 1,    cutoff: 10000 },
+        { detune: -300, rate: 0.92, cutoff: 7000 },
+        { detune: 250,  rate: 1.06, cutoff: 12000 },
+        { detune: -600, rate: 0.85, cutoff: 5500 },
+    ],
+    [ GameSounds.FLIPPER ]: [
+        { detune: 0,    rate: 1,    cutoff: 8000 },
+        { detune: -150, rate: 0.97, cutoff: 6500 },
+        { detune: 120,  rate: 1.03, cutoff: 9500 },
+        { detune: -80,  rate: 0.99, cutoff: 7200 },
+    ],
+    [ GameSounds.TRIGGER ]: [
+        { detune: 0,    rate: 1,    cutoff: 12000 },
+        { detune: 200,  rate: 1.05, cutoff: 14000 },
+        { detune: 400,  rate: 1.1,  cutoff: 16000 },
+        { detune: 700,  rate: 1.18, cutoff: 18000 },
+    ],
+    [ GameSounds.BUMP ]: [
+        { detune: 0,    rate: 1,    cutoff: 3000 },
+        { detune: -200, rate: 0.95, cutoff: 2400 },
+        { detune: 150,  rate: 1.04, cutoff: 3600 },
+    ],
+};
+
+const variantCursor = new Map<GameSounds, number>();
+
+/** Next timbre variant for `effect` (round-robin). Exported for tests. */
+export const nextFxVariant = ( effect: GameSounds ): FxVariant | undefined => {
+    const list = FX_VARIANTS[ effect ];
+    if ( !list?.length ) return undefined;
+    const i = ( ( variantCursor.get( effect ) ?? -1 ) + 1 ) % list.length;
+    variantCursor.set( effect, i );
+    return list[ i ];
+};
+
+/** Clamp to [lo, hi]; NaN → lo. */
+const clamp = ( v: number, lo: number, hi: number ): number => ( v > lo ? ( v < hi ? v : hi ) : lo );
+
+/**
+ * Pure mix for an impact: harder hits are louder, a touch higher and brighter.
+ * Gain spans ~-14dB..0dB so soft grazes stay audible under the music.
+ */
+export const impactMix = ( intensity = 0.6 ): { gain: number; detune: number; brightness: number } => {
+    const i = clamp( intensity, 0, 1 );
+    return { gain: 0.2 + 0.8 * i * i, detune: ( i - 0.5 ) * 240, brightness: 0.45 + 0.55 * i };
+};
+
+/** Stereo position for a table x coordinate. Kept off the hard edges. */
+export const panForX = ( x: number, width: number ): number => {
+    if ( !( width > 0 ) || !Number.isFinite( x ) ) return 0;
+    return clamp( ( x / width ) * 2 - 1, -1, 1 ) * 0.8;
+};
+
+/** Impact strength from a ball velocity (physics units/tick). */
+export const intensityForSpeed = ( vx: number, vy: number, fullAt = 22 ): number =>
+    clamp( Math.hypot( vx, vy ) / fullAt, 0, 1 );
+
+const fxBuffers = new Map<GameSounds, AudioBuffer | null>();
+
+function loadFxBuffers(): void {
+    if ( !audioContext || typeof fetch !== "function" ) return;
+    for ( const { key, file } of SOUND_EFFECTS ) {
+        if ( fxBuffers.has( key )) continue;
+        fxBuffers.set( key, null ); // in flight; element path covers it meanwhile
+        fetch( `${SOUND_FX_PATH}${file}` )
+            .then( r => r.arrayBuffer() )
+            .then( data => audioContext.decodeAudioData( data ))
+            .then( buf => { fxBuffers.set( key, buf ); })
+            .catch(() => { /* keep the <audio> element fallback */ });
+    }
+}
+
+/** A short struck-metal partial over hard bumper hits: the table's "ting". */
+function playMetalTing( when: number, gain: number, panNode: AudioNode ): void {
+    const g = audioContext.createGain();
+    g.gain.setValueAtTime( 0.0001, when );
+    g.gain.exponentialRampToValueAtTime( gain, when + 0.004 );
+    g.gain.exponentialRampToValueAtTime( 0.0001, when + 0.22 );
+    g.connect( panNode );
+    const base = 1800 + Math.random() * 900;
+    for ( const ratio of [ 1, 2.76, 5.4 ] ) {
+        const o = audioContext.createOscillator();
+        o.type = "sine";
+        o.frequency.setValueAtTime( base * ratio, when );
+        o.connect( g );
+        o.start( when );
+        o.stop( when + 0.24 );
+    }
+}
+
+/** Play via a fresh buffer voice. False when no decoded buffer is ready. */
+function playFxVoice( effect: GameSounds, opts: FxOptions ): boolean {
+    const buffer = fxBuffers.get( effect );
+    if ( !audioContext || !buffer || !effectsBus ) return false;
+    const now = audioContext.currentTime;
+    const character = FX_CHARACTER.get( effect );
+    const variant = nextFxVariant( effect );
+    const mix = impactMix( opts.intensity );
+
+    const src = audioContext.createBufferSource();
+    src.buffer = buffer;
+    src.playbackRate.value = ( character?.rate ?? 1 ) * ( variant?.rate ?? 1 );
+    // Small human jitter so even the same variant never repeats exactly.
+    src.detune.value = ( character?.detune ?? 0 ) + ( variant?.detune ?? 0 ) + mix.detune + ( Math.random() * 60 - 30 );
+
+    const tone = audioContext.createBiquadFilter();
+    tone.type = "lowpass";
+    tone.frequency.value = ( variant?.cutoff ?? 12000 ) * mix.brightness;
+
+    const gain = audioContext.createGain();
+    gain.gain.value = mix.gain;
+
+    let out: AudioNode = gain;
+    if ( typeof audioContext.createStereoPanner === "function" ) {
+        const panner = audioContext.createStereoPanner();
+        panner.pan.value = clamp( opts.pan ?? 0, -1, 1 );
+        gain.connect( panner );
+        out = panner;
+    }
+    out.connect( masterGain );
+    src.connect( tone ).connect( gain );
+    src.start( now );
+
+    if ( effect === GameSounds.BUMPER && ( opts.intensity ?? 0 ) > 0.55 ) {
+        playMetalTing( now, 0.05 + 0.1 * ( ( opts.intensity ?? 0 ) - 0.55 ), gain );
+    }
+    return true;
+}
+
 /**
  * Must be called on user interaction to prevent locked AudioContext
  */
@@ -104,13 +259,16 @@ export const setAudioSuppressed = ( value: boolean ): void => {
     }
 };
 
-export const playSoundEffect = ( effect: GameSounds ): void => {
+export const playSoundEffect = ( effect: GameSounds, opts: FxOptions = {} ): void => {
     if ( !inited || fxMuted || suppressed ) {
         return;
     }
 
     if ( soundEffects.size === 0 ) {
         loadSoundEffects();
+    }
+    if ( playFxVoice( effect, opts )) {
+        return;
     }
 
     const soundEffect = soundEffects.get( effect );
@@ -487,6 +645,7 @@ function _startPlayingEnqueuedTrack( trackId: string ): void {
 }
 
 function loadSoundEffects(): void {
+    loadFxBuffers();
     SOUND_EFFECTS.forEach( mapping => {
         soundEffects.set( mapping.key, createAudioElement( `${SOUND_FX_PATH}${mapping.file}`, false, effectsBus ));
     });
