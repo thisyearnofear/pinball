@@ -20,7 +20,7 @@
  */
 
 import { keccak256, toUtf8Bytes } from "ethers";
-import { describeSeedProvenance } from "./seed-provenance";
+import { describeSeedProvenance, sanitizeSeedAttestation } from "./seed-provenance";
 
 /** Namespace + version so a seed hash can never be confused with another keccak. */
 export const SEED_FINGERPRINT_PREFIX = "KB_SEED:v1";
@@ -76,6 +76,17 @@ export function hasSeedAudit(seed?: number | null, replayHash?: string | null): 
     return (typeof seed === "number" && Number.isFinite(seed)) || isAuditHash(replayHash);
 }
 
+/** Short display form of a MOTH job id or bare-hex pulse hash. */
+export function shortId(value: string | undefined | null, chars = 8): string {
+    if (!value) return "";
+    return value.length > chars ? `${value.slice(0, chars)}…` : value;
+}
+
+/** Plain copy for the CHSH witness flag (a fact about the run, not a verdict). */
+export function bellWitnessText(violation: boolean): string {
+    return violation ? "exceeds classical bound (3σ)" : "within classical bound";
+}
+
 /**
  * Paste-ready audit block for a run: one `field: value` per line, only for the
  * values actually recorded. This is what "copy" yields — a rival can paste it
@@ -84,6 +95,7 @@ export function hasSeedAudit(seed?: number | null, replayHash?: string | null): 
 export function formatSeedAuditSummary(opts: {
     seed?: number | null;
     seedSource?: string | null;
+    seedAttestation?: unknown;
     replayHash?: string | null;
 }): string {
     const lines = ["Kamikaze Ball · seed audit"];
@@ -92,6 +104,13 @@ export function formatSeedAuditSummary(opts: {
     if (typeof opts.seed === "number" && Number.isFinite(opts.seed)) {
         lines.push(`seed: ${opts.seed}`);
         lines.push(`seed hash: ${seedFingerprint(opts.seed)}`);
+    }
+    const att = sanitizeSeedAttestation(opts.seedAttestation);
+    if (att) {
+        lines.push(`moth job: ${att.jobId}`);
+        if (att.pulseHash) lines.push(`pulse hash: ${att.pulseHash}`);
+        if (att.backend) lines.push(`backend: ${att.backend}`);
+        if (att.bellViolation !== undefined) lines.push(`bell witness: ${bellWitnessText(att.bellViolation)}`);
     }
     if (isAuditHash(opts.replayHash)) lines.push(`replay hash: ${opts.replayHash}`);
     return lines.join("\n");

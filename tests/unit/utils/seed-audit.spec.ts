@@ -126,3 +126,32 @@ describe("formatSeedAuditSummary", () => {
         expect(formatSeedAuditSummary({})).toBe("Kamikaze Ball · seed audit");
     });
 });
+
+describe("formatSeedAuditSummary with a MOTH attestation", () => {
+    it("adds the job, pulse, backend and witness lines", () => {
+        const text = formatSeedAuditSummary({
+            seed: 5,
+            seedSource: "moth-emu",
+            seedAttestation: {
+                provider: "moth",
+                mode: "emu",
+                jobId: "job-1",
+                pulseHash: "ef".repeat(32),
+                backend: "aer",
+                bellViolation: false,
+            },
+        });
+        expect(text).toContain("moth job: job-1");
+        expect(text).toContain(`pulse hash: ${"ef".repeat(32)}`);
+        expect(text).toContain("backend: aer");
+        expect(text).toContain("bell witness: within classical bound");
+    });
+
+    it("omits attestation lines when none (or a malformed one) was recorded", () => {
+        expect(formatSeedAuditSummary({ seed: 5, seedSource: "moth-emu" })).not.toContain("moth job");
+        expect(
+            formatSeedAuditSummary({ seed: 5, seedSource: "moth-emu", seedAttestation: { provider: "x" } }),
+        ).not.toContain("moth job");
+    });
+});
+

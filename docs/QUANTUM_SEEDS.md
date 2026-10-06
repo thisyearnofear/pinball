@@ -37,25 +37,36 @@ nextRunSeed()  ── buffer hit ──▶  (none)
       │
       └─ prefetch ──── GET /api/quantum/seed?count=N ──▶ fetchQuantumSeeds()
                                                               │
+                                     QUANTUM_SEED_PROVIDER=anu (default)
                                           QUANTUM_SEED_URL set? ──yes──▶ HTTP-JSON QRNG
-                                                              │                  │
                                                               │      ok? ──yes──▶ { data: [uint16…] }
-                                                              │                  │
-                                                              └──no / unreachable / bad ──▶ CSPRNG
-                                                          ◀── { seeds, source } ──┘
+                                     QUANTUM_SEED_PROVIDER=moth
+                                          MothSeedPool.take(N) ──hit──▶ buffered uint32s
+                                                              │            ▲
+                                                              │            └── background job loop:
+                                                              │                POST …/comet-qrng-v1/process
+                                                              │                poll /jobs/{id}/status
+                                                              │                GET  /jobs/{id}/result
+                                                              │
+                                                              └──miss / no key / unreachable / bad ──▶ CSPRNG
+                                                          ◀── { seeds, source, attestation? } ──┘
 ```
 
-- **Backend** (`backend/src/lib/quantum-seed.ts`): provider-agnostic. Fetches from
-  any HTTP-JSON RNG and combines `uint16` words into `uint32` seeds. **Never
-  throws and never returns fewer than the requested count** — a provider outage
-  degrades to a CSPRNG and reports it via `source`.
+- **Backend** (`backend/src/lib/quantum-seed.ts`): two provider paths. `anu`
+  fetches from any HTTP-JSON RNG and combines `uint16` words into `uint32`
+  seeds. `moth` (`backend/src/lib/moth-seed.ts`) serves seeds from a pool that a
+  background loop refills with MOTH `comet-qrng-v1` jobs — the request path
+  never waits on a job. **Never throws and never returns fewer than the
+  requested count** — a provider outage (or an empty MOTH pool) degrades to a
+  CSPRNG and reports it via `source`.
 - **Route** (`backend/src/routes/quantum-seed.ts`): `GET /api/quantum/seed?count=N`
   (1..32, `no-store`). Proxied so the provider key never reaches the browser.
 - **Client** (`src/services/quantum-seed.ts`): prefetches a small buffer so run
   creation stays synchronous. Prefers a buffered seed (`qrng`/`csprng`), falls
   back to a local CSPRNG (`local`), and never blocks play on the network.
 - **Provenance**: the chosen source is stored on the `GameDef`, recorded as
-  `ReplayDigest.seedSource`, so a verifier can see *where* a seed came from, and
+  `ReplayDigest.seedSource` (plus `ReplayDigest.seedAttestation` for MOTH
+  seeds — job id, pulse hash, backend, Bell-witness flag), so a verifier can see *where* a seed came from, and
   surfaced to the player as a badge (see below).
 
 ---
@@ -66,12 +77,22 @@ Backend env (see `backend/.env.example`):
 
 | Var | Meaning |
 |---|---|
-| `QUANTUM_SEED_URL` | HTTP-JSON QRNG endpoint. Unset ⇒ feature is inert (CSPRNG seeds). |
-| `QUANTUM_SEED_API_KEY` | Sent as `x-api-key`. Optional. |
-| `QUANTUM_SEED_TIMEOUT_MS` | Request timeout (default 2000). |
+| `QUANTUM_SEED_PROVIDER` | `anu` (default) or `moth`. |
+| `QUANTUM_SEED_URL` | `anu`: HTTP-JSON QRNG endpoint. Unset ⇒ feature is inert (CSPRNG seeds). |
+| `QUANTUM_SEED_API_KEY` | `anu`: sent as `x-api-key`. Optional. |
+| `QUANTUM_SEED_TIMEOUT_MS` | `anu`: request timeout (default 2000). |
+| `MOTH_API_KEY` | `moth`: bearer token. Unset ⇒ MOTH path is inert (CSPRNG seeds). Server-side only; never logged. |
+| `MOTH_API_URL` | `moth`: API base (default `https://api.mothquantum.com/api/v1`). |
+| `MOTH_SEED_MODE` | `moth`: `emu` (default, Aer simulator) or `qpu` (IBM quantum hardware). |
+| `MOTH_SEED_BATCH` | `moth`: seeds per job / pool target (default 32). |
+| `MOTH_SEED_SHOTS` | `moth`: circuit shots per job (default 4096, max 10000). |
+| `MOTH_SEED_TIMEOUT_MS` | `moth`: whole-job deadline — submit + poll + result (default 60s emu, 30min qpu). |
+| `MOTH_SEED_POLL_MS` | `moth`: status poll interval (default 2s emu, 15s qpu). |
 
-The adapter is **ANU-QRNG compatible** by default: it appends
-`?length=N&type=uint16` and reads `{ data: [uint16, …] }`. Example:
+### ANU (default)
+
+The `anu` adapter appends `?length=N&type=uint16` and reads
+`{ data: [uint16, …] }`. Example:
 
 ```bash
 QUANTUM_SEED_URL=https://qrng.anu.edu.au/API/jsonI.php
@@ -80,15 +101,102 @@ QUANTUM_SEED_URL=https://qrng.anu.edu.au/API/jsonI.php
 Any provider with a different shape needs a small adapter in
 `fetchQuantumSeeds` (or an endpoint that normalises to `{ data: […] }`).
 
-### A note on MOTH
+### MOTH `comet-qrng-v1` (randomness beacon)
 
-MOTH's public API (`api.mothquantum.com`, see its `/openapi.json`) is a
-**creative-compute platform** — engines, jobs, assets, notebooks, showcases. It
-is **not a randomness beacon**, so it does not slot into this path. MOTH is a
-better fit for *offline* generation of world art / texture variants. For the run
-seed, point `QUANTUM_SEED_URL` at an actual QRNG.
+MOTH's `comet-qrng-v1` engine **is** a randomness beacon: every job measures a
+quantum circuit, conditions the counts into output bytes, and returns them with
+certificates — a `commitment` (hash + salt committed before the outcome
+existed), a CHSH `bell_witness`, an SP 800-90B-style `entropy_report`,
+`provenance` (`backend`, `circuit_hash`, `provider_job_id`, `shots`) and a
+`pulse` (`pulse_hash`, `prev_hash`, `output_hash`, `raw_counts_hash`) that links
+each output into a tamper-evident beacon chain.
+
+```bash
+QUANTUM_SEED_PROVIDER=moth
+MOTH_API_KEY=…            # secret store, never committed
+MOTH_SEED_MODE=emu        # or qpu
+```
+
+Flow (`backend/src/lib/moth-seed.ts`):
+
+1. `POST /engines/comet-qrng-v1/process` with
+   `{ mode, params: { shots, output_bytes, derive: { integers: { min: 0, max: 4294967295, count } } } }` → `202 { job_id }`.
+2. Poll `GET /jobs/{job_id}/status` until `completed` (`failed`/`error`/`cancelled` abort; the whole job is bounded by `MOTH_SEED_TIMEOUT_MS`).
+3. `GET /jobs/{job_id}/result` → `result.output.random.derived.integers.values` are the uint32 seeds directly (no word-combining).
+
+The seeds go into an in-memory pool; `GET /api/quantum/seed` takes from it
+synchronously. A missing key, HTTP error, timeout, failed job, malformed result
+or a result with too few integers yields no chunk, the pool backs off, and
+requests are answered from the CSPRNG meanwhile. Each MOTH batch carries a
+public `attestation` (`jobId`, `pulseHash`, `backend`, `mode`,
+`bellViolation`) — never the key.
+
+**`emu` vs `qpu` — labelled honestly:**
+
+| Mode | Runs on | Latency | `source` |
+|---|---|---|---|
+| `emu` (default) | Aer simulator (`backend: "aer"`) — a classical baseline of the same circuit | seconds (~8–20s per job) | `moth-emu` |
+| `qpu` | Real IBM quantum hardware (least-busy device) | queues on IBM for **minutes** | `moth-qpu` |
+
+`emu` output is **simulator output, not hardware quantum randomness**, and is
+never labelled as quantum. A batch is only `moth-qpu` when the result itself
+reports `mode: "qpu"` *and* a non-simulator backend. Dev and tests default to
+`emu` so they never burn QPU queue time.
+
+Latency is why the design is pool + prefetch: neither the HTTP route nor the
+client ever waits for a job. A cold pool (e.g. the first minutes after boot in
+`qpu` mode) just means `csprng` seeds until the first job lands. The emu circuit
+uses MOTH's default 12 randomness qubits: with `bell_witness` on, emu is capped
+at 20 qubits total.
+
+The attestation is a recorded *claim* — the replay verifier does not call MOTH.
+Anyone with MOTH access can look the job/pulse up to check it.
 
 ---
+
+## Daily Kami seed bank (commit now, reveal daily)
+
+QPU access is finite, so it is spent on output that keeps: a bank of one seed
+per UTC day, generated up front and committed to before anyone plays.
+
+1. `cd backend && npm run bank-daily -- --days 366 --start YYYY-MM-DD` runs
+   `qpu` jobs (`--parallel`, resumable via `<out>.chunks.json`). Any chunk the
+   result reports as simulator output is **rejected**, never banked as
+   hardware. Seeds are assigned to days in the order MOTH produced them — no
+   picking.
+2. Each day's leaf is
+   `keccak256(abi.encodePacked("kamikaze-daily-v1", day, seed, salt, jobId, pulseHash, mode, backend))`.
+   The 32-byte `salt` matters: a bare uint32 seed could be brute-forced out of
+   its hash in seconds. `mode`/`backend` are inside the leaf, so an emu seed
+   can't be relabelled QPU later. Pairs hash sorted (OpenZeppelin
+   `MerkleProof` convention), so proofs are also checkable on-chain.
+3. The script prints the **public commitment** (`startDate`, `days`, `root`),
+   which is pinned in `src/config/daily-seed-commitment.ts`. The bank file
+   itself holds every future seed: it is git-ignored (`backend/.data/`) and
+   deployed as a secret (`DAILY_SEED_BANK_PATH` or `DAILY_SEED_BANK_JSON`,
+   optionally pinned with `DAILY_SEED_BANK_ROOT`).
+4. `GET /api/daily/seed?date=` reveals that day's seed, salt, attestation and
+   proof — today or earlier only; future dates get `403 NOT_YET_REVEALED`.
+   `GET /api/daily/commitment` returns the public commitment.
+5. The lobby's Daily Challenge fetches today's reveal and checks the proof
+   against the pinned root (`src/services/daily-seed.ts`). Verified ⇒ the run
+   uses that seed and records `ReplayDigest.daily = { date, day, root }`; no
+   backend, no bank or a bad proof ⇒ an ordinary run seed, and play never
+   waits on it.
+6. The replay verifier rejects a digest that claims `daily` but whose seed is
+   not that day's revealed seed (`REPLAY_DAILY_SEED_MISMATCH`, plus
+   `…_DAY_UNREVEALED` / `…_ROOT_MISMATCH` / `…_BANK_UNAVAILABLE`).
+
+What this does and doesn't prove: once the root is public, nobody — the
+operator included — can change a day's seed. It does **not** hide seeds from
+whoever holds the bank (or the MOTH account), who could practise a day early;
+that is the trade for not needing QPU access every day.
+
+| Variable | Meaning |
+|---|---|
+| `DAILY_SEED_BANK_PATH` | Path to the bank JSON (secret). |
+| `DAILY_SEED_BANK_JSON` | The bank inline (JSON or base64), for hosts without a disk. |
+| `DAILY_SEED_BANK_ROOT` | Optional: refuse to serve a bank whose root differs. |
 
 ## Proof-of-provenance badge
 
@@ -101,7 +209,7 @@ Where the seed came from is surfaced to the player, from one formatter
 | **Celebration overlay** | The finished run's provenance, under the verdict seal |
 | **Share card image** | A chip in the top-right corner |
 | **Share text** | A `Seed: …` line |
-| **Ghost race / replay viewer** (`SeedAudit`) | Provenance, the raw seed, a seed fingerprint, and the replay hash — the audit trail for a rival's run |
+| **Ghost race / replay viewer** (`SeedAudit`) | Provenance, the raw seed, a seed fingerprint, and the replay hash — the audit trail for a rival's run. MOTH seeds add `MOTH JOB`, `PULSE HASH`, `BACKEND` and `BELL WITNESS` rows (validated before rendering; dropped if malformed) |
 | **Replay viewer** (`ReplayVerification`) | Whether the replay's hash still matches the score metadata it was submitted with, plus a copy button for that metadata block. Collapsed by default — see below |
 | **Ghost race** (`ReplayVerification` compact) | The same check as a one-line status under the PiP: `✓ matches` / `✗ mismatch` / `○ no record` |
 | **Replay viewer, collapsed row** | An `AUDIT` label plus that one-line status, with an **Audit trail ▾** control that expands the two full panels on demand |
@@ -109,6 +217,8 @@ Where the seed came from is surfaced to the player, from one formatter
 | Value | Chip | Meaning |
 |---|---|---|
 | `qrng` | `⚛ QUANTUM-SEEDED` | Seed came from the configured quantum RNG |
+| `moth-qpu` | `⚛ QPU-SEEDED` | MOTH `comet-qrng-v1` run on quantum hardware |
+| `moth-emu` | `◎ SIMULATED QRNG` | MOTH `comet-qrng-v1` on the Aer simulator — classical, not hardware-quantum |
 | `csprng` | `◈ SERVER ENTROPY` | Backend CSPRNG (provider unset/unreachable) |
 | `local` | `◇ DEVICE ENTROPY` | On-device CSPRNG (offline / cold buffer) |
 | unlabelled | `◆ SEED ON RECORD` | A seed exists but its origin label was not recorded (legacy/practice digest) |
@@ -220,7 +330,9 @@ string a viewer would paste elsewhere to re-check the binding independently.
 
 | Situation | Result |
 |---|---|
-| `QUANTUM_SEED_URL` unset | `source: "csprng"`, everything works |
+| `QUANTUM_SEED_URL` unset (`anu`) / `MOTH_API_KEY` unset (`moth`) | `source: "csprng"`, everything works |
+| MOTH pool empty (cold start, job queued on QPU) | `source: "csprng"` immediately; pool refills in background |
+| MOTH HTTP error / timeout / failed job / malformed or short result | `source: "csprng"`, request never fails; refill backs off |
 | Provider 500 / timeout / bad JSON | `source: "csprng"`, request never fails |
 | Backend unreachable / offline WebView | `source: "local"` (client CSPRNG) |
 | Buffer empty at run start | local seed immediately + background refill |

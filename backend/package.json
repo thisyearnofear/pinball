@@ -10,7 +10,8 @@
     "start": "node dist/index.js",
     "finalize": "tsx src/scripts/finalize-tournament.ts",
     "verify:moth": "tsx src/scripts/verify-moth-seed.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "bank-daily": "tsx src/scripts/bank-daily-seeds.ts"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",

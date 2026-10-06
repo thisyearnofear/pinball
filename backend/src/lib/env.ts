@@ -43,6 +43,21 @@ const EnvSchema = z.object({
   QUANTUM_SEED_URL: z.string().url().optional(),
   QUANTUM_SEED_API_KEY: z.string().optional(),
   QUANTUM_SEED_TIMEOUT_MS: z.coerce.number().int().positive().default(2000),
+  // anu = HTTP-JSON QRNG at QUANTUM_SEED_URL; moth = MOTH comet-qrng-v1 beacon.
+  QUANTUM_SEED_PROVIDER: z.enum(['anu', 'moth']).default('anu'),
+  // MOTH (provider=moth). No key ⇒ CSPRNG seeds. emu = Aer simulator (default,
+  // never burns QPU queue time); qpu = IBM hardware (jobs queue for minutes).
+  MOTH_API_KEY: z.string().optional(),
+  MOTH_API_URL: z.string().url().optional(),
+  MOTH_SEED_MODE: z.enum(['emu', 'qpu']).default('emu'),
+  MOTH_SEED_BATCH: z.coerce.number().int().min(1).max(1024).optional(),
+  MOTH_SEED_SHOTS: z.coerce.number().int().min(1).max(10000).optional(),
+  MOTH_SEED_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
+  MOTH_SEED_POLL_MS: z.coerce.number().int().positive().optional(),
+  // Daily Kami seed bank (see docs/QUANTUM_SEEDS.md). Secret: holds future seeds.
+  DAILY_SEED_BANK_PATH: z.string().optional(),
+  DAILY_SEED_BANK_JSON: z.string().optional(),
+  DAILY_SEED_BANK_ROOT: z.string().regex(/^0x[0-9a-fA-F]{64}$/).optional(),
 });
 
 export const env = EnvSchema.parse(process.env);

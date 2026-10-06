@@ -5,6 +5,8 @@ import { getTournamentWorld } from "@/config/tournaments";
 import type { AIDifficulty } from "@/model/kamikaze";
 import { getDailyChallenge, getDailyBest, type DailyChallenge } from "@/config/daily-challenge";
 import { getWorldById } from "@/config/worlds";
+import { fetchDailySeed, type VerifiedDailySeed } from "@/services/daily-seed";
+import { describeSeedProvenance } from "@/utils/seed-provenance";
 import type { PlayerProgress } from "@/config/progression";
 import type { ChallengeInvite } from "@/utils/challenge-link";
 
@@ -334,6 +336,16 @@ function DailyBanner(props: { onPlayDaily: (c: DailyChallenge) => void }) {
   const best = getDailyBest(challenge.dayKey);
   const world = getWorldById(challenge.worldId);
   const kamikaze = challenge.mode === "kamikaze";
+  // Today's banked seed, proof-checked against the pinned commitment. Absent
+  // until it arrives (or forever, with no backend/bank): the run then uses an
+  // ordinary seed, so the button never waits on this.
+  const [qpu, setQpu] = useState<VerifiedDailySeed | null>(null);
+  React.useEffect(() => {
+    let live = true;
+    void fetchDailySeed(challenge.dayKey).then((v) => { if (live) setQpu(v); });
+    return () => { live = false; };
+  }, [challenge.dayKey]);
+  const qpuProvenance = qpu ? describeSeedProvenance(qpu.source) : null;
 
   return (
     <div className={styles.daily}>
@@ -346,11 +358,16 @@ function DailyBanner(props: { onPlayDaily: (c: DailyChallenge) => void }) {
         <div className={styles.dailyBest}>
           Your best today: {formatDailyBest(best, kamikaze)}{best ? "" : " — no run yet"}
         </div>
+        {qpu && qpuProvenance && (
+          <div className={styles.dailySeed} style={{ color: qpuProvenance.color }} title={`Seed ${qpu.seed} · day ${qpu.day} · Merkle proof verified against ${qpu.root}`}>
+            {qpuProvenance.symbol} Kami&apos;s dice · {qpu.source === "moth-qpu" ? "QPU seed" : "simulated QRNG seed"} · proof ✓
+          </div>
+        )}
       </div>
       <div className={styles.dailyAction}>
         <Button
           variant="secondary"
-          onClick={(e) => { burstOnElement(e.currentTarget as HTMLElement, { count: 12, colors: ["#d4a017", "#e34234", "#fbbf24"] }); props.onPlayDaily(challenge); }}
+          onClick={(e) => { burstOnElement(e.currentTarget as HTMLElement, { count: 12, colors: ["#d4a017", "#e34234", "#fbbf24"] }); props.onPlayDaily(qpu ? { ...challenge, qpu } : challenge); }}
         >
           Play Daily
         </Button>
