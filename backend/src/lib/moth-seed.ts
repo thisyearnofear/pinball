@@ -128,8 +128,11 @@ const TERMINAL_FAILURE = new Set(['failed', 'error', 'cancelled', 'canceled']);
 
 export const MOTH_DEFAULTS = {
   count: 32,
-  // ~1200 extractable bits at 12 qubits (live emu probe): enough for 32 uint32s.
-  shots: 4096,
+  // Emu yields ~1200 extractable bits at 12 qubits/4096 shots — enough for 32
+  // uint32s. On real hardware the ordering penalty grows super-linearly in
+  // shots: 4096 collapsed the budget to ~45 bits and derived zero integers;
+  // 1024 budgeted ~415 bits (docs/TRAPS.md #12).
+  shots: { emu: 4096, qpu: 1024 } as Record<MothMode, number>,
   timeoutMs: { emu: 60_000, qpu: 30 * 60_000 } as Record<MothMode, number>,
   pollIntervalMs: { emu: 2_000, qpu: 15_000 } as Record<MothMode, number>,
   requestTimeoutMs: 10_000,
@@ -148,7 +151,7 @@ export async function runMothSeedJob(opts: MothJobOptions = {}): Promise<MothSee
   const mode: MothMode = opts.mode === 'qpu' ? 'qpu' : 'emu';
   const base = (opts.baseUrl ?? MOTH_DEFAULT_BASE_URL).replace(/\/+$/, '');
   const count = Math.max(1, Math.min(1024, Math.floor(opts.count ?? MOTH_DEFAULTS.count)));
-  const shots = Math.max(1, Math.min(10_000, Math.floor(opts.shots ?? MOTH_DEFAULTS.shots)));
+  const shots = Math.max(1, Math.min(10_000, Math.floor(opts.shots ?? MOTH_DEFAULTS.shots[mode])));
   const timeoutMs = opts.timeoutMs ?? MOTH_DEFAULTS.timeoutMs[mode];
   const pollMs = opts.pollIntervalMs ?? MOTH_DEFAULTS.pollIntervalMs[mode];
   const requestTimeoutMs = opts.requestTimeoutMs ?? MOTH_DEFAULTS.requestTimeoutMs;

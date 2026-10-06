@@ -138,3 +138,20 @@ Format: **symptom / why it stays green / the rule.**
 - **The rule** — in tests/visual, drive buttons with
   `locator.evaluate((el) => el.click())` — same React handler, no input
   pipeline — and assert the *state consequence*, not the mouse.
+
+## 12. On real QPU hardware, more shots means *less* extractable entropy
+
+- **Symptom** — `MOTH_SEED_MODE=qpu` configured, MOTH jobs complete on IBM
+  hardware, yet `/api/quantum/seed` keeps returning `source: "csprng"`
+  forever and every refill burns a job for zero seeds.
+- **Why green** — submission, polling and completion all succeed (HTTP 200);
+  the extractor simply emits `output_bits: 0`. MOTH's entropy accounting
+  subtracts an ordering penalty that grows super-linearly in `shots`: at
+  `shots=4096` on `ibm_fez` the extractable budget collapsed to ~45 bits —
+  fewer than one uint32 — while `shots=1024` on `ibm_miami` budgeted ~415
+  bits. The provider's never-throws contract hides the failure; the only
+  signal is `random.derivation_error` inside the job result.
+- **The rule** — keep shots low on hardware (`1024`; the code default is
+  mode-dependent, emu can afford 4096). When `moth` is configured but seeds
+  report `csprng`, inspect the job's `result.output.entropy.budget_bits`
+  and `random.derivation_error` before assuming auth or queue trouble.
