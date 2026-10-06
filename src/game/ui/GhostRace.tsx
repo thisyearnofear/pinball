@@ -181,7 +181,7 @@ export function GhostRace({ replay, leaderScore, leaderAddress, replayHash, meta
         style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "0 6px 4px" }}
       >
         {hasSeedAudit(replay.seed, replayHash) && (
-          <SeedAudit variant="compact" seed={replay.seed} seedSource={replay.seedSource} replayHash={replayHash} />
+          <SeedAudit variant="compact" seed={replay.seed} seedSource={replay.seedSource} seedAttestation={replay.seedAttestation} replayHash={replayHash} />
         )}
         <ReplayVerification variant="compact" replay={replay} actualHash={replayHash} metadata={metadata} />
       </div>

@@ -1,11 +1,13 @@
 import React, { useRef, useState } from "react";
-import { describeSeedProvenance } from "@/utils/seed-provenance";
+import { describeSeedProvenance, sanitizeSeedAttestation } from "@/utils/seed-provenance";
 import {
+    bellWitnessText,
     formatSeedAuditSummary,
     hasSeedAudit,
     isAuditHash,
     seedFingerprint,
     shortHash,
+    shortId,
 } from "@/utils/seed-audit";
 import { copyToClipboard } from "@/utils/clipboard";
 
@@ -14,8 +16,10 @@ import { colors, radius, spacing, typography } from "@/theme/tokens";
 type Props = {
     /** The run's recorded RNG seed. */
     seed?: number | null;
-    /** Recorded provenance (qrng/csprng/local). */
+    /** Recorded provenance (qrng/moth-qpu/moth-emu/csprng/local). */
     seedSource?: string | null;
+    /** Recorded MOTH job/pulse provenance (validated before rendering). */
+    seedAttestation?: unknown;
     /** keccak256 of the encoded replay JSON (binds the replay to the signed score). */
     replayHash?: string | null;
     /** "full" for a panel (replay viewer); "compact" for a one-line PiP footer. */
@@ -35,8 +39,10 @@ type CopyState = { key: string; ok: boolean } | null;
  * `seed-provenance` + `seed-audit`; copy is deliberately literal (this is a
  * derived fingerprint, not a fairness proof).
  */
-export function SeedAudit({ seed, seedSource, replayHash, variant = "full" }: Props) {
+export function SeedAudit({ seed, seedSource, seedAttestation, replayHash, variant = "full" }: Props) {
     const provenance = describeSeedProvenance(seedSource);
+    // Only meaningful beside a MOTH source; a stored replay is untrusted input.
+    const attestation = seedSource?.startsWith("moth-") ? sanitizeSeedAttestation(seedAttestation) : undefined;
     const hasSeed = typeof seed === "number" && Number.isFinite(seed);
     const fingerprint = hasSeed ? seedFingerprint(seed as number) : null;
     const hasReplayHash = isAuditHash(replayHash);
@@ -65,7 +71,7 @@ export function SeedAudit({ seed, seedSource, replayHash, variant = "full" }: Pr
         return (
             <button
                 type="button"
-                onClick={(e) => copy("summary", formatSeedAuditSummary({ seed, seedSource, replayHash }), e)}
+                onClick={(e) => copy("summary", formatSeedAuditSummary({ seed, seedSource, seedAttestation: attestation, replayHash }), e)}
                 title={`${auditTitle({ seed, fingerprint, replayHash, label: provenance.phrase })}\n\nTap to copy`}
                 aria-label="Copy seed audit"
                 style={{
@@ -140,6 +146,51 @@ export function SeedAudit({ seed, seedSource, replayHash, variant = "full" }: Pr
                     copyKey="seedHash"
                     copyValue={fingerprint}
                     copied={flashed("seedHash")}
+                    onCopy={copy}
+                />
+            )}
+            {attestation && (
+                <AuditRow
+                    label="MOTH JOB"
+                    value={shortId(attestation.jobId, 8)}
+                    title={attestation.jobId}
+                    mono
+                    copyKey="mothJob"
+                    copyValue={attestation.jobId}
+                    copied={flashed("mothJob")}
+                    onCopy={copy}
+                />
+            )}
+            {attestation?.pulseHash && (
+                <AuditRow
+                    label="PULSE HASH"
+                    value={shortId(attestation.pulseHash, 10)}
+                    title={attestation.pulseHash}
+                    mono
+                    copyKey="pulseHash"
+                    copyValue={attestation.pulseHash}
+                    copied={flashed("pulseHash")}
+                    onCopy={copy}
+                />
+            )}
+            {attestation?.backend && (
+                <AuditRow
+                    label="BACKEND"
+                    value={attestation.backend}
+                    mono
+                    copyKey="backend"
+                    copyValue={attestation.backend}
+                    copied={flashed("backend")}
+                    onCopy={copy}
+                />
+            )}
+            {attestation?.bellViolation !== undefined && (
+                <AuditRow
+                    label="BELL WITNESS"
+                    value={bellWitnessText(attestation.bellViolation)}
+                    copyKey="bellWitness"
+                    copyValue={`CHSH ${bellWitnessText(attestation.bellViolation)}`}
+                    copied={flashed("bellWitness")}
                     onCopy={copy}
                 />
             )}

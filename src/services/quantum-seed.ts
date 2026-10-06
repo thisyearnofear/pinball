@@ -14,20 +14,25 @@
 import axios from "axios";
 import { getAppConfig } from "@/config/app-config";
 import { createRunSeed } from "@/utils/rng";
+import { sanitizeSeedAttestation, type SeedAttestation, type SeedSource } from "@/utils/seed-provenance";
 
-/** Where a run's seed came from. Recorded in the replay for provenance. */
-export type SeedSource = "qrng" | "csprng" | "local";
+export type { SeedSource, SeedAttestation };
 
-export type SeedBatch = { seeds: number[]; source: SeedSource };
+export type SeedBatch = { seeds: number[]; source: SeedSource; attestation?: SeedAttestation };
+
+/** Each buffered seed keeps the provenance of the batch it arrived in. */
+type BufferedSeed = { seed: number; source: SeedSource; attestation?: SeedAttestation };
+
+const BACKEND_SOURCES: ReadonlySet<string> = new Set(["qrng", "moth-qpu", "moth-emu", "csprng"]);
 
 const PREFETCH_COUNT = 8;
 /** Refill when the buffer drops to this level. */
 const LOW_WATER_MARK = 2;
 const REQUEST_TIMEOUT_MS = 2500;
 
-let buffer: number[] = [];
-let bufferSource: SeedSource = "csprng";
+let buffer: BufferedSeed[] = [];
 let lastSource: SeedSource = "local";
+let lastAttestation: SeedAttestation | undefined;
 let inFlight: Promise<void> | null = null;
 
 const API_BASE = (() => {
@@ -58,9 +63,11 @@ export function prefetchQuantumSeeds(count = PREFETCH_COUNT): Promise<void> {
       });
       const seeds = Array.isArray(data?.seeds) ? data.seeds.filter(isUint32) : [];
       if (seeds.length === 0) return;
-      const source: SeedSource = data?.source === "qrng" ? "qrng" : "csprng";
-      buffer = buffer.concat(seeds);
-      bufferSource = source;
+      // Unknown labels collapse to csprng: never claim more than the backend said.
+      const source = (BACKEND_SOURCES.has(data?.source) ? data.source : "csprng") as SeedSource;
+      // Attestations only ride with MOTH batches.
+      const attestation = source.startsWith("moth-") ? sanitizeSeedAttestation(data?.attestation) : undefined;
+      buffer = buffer.concat(seeds.map((seed) => ({ seed, source, ...(attestation ? { attestation } : {}) })));
     } catch {
       // Offline, backend down, provider down, bad payload — keep the fallback.
     } finally {
@@ -77,12 +84,14 @@ export function prefetchQuantumSeeds(count = PREFETCH_COUNT): Promise<void> {
  */
 export function nextRunSeed(): number {
   if (buffer.length > 0) {
-    const seed = buffer.shift()!;
-    lastSource = bufferSource;
+    const next = buffer.shift()!;
+    lastSource = next.source;
+    lastAttestation = next.attestation;
     if (buffer.length <= LOW_WATER_MARK) void prefetchQuantumSeeds();
-    return seed;
+    return next.seed;
   }
   lastSource = "local";
+  lastAttestation = undefined;
   void prefetchQuantumSeeds();
   return createRunSeed();
 }
@@ -92,19 +101,24 @@ export function lastSeedSource(): SeedSource {
   return lastSource;
 }
 
+/** MOTH job/pulse provenance of the most recently handed-out seed, if any. */
+export function lastSeedAttestation(): SeedAttestation | undefined {
+  return lastAttestation;
+}
+
 /**
  * Provenance the NEXT run would use, without consuming a seed. Buffered seeds
  * carry the source they arrived with; an empty buffer means the local CSPRNG
  * (a refill may still land first, which is why the lobby re-reads this).
  */
 export function peekNextSeedSource(): SeedSource {
-  return buffer.length > 0 ? bufferSource : "local";
+  return buffer.length > 0 ? buffer[0].source : "local";
 }
 
 /** Test-only: clear buffered state between cases. */
 export function resetQuantumSeedCache(): void {
   buffer = [];
-  bufferSource = "csprng";
   lastSource = "local";
+  lastAttestation = undefined;
   inFlight = null;
 }
