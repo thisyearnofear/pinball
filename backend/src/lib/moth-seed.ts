@@ -112,6 +112,8 @@ export type MothJobOptions = {
   /** Integers to ask for. MOTH returns min(requested, extractable). */
   count?: number;
   shots?: number;
+  /** qpu only: pin an IBM device (MOTH `backend_name`) instead of least-busy. */
+  backendName?: string;
   /** Overall budget for submit + polling + result. */
   timeoutMs?: number;
   pollIntervalMs?: number;
@@ -178,6 +180,7 @@ export async function runMothSeedJob(opts: MothJobOptions = {}): Promise<MothSee
           output_bytes: count * 4,
           include_raw_counts: false,
           derive: { integers: { min: 0, max: UINT32_MAX, count } },
+          ...(mode === 'qpu' && opts.backendName && SAFE_ID.test(opts.backendName) ? { backend_name: opts.backendName } : {}),
         },
       }),
     }));

@@ -9,7 +9,7 @@ import { buildBank, commitmentOf, dateForDay, isUtcDate, newSalt, utcDateKey } f
  *
  * Usage:
  *   npm run bank-daily -- [--days 366] [--start YYYY-MM-DD] [--out .data/daily-seed-bank.json]
- *                         [--mode qpu|emu] [--per-job 128] [--shots 10000] [--parallel 2]
+ *                         [--mode qpu|emu] [--per-job 128] [--shots 10000] [--parallel 2] [--backend ibm_xxx]
  *
  * Resumable: finished jobs are appended to `<out>.chunks.json`, so a killed run
  * picks up where it stopped. In qpu mode any chunk the result reports as
@@ -21,7 +21,7 @@ import { buildBank, commitmentOf, dateForDay, isUtcDate, newSalt, utcDateKey } f
  * Nothing secret (key, seeds, salts) is ever printed.
  */
 
-type Args = { days: number; start: string; out: string; mode: MothMode; perJob: number; shots: number; parallel: number };
+type Args = { days: number; start: string; out: string; mode: MothMode; perJob: number; shots: number; parallel: number; backend?: string };
 
 function parseArgs(argv: string[]): Args {
   const get = (k: string) => {
@@ -37,6 +37,7 @@ function parseArgs(argv: string[]): Args {
     perJob: Number(get('per-job') ?? 128),
     shots: Number(get('shots') ?? 10_000),
     parallel: Math.max(1, Number(get('parallel') ?? 2)),
+    backend: get('backend'),
   };
   if (!Number.isInteger(a.days) || a.days < 1 || a.days > 4000) throw new Error('--days must be 1..4000');
   if (!isUtcDate(a.start)) throw new Error('--start must be YYYY-MM-DD');
@@ -64,7 +65,7 @@ async function main() {
     const jobs = Math.min(args.parallel, Math.ceil(need / args.perJob));
     const results = await Promise.all(
       Array.from({ length: jobs }, () =>
-        runMothSeedJob({ apiKey, mode: args.mode, count: args.perJob, shots: args.shots, timeoutMs: 45 * 60_000, baseUrl: process.env.MOTH_API_URL }),
+        runMothSeedJob({ apiKey, mode: args.mode, count: args.perJob, shots: args.shots, backendName: args.backend, timeoutMs: 45 * 60_000, baseUrl: process.env.MOTH_API_URL }),
       ),
     );
     for (const r of results) {
