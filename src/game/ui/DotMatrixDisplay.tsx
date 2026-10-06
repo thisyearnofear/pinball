@@ -29,6 +29,12 @@ export function marqueeOffset(textDots: number, cols: number, tMs: number, dotsP
     return Math.floor(((tMs / 1000) * dotsPerS) % span);
 }
 
+/** Largest font size in [min, max] whose measured width fits `cols`; `min` if none do. Pure. */
+export function fitFontPx(max: number, min: number, cols: number, measure: (px: number) => number): number {
+    for (let px = max; px > min; px--) if (measure(px) <= cols) return px;
+    return min;
+}
+
 function prefersReducedMotion(): boolean {
     return typeof window !== "undefined" && typeof window.matchMedia === "function"
         && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -53,11 +59,15 @@ export function DotMatrixDisplay({ text, color, flashKey = 0, style }: Props) {
         canvas.width = DMD_COLS * PITCH * dpr;
         canvas.height = DMD_ROWS * PITCH * dpr;
 
-        // Rasterise the whole line once at dot resolution.
-        const fontPx = DMD_ROWS - 4;
-        const font = `bold ${fontPx}px "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif`;
+        // Rasterise the whole line once at dot resolution. Shrink to fit first;
+        // only lines still too wide marquee (reduced motion shrinks further
+        // instead, so nothing is cut off).
+        const reduced = prefersReducedMotion();
         const probe = document.createElement("canvas").getContext("2d");
         if (!probe) return;
+        const fontFor = (px: number) => `bold ${px}px "Hiragino Sans", "Noto Sans JP", "Noto Sans CJK JP", "Yu Gothic", Meiryo, system-ui, sans-serif`;
+        const fontPx = fitFontPx(DMD_ROWS - 6, reduced ? 7 : 11, DMD_COLS - 4, (px) => { probe.font = fontFor(px); return probe.measureText(text).width; });
+        const font = fontFor(fontPx);
         probe.font = font;
         const textDots = Math.ceil(probe.measureText(text).width) + 2;
         const fits = textDots <= DMD_COLS;
@@ -73,15 +83,11 @@ export function DotMatrixDisplay({ text, color, flashKey = 0, style }: Props) {
         sctx.fillText(text, fits ? Math.floor((DMD_COLS - textDots) / 2) + 1 : 1, DMD_ROWS / 2 + 1);
         const mask = rasterizeDots(sctx.getImageData(0, 0, srcCols, DMD_ROWS).data, srcCols, DMD_ROWS);
 
-        const reduced = prefersReducedMotion();
-        const start = performance.now();
         const r = PITCH * dpr * 0.36;
         let raf = 0;
+        let start = -1;
 
-        const paint = (now: number) => {
-            const t = now - start;
-            const offset = reduced ? 0 : marqueeOffset(textDots, DMD_COLS, Math.max(0, t - 900));
-            const wipe = reduced ? DMD_COLS : Math.min(DMD_COLS, Math.floor((t / WIPE_MS) * DMD_COLS));
+        const draw = (offset: number, wipe: number) => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             for (let y = 0; y < DMD_ROWS; y++) {
                 for (let x = 0; x < DMD_COLS; x++) {
@@ -95,9 +101,20 @@ export function DotMatrixDisplay({ text, color, flashKey = 0, style }: Props) {
                 }
             }
             ctx.globalAlpha = 1;
-            if (!reduced && (!fits || wipe < DMD_COLS)) raf = requestAnimationFrame(paint);
         };
-        raf = requestAnimationFrame(paint);
+
+        // Full frame now, so the panel is never blank even if frames are
+        // starved; the wipe/marquee then animate from the first rAF tick.
+        draw(0, DMD_COLS);
+        if (reduced) return;
+        const tick = (now: number) => {
+            if (start < 0) start = now;
+            const t = now - start;
+            const wipe = Math.min(DMD_COLS, Math.floor((t / WIPE_MS) * DMD_COLS));
+            draw(marqueeOffset(textDots, DMD_COLS, Math.max(0, t - 900)), wipe);
+            if (!fits || wipe < DMD_COLS) raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
         return () => cancelAnimationFrame(raf);
     }, [text, color, flashKey]);
 
