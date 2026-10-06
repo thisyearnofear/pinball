@@ -155,6 +155,20 @@ describe('runMothSeedJob', () => {
     expect(JSON.parse(String(qpu.calls[0].init?.body)).mode).toBe('qpu');
   });
 
+  it('pins backend_name only for qpu jobs with a safe device name', async () => {
+    const pinned = mothApi();
+    await runMothSeedJob({ apiKey: KEY, mode: 'qpu', backendName: 'ibm_boston', fetchImpl: pinned.fetchImpl, sleep: noSleep });
+    expect(JSON.parse(String(pinned.calls[0].init?.body)).params.backend_name).toBe('ibm_boston');
+
+    const emu = mothApi();
+    await runMothSeedJob({ apiKey: KEY, backendName: 'ibm_boston', fetchImpl: emu.fetchImpl, sleep: noSleep });
+    expect(JSON.parse(String(emu.calls[0].init?.body)).params.backend_name).toBeUndefined();
+
+    const unsafe = mothApi();
+    await runMothSeedJob({ apiKey: KEY, mode: 'qpu', backendName: 'ibm boston"; x', fetchImpl: unsafe.fetchImpl, sleep: noSleep });
+    expect(JSON.parse(String(unsafe.calls[0].init?.body)).params.backend_name).toBeUndefined();
+  });
+
   it('returns null without a key and never calls the API', async () => {
     const api = mothApi();
     expect(await runMothSeedJob({ fetchImpl: api.fetchImpl })).toBeNull();

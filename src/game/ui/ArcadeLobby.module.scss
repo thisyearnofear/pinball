@@ -351,6 +351,13 @@
   font-family: var(--font-family-mono);
 }
 
+.dailySeed {
+  margin-top: 4px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+
 .dailyAction {
   flex-shrink: 0;
 }

@@ -154,6 +154,50 @@ Anyone with MOTH access can look the job/pulse up to check it.
 
 ---
 
+## Daily Kami seed bank (commit now, reveal daily)
+
+QPU access is finite, so it is spent on output that keeps: a bank of one seed
+per UTC day, generated up front and committed to before anyone plays.
+
+1. `cd backend && npm run bank-daily -- --days 366 --start YYYY-MM-DD` runs
+   `qpu` jobs (`--parallel`, resumable via `<out>.chunks.json`). Any chunk the
+   result reports as simulator output is **rejected**, never banked as
+   hardware. Seeds are assigned to days in the order MOTH produced them — no
+   picking.
+2. Each day's leaf is
+   `keccak256(abi.encodePacked("kamikaze-daily-v1", day, seed, salt, jobId, pulseHash, mode, backend))`.
+   The 32-byte `salt` matters: a bare uint32 seed could be brute-forced out of
+   its hash in seconds. `mode`/`backend` are inside the leaf, so an emu seed
+   can't be relabelled QPU later. Pairs hash sorted (OpenZeppelin
+   `MerkleProof` convention), so proofs are also checkable on-chain.
+3. The script prints the **public commitment** (`startDate`, `days`, `root`),
+   which is pinned in `src/config/daily-seed-commitment.ts`. The bank file
+   itself holds every future seed: it is git-ignored (`backend/.data/`) and
+   deployed as a secret (`DAILY_SEED_BANK_PATH` or `DAILY_SEED_BANK_JSON`,
+   optionally pinned with `DAILY_SEED_BANK_ROOT`).
+4. `GET /api/daily/seed?date=` reveals that day's seed, salt, attestation and
+   proof — today or earlier only; future dates get `403 NOT_YET_REVEALED`.
+   `GET /api/daily/commitment` returns the public commitment.
+5. The lobby's Daily Challenge fetches today's reveal and checks the proof
+   against the pinned root (`src/services/daily-seed.ts`). Verified ⇒ the run
+   uses that seed and records `ReplayDigest.daily = { date, day, root }`; no
+   backend, no bank or a bad proof ⇒ an ordinary run seed, and play never
+   waits on it.
+6. The replay verifier rejects a digest that claims `daily` but whose seed is
+   not that day's revealed seed (`REPLAY_DAILY_SEED_MISMATCH`, plus
+   `…_DAY_UNREVEALED` / `…_ROOT_MISMATCH` / `…_BANK_UNAVAILABLE`).
+
+What this does and doesn't prove: once the root is public, nobody — the
+operator included — can change a day's seed. It does **not** hide seeds from
+whoever holds the bank (or the MOTH account), who could practise a day early;
+that is the trade for not needing QPU access every day.
+
+| Variable | Meaning |
+|---|---|
+| `DAILY_SEED_BANK_PATH` | Path to the bank JSON (secret). |
+| `DAILY_SEED_BANK_JSON` | The bank inline (JSON or base64), for hosts without a disk. |
+| `DAILY_SEED_BANK_ROOT` | Optional: refuse to serve a bank whose root differs. |
+
 ## Proof-of-provenance badge
 
 Where the seed came from is surfaced to the player, from one formatter

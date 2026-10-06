@@ -7,6 +7,7 @@ import { stopGame, setSubmissionStateCallback, type SubmissionStep as LegacySubm
 import { getTournamentMeta, getAllTournaments, type GameMode } from "@/config/tournaments";
 import { getFromStorage } from "@/utils/local-storage";
 import { getDailyChallenge, recordDailyRun } from "@/config/daily-challenge";
+import type { VerifiedDailySeed } from "@/services/daily-seed";
 import { getProgress, recordRunProgress, grantEarlyWin, XP_FIRST_ACTION, type PlayerProgress, type ProgressUpdate } from "@/config/progression";
 import { loadMemory, recordRunResult, saveMemory } from "@/utils/machine-memory";
 import { getRunHabits } from "@/model/game";
@@ -114,6 +115,7 @@ function GameScreenInner({ initialStory = false }: { initialStory?: boolean }) {
   const [lastReplayHash, setLastReplayHash] = useState<string | undefined>(undefined);
   const [lastSeedSource, setLastSeedSource] = useState<string | undefined>(undefined);
   const [lastSignedMetadata, setLastSignedMetadata] = useState<string | undefined>(undefined);
+  const [dailySeed, setDailySeed] = useState<VerifiedDailySeed | null>(null);
   const [dailyResult, setDailyResult] = useState<{ dayKey: string; mode: "classic" | "kamikaze"; best: number; isPB: boolean } | null>(null);
   const [lastReplay, setLastReplay] = useState<ReplayDigest | null>(null);
   const [showReplay, setShowReplay] = useState(false);
@@ -232,16 +234,19 @@ function GameScreenInner({ initialStory = false }: { initialStory?: boolean }) {
 
   function startPractice() {
     setStory(false);
+    setDailySeed(null);
     setMode("practice");
     setShowCelebration(false);
     setRunKey((k) => k + 1);
     setView("game");
   }
-  function startDailyChallenge(challenge: { worldId: string; mode: GameMode; aiDifficulty: AIDifficulty }) {
+  function startDailyChallenge(challenge: { worldId: string; mode: GameMode; aiDifficulty: AIDifficulty; qpu?: VerifiedDailySeed }) {
+    setDailySeed(challenge.qpu ?? null);
     setSelectedWorldId(challenge.worldId);
     setGameMode(challenge.mode);
     setAiDifficulty(challenge.aiDifficulty);
     setStory(false);
+    setDailySeed(null);
     setMode("practice");
     setShowCelebration(false);
     setRunKey((k) => k + 1);
@@ -256,6 +261,7 @@ function GameScreenInner({ initialStory = false }: { initialStory?: boolean }) {
     setGameMode(invite.mode);
     setAiDifficulty(invite.aiDifficulty);
     setStory(false);
+    setDailySeed(null);
     setMode("practice");
     setShowCelebration(false);
     setChallengeOutcome(null);
@@ -280,6 +286,7 @@ function GameScreenInner({ initialStory = false }: { initialStory?: boolean }) {
     setSelectedWorldId(invite.worldId);
     setGameMode(invite.mode);
     setStory(false);
+    setDailySeed(null);
     setMode("practice");
     setShowCelebration(false);
     setChallengeOutcome(null);
@@ -293,6 +300,7 @@ function GameScreenInner({ initialStory = false }: { initialStory?: boolean }) {
 
   function proceedAfterEntry() {
     setStory(false);
+    setDailySeed(null);
     setMode("tournament");
     setShowCelebration(false);
     setRunKey((k) => k + 1);
@@ -329,6 +337,7 @@ function GameScreenInner({ initialStory = false }: { initialStory?: boolean }) {
 
   function startTournament() {
     setStory(false);
+    setDailySeed(null);
     setMode("tournament");
     if (!canStartTournamentRun) {
       if (!isConnected) {
@@ -560,6 +569,7 @@ function GameScreenInner({ initialStory = false }: { initialStory?: boolean }) {
                 onStartTournament={(id) => {
                   setTournament((prev) => ({ ...prev, tournamentId: id }));
                   setStory(false);
+                  setDailySeed(null);
                   setMode("tournament");
                   setShowCelebration(false);
                   setRunKey((k) => k + 1);
@@ -640,6 +650,7 @@ function GameScreenInner({ initialStory = false }: { initialStory?: boolean }) {
                       tableIndex={tableIndex}
                       paused={pausedEffective}
                       story={story && mode === "practice"}
+                      dailySeed={mode === "practice" && !story ? dailySeed : null}
                       onTogglePause={() => setView((v) => (v === "game" ? "paused" : v === "paused" ? "game" : v))}
                       onRestart={() => { setRunKey((k) => k + 1); setView("game"); }}
                       onQuit={() => setView("lobby")}

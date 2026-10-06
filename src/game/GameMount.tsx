@@ -34,6 +34,7 @@ import { mulberry32 } from "@/utils/rng";
 import { describeMood } from "@/utils/mood-display";
 import { coachScript, currentCue, noObservations, type CoachCueId, type CoachObservations } from "@/config/table-coach";
 import { nextRunSeed, lastSeedSource, lastSeedAttestation } from "@/services/quantum-seed";
+import type { VerifiedDailySeed } from "@/services/daily-seed";
 import * as haptics from "@/utils/haptics";
 import { startMachinePulse, stopMachinePulse } from "@/services/audio-service";
 import { formatGameScore } from "@/utils/score-format";
@@ -63,10 +64,14 @@ function createRunGame(opts: {
   worldId?: string;
   controlScheme?: "steer" | "feint" | "precision";
   story?: boolean;
+  /** Daily Kami: play the day's banked, proof-checked seed instead of a fresh one. */
+  daily?: VerifiedDailySeed | null;
 }): GameDef {
-  // Quantum when available, local CSPRNG otherwise — both recorded in the
-  // replay, so the run stays reproducible either way.
-  const rngSeed = nextRunSeed();
+  // Daily runs share the day's banked seed; otherwise quantum when available,
+  // local CSPRNG otherwise — all recorded in the replay, so the run stays
+  // reproducible either way.
+  const daily = opts.story ? undefined : opts.daily ?? undefined;
+  const rngSeed = daily ? daily.seed : nextRunSeed();
   return {
     id: opts.id,
     active: false,
@@ -78,8 +83,9 @@ function createRunGame(opts: {
     underworld: false,
     kamikaze: opts.gameMode === "kamikaze" ? createKamikazeState(opts.aiDifficulty) : undefined,
     rngSeed,
-    seedSource: lastSeedSource(),
-    seedAttestation: lastSeedAttestation(),
+    seedSource: daily ? daily.source : lastSeedSource(),
+    seedAttestation: daily ? daily.attestation : lastSeedAttestation(),
+    ...(daily ? { daily: { date: daily.date, day: daily.day, root: daily.root } } : {}),
     rng: mulberry32(rngSeed),
     // Story runs keep the physical table but skip world-physics wobble: the
     // shrine encounter is a fixed learning loop, not a seeded marble drift.
@@ -102,6 +108,7 @@ function beginRunRecording(g: GameDef, gameMode: GameMode, aiDifficulty?: AIDiff
     controlScheme: g.controlScheme,
     seedSource: g.seedSource,
     seedAttestation: g.seedAttestation,
+    daily: g.daily,
     aiDifficulty: gameMode === "kamikaze" ? aiDifficulty ?? "medium" : undefined,
   });
 }
@@ -337,6 +344,8 @@ type Props = {
   paused: boolean;
   /** Story mode (Water Shrine): the same table runs the narrative encounter. */
   story?: boolean;
+  /** Daily Kami: the day's verified banked seed (null/absent = ordinary seed). */
+  dailySeed?: VerifiedDailySeed | null;
   /** Shared pause toggle owned by GameScreen (the pause menu lives there). */
   onTogglePause?: () => void;
   /** Story terminal panels reuse the parent's restart/quit flows. */
@@ -560,7 +569,7 @@ export default function GameMount(props: Props) {
   const taxSeenRef = useRef(0);
 
   const initialGame = useMemo<GameDef>(
-    () => createRunGame({ id: storyRun ? "story-initial" : "practice", table: START_TABLE_INDEX, paused: false, gameMode: props.gameMode, aiDifficulty: props.aiDifficulty, worldId: props.worldId, controlScheme: props.controlScheme, story: storyRun }),
+    () => createRunGame({ id: storyRun ? "story-initial" : "practice", table: START_TABLE_INDEX, paused: false, gameMode: props.gameMode, aiDifficulty: props.aiDifficulty, worldId: props.worldId, controlScheme: props.controlScheme, story: storyRun, daily: props.dailySeed }),
     [props.gameMode, props.aiDifficulty, storyRun],
   );
 
@@ -734,6 +743,7 @@ export default function GameMount(props: Props) {
       worldId: props.worldId,
       controlScheme: props.controlScheme,
       story: storyRun,
+      daily: props.dailySeed,
     });
 
     if (!g.story) {
