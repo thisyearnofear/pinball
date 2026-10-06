@@ -8,6 +8,7 @@
  */
 
 import type { SeedAttestation } from "@/utils/seed-provenance";
+import type { DailyRunRef } from "@/services/daily-seed";
 
 export type ReplayEventType =
     | "L+" | "L-"   // left flipper down/up
@@ -45,6 +46,8 @@ export type ReplayDigest = {
     seedSource?: string;
     /** MOTH job/pulse the seed came from (moth-* sources) — provenance, not physics. */
     seedAttestation?: SeedAttestation;
+    /** Daily Kami run: the verifier checks `seed` is this day's revealed banked seed. */
+    daily?: DailyRunRef;
     tickCount: number;
     finalScore: number;
     truncated: boolean;
@@ -72,6 +75,7 @@ let world: string | undefined;
 let controlScheme: string | undefined;
 let seedSource: string | undefined;
 let seedAttestation: SeedAttestation | undefined;
+let daily: DailyRunRef | undefined;
 let events: ReplayEvent[] = [];
 let trace: number[] = [];
 let lastTraceTick = -Infinity;
@@ -85,6 +89,7 @@ export function startReplayRecording(opts: {
     controlScheme?: string;
     seedSource?: string;
     seedAttestation?: SeedAttestation;
+    daily?: DailyRunRef;
 }): void {
     recording = true;
     truncated = false;
@@ -96,6 +101,7 @@ export function startReplayRecording(opts: {
     controlScheme = opts.controlScheme;
     seedSource = opts.seedSource;
     seedAttestation = opts.seedAttestation;
+    daily = opts.daily;
     events = [];
     trace = [];
     lastTraceTick = -Infinity;
@@ -146,6 +152,7 @@ export function finishReplayRecording(finalScore: number, tickCount: number): Re
         ...(controlScheme ? { controlScheme } : {}),
         ...(seedSource ? { seedSource } : {}),
         ...(seedAttestation ? { seedAttestation } : {}),
+        ...(daily ? { daily } : {}),
         tickCount,
         finalScore,
         truncated,

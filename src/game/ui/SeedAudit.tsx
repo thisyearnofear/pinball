@@ -20,6 +20,8 @@ type Props = {
     seedSource?: string | null;
     /** Recorded MOTH job/pulse provenance (validated before rendering). */
     seedAttestation?: unknown;
+    /** Daily Kami reference recorded in the replay (validated before rendering). */
+    daily?: unknown;
     /** keccak256 of the encoded replay JSON (binds the replay to the signed score). */
     replayHash?: string | null;
     /** "full" for a panel (replay viewer); "compact" for a one-line PiP footer. */
@@ -39,13 +41,14 @@ type CopyState = { key: string; ok: boolean } | null;
  * `seed-provenance` + `seed-audit`; copy is deliberately literal (this is a
  * derived fingerprint, not a fairness proof).
  */
-export function SeedAudit({ seed, seedSource, seedAttestation, replayHash, variant = "full" }: Props) {
+export function SeedAudit({ seed, seedSource, seedAttestation, daily, replayHash, variant = "full" }: Props) {
     const provenance = describeSeedProvenance(seedSource);
     // Only meaningful beside a MOTH source; a stored replay is untrusted input.
     const attestation = seedSource?.startsWith("moth-") ? sanitizeSeedAttestation(seedAttestation) : undefined;
     const hasSeed = typeof seed === "number" && Number.isFinite(seed);
     const fingerprint = hasSeed ? seedFingerprint(seed as number) : null;
     const hasReplayHash = isAuditHash(replayHash);
+    const dailyRef = sanitizeDailyRef(daily);
     const [copyState, setCopyState] = useState<CopyState>(null);
     const clearRef = useRef<number | null>(null);
 
@@ -194,6 +197,17 @@ export function SeedAudit({ seed, seedSource, seedAttestation, replayHash, varia
                     onCopy={copy}
                 />
             )}
+            {dailyRef && (
+                <AuditRow
+                    label="DAILY KAMI"
+                    value={`${dailyRef.date} · day ${dailyRef.day}`}
+                    title={`Banked seed for ${dailyRef.date}; the verifier checks it against bank root ${dailyRef.root}`}
+                    copyKey="daily"
+                    copyValue={`${dailyRef.date} day ${dailyRef.day} root ${dailyRef.root}`}
+                    copied={flashed("daily")}
+                    onCopy={copy}
+                />
+            )}
             {hasReplayHash && (
                 <AuditRow
                     label="REPLAY HASH"
@@ -279,4 +293,13 @@ function auditTitle(opts: {
     const replay = typeof opts.replayHash === "string" ? opts.replayHash : "";
     if (replay) lines.push(`Replay hash: ${replay}`);
     return lines.join("\n");
+}
+
+function sanitizeDailyRef(v: unknown): { date: string; day: number; root: string } | null {
+    if (!v || typeof v !== "object") return null;
+    const d = v as Record<string, unknown>;
+    if (typeof d.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(d.date)) return null;
+    if (typeof d.day !== "number" || !Number.isInteger(d.day) || d.day < 0) return null;
+    if (typeof d.root !== "string" || !/^0x[0-9a-f]{64}$/i.test(d.root)) return null;
+    return { date: d.date, day: d.day, root: d.root };
 }

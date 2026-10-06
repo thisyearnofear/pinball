@@ -215,6 +215,8 @@ export type GameDef = {
     seedSource?: string;
     /** MOTH job/pulse provenance of rngSeed (moth-* sources), recorded for audit. */
     seedAttestation?: import("@/utils/seed-provenance").SeedAttestation;
+    /** Daily Kami run reference (rngSeed is that day's banked seed). */
+    daily?: import("@/services/daily-seed").DailyRunRef;
     rng?: () => number;  // seeded PRNG; falls back to Math.random when absent
     worldPhysics?: TablePhysics; // A4: per-world gravity modifier (deterministic, seeded)
     /** Control scheme: "steer" = classic tap-to-nudge; "feint"/"precision" = the

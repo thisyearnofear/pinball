@@ -1,6 +1,7 @@
 import type { GameMode } from "@/config/tournaments";
 import type { AIDifficulty } from "@/model/kamikaze";
 import { getFromStorage, setInStorage } from "@/utils/local-storage";
+import type { VerifiedDailySeed } from "@/services/daily-seed";
 
 /**
  * Daily Challenge — a lightweight retention hook.
@@ -22,6 +23,8 @@ export type DailyChallenge = {
   mode: GameMode;
   worldId: string;
   aiDifficulty: AIDifficulty;
+  /** Today's QPU-banked run seed, once fetched and proof-checked (services/daily-seed). */
+  qpu?: VerifiedDailySeed;
 };
 
 const WORLDS = ["hobbiton", "spaceship", "cottage", "pirate-ship", "haunted-house", "sakura-shrine"];
@@ -30,12 +33,12 @@ const DIFFICULTIES: AIDifficulty[] = ["easy", "medium", "hard"];
 
 const PB_PREFIX = "pinball_daily_pb_";
 
-/** Local midnight calendar key. Stable within a day, rolls over at midnight. */
+/**
+ * UTC calendar key. The whole world shares one challenge (and one banked QPU
+ * seed) per UTC day, so it rolls over at 00:00 UTC, not local midnight.
+ */
 function todayKey(d = new Date()): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return d.toISOString().slice(0, 10);
 }
 
 /** Small deterministic string hash (FNV-1a) so all clients agree on the seed. */

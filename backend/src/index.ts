@@ -6,6 +6,7 @@ import { scoresRoutes } from './routes/scores.js';
 import { replaysRoutes } from './routes/replays.js';
 import { nimEntryRoutes } from './routes/nim-entry.js';
 import { quantumSeedRoutes } from './routes/quantum-seed.js';
+import { dailySeedRoutes } from './routes/daily-seed.js';
 import { scoreSignatureRateLimiter } from './lib/rate-limiter.js';
 import { nonceTracker } from './lib/nonce-tracker.js';
 import { isRedisAvailable } from './lib/redis-client.js';
@@ -34,6 +35,7 @@ await app.register(scoresRoutes);
 await app.register(replaysRoutes);
 await app.register(nimEntryRoutes);
 await app.register(quantumSeedRoutes);
+await app.register(dailySeedRoutes);
 
 app.get('/health', async () => ({ ok: true }));
 

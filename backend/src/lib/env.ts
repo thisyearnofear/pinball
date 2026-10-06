@@ -54,6 +54,10 @@ const EnvSchema = z.object({
   MOTH_SEED_SHOTS: z.coerce.number().int().min(1).max(10000).optional(),
   MOTH_SEED_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
   MOTH_SEED_POLL_MS: z.coerce.number().int().positive().optional(),
+  // Daily Kami seed bank (see docs/QUANTUM_SEEDS.md). Secret: holds future seeds.
+  DAILY_SEED_BANK_PATH: z.string().optional(),
+  DAILY_SEED_BANK_JSON: z.string().optional(),
+  DAILY_SEED_BANK_ROOT: z.string().regex(/^0x[0-9a-fA-F]{64}$/).optional(),
 });
 
 export const env = EnvSchema.parse(process.env);

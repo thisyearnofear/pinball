@@ -60,3 +60,6 @@ pnpm-debug.log*
 /playwright-report/
 /playwright/.cache/
 
+
+# Daily seed bank (holds future seeds — deploy as a secret, never commit)
+/backend/.data/

@@ -1,5 +1,6 @@
 import { keccak256, toUtf8Bytes } from 'ethers';
 import { MIN_DRAIN_MS, type GameMode, type GameMetadata } from './validation.js';
+import { checkDailyReplay, loadDailySeedBank, utcDateKey, type DailySeedBank } from './daily-seed-bank.js';
 
 /**
  * Replay plausibility verification.
@@ -41,7 +42,15 @@ type ReplayEvent = { t: number; e: string; x?: number; y?: number };
 
 export function verifyReplay(
   replayJson: string,
-  ctx: { score: number; mode: GameMode; metadata: GameMetadata; replayHash?: string }
+  ctx: {
+    score: number;
+    mode: GameMode;
+    metadata: GameMetadata;
+    replayHash?: string;
+    /** Injected for tests; defaults to the deployed bank and today's UTC date. */
+    dailyBank?: DailySeedBank | null;
+    today?: string;
+  }
 ): ReplayVerdict {
   const failures: string[] = [];
 
@@ -72,6 +81,12 @@ export function verifyReplay(
   else if (digest.finalScore !== ctx.score) failures.push('REPLAY_SCORE_MISMATCH');
   if (!Array.isArray(digest.events)) failures.push('REPLAY_BAD_EVENTS');
   if (failures.length) return { ok: false, failures };
+
+  // --- Daily Kami: a daily run must use that day's revealed banked seed ---
+  if (digest.daily !== undefined) {
+    const bank = ctx.dailyBank !== undefined ? ctx.dailyBank : loadDailySeedBank();
+    failures.push(...checkDailyReplay(digest, bank, ctx.today ?? utcDateKey(new Date())));
+  }
 
   const events = digest.events as ReplayEvent[];
   const tickCount = digest.tickCount as number;
