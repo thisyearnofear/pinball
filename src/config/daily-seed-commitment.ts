@@ -15,4 +15,11 @@ export type DailySeedCommitment = {
     root: string;
 };
 
-export const DAILY_SEED_COMMITMENT: DailySeedCommitment | null = null;
+// 366 seeds from 23 MOTH comet-qrng-v1 QPU jobs (ibm_boston, ibm_miami), banked 2026-10-06.
+export const DAILY_SEED_COMMITMENT: DailySeedCommitment | null = {
+    v: 1,
+    leafTag: "kamikaze-daily-v1",
+    startDate: "2026-10-07",
+    days: 366,
+    root: "0x51b28d1cf4bd0e26d7ba21d3d83be3330dfea5b7822e101b1b30619ea6d827d5",
+};
