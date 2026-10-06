@@ -352,7 +352,7 @@ export function ReplayViewer({ replay, replayHash, signedMetadata, initialAuditO
             id="replay-audit-details"
             style={{ display: "flex", flexDirection: "column", gap: spacing.md, width: "100%" }}
           >
-            <SeedAudit seed={replay.seed} seedSource={replay.seedSource} replayHash={replayHash} />
+            <SeedAudit seed={replay.seed} seedSource={replay.seedSource} seedAttestation={replay.seedAttestation} replayHash={replayHash} />
             <ReplayVerification replay={replay} metadata={signedMetadata} recordedHash={replayHash} />
           </div>
         )}

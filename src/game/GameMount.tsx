@@ -33,7 +33,7 @@ import type { PowerUpSide } from "@/definitions/game";
 import { mulberry32 } from "@/utils/rng";
 import { describeMood } from "@/utils/mood-display";
 import { coachScript, currentCue, noObservations, type CoachCueId, type CoachObservations } from "@/config/table-coach";
-import { nextRunSeed, lastSeedSource } from "@/services/quantum-seed";
+import { nextRunSeed, lastSeedSource, lastSeedAttestation } from "@/services/quantum-seed";
 import * as haptics from "@/utils/haptics";
 import { startMachinePulse, stopMachinePulse } from "@/services/audio-service";
 import { formatGameScore } from "@/utils/score-format";
@@ -79,6 +79,7 @@ function createRunGame(opts: {
     kamikaze: opts.gameMode === "kamikaze" ? createKamikazeState(opts.aiDifficulty) : undefined,
     rngSeed,
     seedSource: lastSeedSource(),
+    seedAttestation: lastSeedAttestation(),
     rng: mulberry32(rngSeed),
     // Story runs keep the physical table but skip world-physics wobble: the
     // shrine encounter is a fixed learning loop, not a seeded marble drift.
@@ -100,6 +101,7 @@ function beginRunRecording(g: GameDef, gameMode: GameMode, aiDifficulty?: AIDiff
     world: worldId,
     controlScheme: g.controlScheme,
     seedSource: g.seedSource,
+    seedAttestation: g.seedAttestation,
     aiDifficulty: gameMode === "kamikaze" ? aiDifficulty ?? "medium" : undefined,
   });
 }

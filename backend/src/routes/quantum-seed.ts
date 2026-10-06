@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { fetchQuantumSeeds, MAX_SEED_COUNT } from '../lib/quantum-seed.js';
+import { fetchQuantumSeeds, MAX_SEED_COUNT, warmQuantumSeedProvider } from '../lib/quantum-seed.js';
 
 /**
  * Quantum-seeded runs.
@@ -10,9 +10,13 @@ import { fetchQuantumSeeds, MAX_SEED_COUNT } from '../lib/quantum-seed.js';
  * backend so the provider key never reaches the browser.
  *
  * Never fails hard: an unconfigured or unreachable provider degrades to a
- * CSPRNG and reports it via `source`.
+ * CSPRNG and reports it via `source`. With the MOTH provider the batch also
+ * carries the job's public `attestation` (job id, pulse hash, backend, witness).
  */
 export async function quantumSeedRoutes(app: FastifyInstance) {
+  // MOTH jobs take seconds-to-minutes: start the pool filling at boot.
+  void warmQuantumSeedProvider();
+
   app.get<{ Querystring: { count?: string } }>('/api/quantum/seed', async (req, reply) => {
     const raw = req.query?.count ?? '1';
     const count = Number.parseInt(raw, 10);
